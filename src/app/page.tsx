@@ -8,9 +8,10 @@ export default async function Home() {
   let supabase;
   let user = null;
   let initialError: Error | null = null;
+  let errorMessage: string | null = null;
 
   try {
-    // Attempt to create client first. This will throw if env vars are missing.
+    // Attempt to create client first. This will throw if env vars are missing or URL is invalid.
     supabase = createClient();
 
     // Try fetching the user *after* confirming the client was created
@@ -33,40 +34,30 @@ export default async function Home() {
   } catch (error: any) {
     console.error("Error during Supabase initialization or user fetch:", error.message);
     initialError = error; // Store the error to display
-    // Don't try to use supabase client further if creation failed
+
+    // Determine the specific error message
+    if (error.message.includes("URL and Key are required")) {
+       errorMessage = "Supabase URL or Key is missing. Please check your environment variables (`.env.local`) and ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set correctly. Refer to the README for setup instructions.";
+    } else if (error.message.includes("Invalid URL")) {
+         errorMessage = "Invalid Supabase URL format. Please check the `NEXT_PUBLIC_SUPABASE_URL` in your `.env.local` file. It should look like `https://<your-project-ref>.supabase.co`.";
+    } else {
+         errorMessage = `An unexpected error occurred during application startup: ${error.message}. Please contact the administrator or check your Supabase configuration.`;
+    }
   }
 
-  // Display specific error if client creation failed due to missing env vars
-  if (initialError && initialError.message.includes("URL and Key are required")) {
+  // Display specific error if client creation failed
+  if (initialError) {
      return (
         <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
             <Card className="mx-auto max-w-md w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
                 <CardHeader>
                     <CardTitle className="text-destructive">Configuration Error</CardTitle>
                     <CardDescription className="text-destructive-foreground">
-                       Supabase URL or Key is missing. Please check your environment variables (`.env.local`) and ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set correctly. Refer to the README for setup instructions.
+                       {errorMessage}
                     </CardDescription>
                 </CardHeader>
                  <CardContent>
-                    <pre className="mt-2 w-full rounded-md bg-muted p-4 overflow-x-auto text-sm">
-                        {initialError.message}
-                    </pre>
-                 </CardContent>
-            </Card>
-        </div>
-    );
-  } else if (initialError) {
-     // Display generic error for other initialization issues
-     return (
-        <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-            <Card className="mx-auto max-w-md w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
-                <CardHeader>
-                    <CardTitle>Initialization Error</CardTitle>
-                    <CardDescription>
-                       An unexpected error occurred during application startup. Please contact the administrator.
-                    </CardDescription>
-                </CardHeader>
-                 <CardContent>
+                    <p className="text-sm text-muted-foreground">Detailed Error:</p>
                     <pre className="mt-2 w-full rounded-md bg-muted p-4 overflow-x-auto text-sm">
                         {initialError.message}
                     </pre>

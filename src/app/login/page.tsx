@@ -16,6 +16,7 @@ export default async function LoginPage({
    let supabase;
    let initialError: Error | null = null;
    let user = null;
+   let errorMessage: string | null = null;
 
    try {
      supabase = createClient(); // Attempt to create client first
@@ -27,17 +28,19 @@ export default async function LoginPage({
    } catch (error: any) { // Catch potential errors from client creation or getUser
      console.error("Error during Supabase initialization or user check:", error.message);
      initialError = error;
-     // Don't try to use supabase client further if creation failed
+
+     // Determine the specific error message
+     if (error.message.includes("URL and Key are required")) {
+        errorMessage = "Authentication service configuration error: Supabase URL or Key is missing. Please contact the administrator.";
+     } else if (error.message.includes("Invalid URL")) {
+        errorMessage = "Authentication service configuration error: Invalid Supabase URL format. Please contact the administrator.";
+     } else {
+         errorMessage = `An unexpected error occurred connecting to the authentication service: ${error.message}`;
+     }
    }
 
    // If client creation failed, show an error and disable login/signup
    if (initialError) {
-      let errorMessage = "Could not connect to the authentication service.";
-       if (initialError.message.includes("URL and Key are required")) {
-          errorMessage = "Authentication service configuration error: Supabase URL or Key is missing. Please contact the administrator.";
-       } else {
-           errorMessage = `An unexpected error occurred: ${initialError.message}`;
-       }
        return (
          <div className="flex min-h-screen w-full items-center justify-center bg-background relative overflow-hidden p-4">
              <div className="absolute inset-0 z-0 gradient-glow"></div>
@@ -51,7 +54,12 @@ export default async function LoginPage({
                          {errorMessage}
                      </CardDescription>
                  </CardHeader>
-                 {/* Optionally show disabled form elements or just the message */}
+                 <CardContent>
+                    <p className="text-sm text-muted-foreground text-center">Please ensure Supabase environment variables (`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`) are correctly configured.</p>
+                     <pre className="mt-4 w-full rounded-md bg-muted p-4 overflow-x-auto text-xs text-muted-foreground">
+                        {initialError.message}
+                    </pre>
+                 </CardContent>
              </Card>
          </div>
        );
@@ -76,7 +84,11 @@ export default async function LoginPage({
       supabaseActionClient = createClient(); // Re-create client in action scope
     } catch (error: any) {
        console.error("Sign In Action Error - Supabase client creation failed:", error.message);
-       return redirect(`/login?message=Configuration error prevents sign in. Contact admin.`);
+        let redirectMessage = "Configuration error prevents sign in. Contact admin.";
+        if (error.message.includes("Invalid URL")) {
+            redirectMessage = "Configuration error (Invalid URL). Contact admin.";
+        }
+       return redirect(`/login?message=${encodeURIComponent(redirectMessage)}`);
     }
 
     const email = formData.get("email") as string;
@@ -102,7 +114,11 @@ export default async function LoginPage({
        supabaseActionClient = createClient(); // Re-create client in action scope
      } catch (error: any) {
         console.error("Sign Up Action Error - Supabase client creation failed:", error.message);
-        return redirect(`/login?message=Configuration error prevents sign up. Contact admin.`);
+        let redirectMessage = "Configuration error prevents sign up. Contact admin.";
+        if (error.message.includes("Invalid URL")) {
+            redirectMessage = "Configuration error (Invalid URL). Contact admin.";
+        }
+        return redirect(`/login?message=${encodeURIComponent(redirectMessage)}`);
      }
 
     const origin = headers().get("origin");
@@ -169,7 +185,7 @@ export default async function LoginPage({
               <Input id="password" name="password" type="password" required className="bg-input/50 border-border/50"/>
             </div>
              {searchParams?.message && (
-              <p className={`mt-4 p-4 border rounded-md text-center text-sm ${searchParams.message.toLowerCase().includes("error") || searchParams.message.toLowerCase().includes("could not") || searchParams.message.toLowerCase().includes("limit reached") ? 'bg-destructive/20 text-destructive-foreground border-destructive' : 'bg-primary/10 text-primary-foreground border-primary/30'}`}>
+              <p className={`mt-4 p-4 border rounded-md text-center text-sm ${searchParams.message.toLowerCase().includes("error") || searchParams.message.toLowerCase().includes("could not") || searchParams.message.toLowerCase().includes("limit reached") || searchParams.message.toLowerCase().includes("configuration") ? 'bg-destructive/20 text-destructive-foreground border-destructive' : 'bg-primary/10 text-primary-foreground border-primary/30'}`}>
                 {searchParams.message}
               </p>
             )}

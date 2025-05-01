@@ -65,12 +65,66 @@ export function ProfileDialog({
   const [isPending, startTransition] = useTransition();
   const [profile, setProfile] = useState<Profile | null>(initialProfile);
   const [quota, setQuota] = useState<Quota | null>(initialQuota);
+  const [localDbSetupError, setLocalDbSetupError] = useState<string | null>(dbSetupError); // Local state for DB error
 
    // Ensure local state updates if initial props change (e.g., after initial load)
    useEffect(() => {
       setProfile(initialProfile);
       setQuota(initialQuota);
-    }, [initialProfile, initialQuota]);
+      setLocalDbSetupError(dbSetupError); // Update local error state from prop
+    }, [initialProfile, initialQuota, dbSetupError]);
+
+
+   // Fetch Quota inside dialog if initialQuota is null and no DB error
+  useEffect(() => {
+      if (isOpen && !quota && !localDbSetupError) {
+         const fetchQuota = async () => {
+            try {
+                // Select specific columns
+                const { data, error } = await supabase
+                 .from('quotas')
+                 .select('user_id, request_count, quota_limit, last_reset_at')
+                 .eq('user_id', user.id)
+                 .single();
+
+               if (error && error.code === 'PGRST116') {
+                  // Quota record doesn't exist yet, which is fine initially.
+                  // No need to set error, the UI will show loading or default state.
+                  console.log("Quota record not found for user:", user.id);
+               } else if (error) {
+                  console.error('Error fetching quota inside dialog:', error.message);
+                   let errorMsg = `Failed to load usage data: ${error.message}`;
+                    if (error.message.includes("relation \"public.quotas\" does not exist")) {
+                       errorMsg = "Database setup incomplete: Missing 'quotas' table. Please run the SQL script from `supabase/schema.sql`. See README Step 3.";
+                    } else if (error.message.includes("permission denied")) {
+                       errorMsg = "Database access error: Permission denied for 'quotas' table. Check RLS policies. See README Step 3.";
+                    } else if (error.message.includes("406")) {
+                         errorMsg = `Database configuration issue: Could not fetch quota (Error 406). Check RLS/table access. Details: ${error.message}`;
+                         toast({ title: "Quota Load Error", description: "Could not retrieve usage data (406).", variant: "destructive" });
+                    } else {
+                        toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
+                    }
+                   setLocalDbSetupError(errorMsg); // Set local error state
+               } else if (data && 'user_id' in data && 'request_count' in data && 'quota_limit' in data && 'last_reset_at' in data) {
+                  setQuota(data as Quota); // Update quota state if successful
+                  setLocalDbSetupError(null); // Clear error on success
+               } else {
+                    console.warn("Fetched quota data inside dialog is missing fields:", data);
+                    const errorMsg = `Incomplete quota data received.`;
+                    setLocalDbSetupError(errorMsg);
+                    toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
+               }
+            } catch (err: any) {
+               console.error('Unexpected error fetching quota inside dialog:', err.message);
+               const errorMsg = `Unexpected error loading usage data: ${err.message}`;
+               setLocalDbSetupError(errorMsg);
+               toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
+            }
+         };
+         fetchQuota();
+      }
+   }, [isOpen, quota, localDbSetupError, supabase, user.id, toast]);
+
 
   const {
     register,
@@ -88,7 +142,7 @@ export function ProfileDialog({
     },
   });
 
-  // Reset form when initialProfile changes or dialog opens/closes
+  // Reset form when profile changes or dialog opens/closes
   useEffect(() => {
     reset({
       full_name: profile?.full_name ?? '',
@@ -106,7 +160,7 @@ export function ProfileDialog({
   const quotaExceeded = quotaRemaining <= 0 && !!quota; // Only exceeded if quota loaded
 
   const onSubmit = async (data: ProfileFormData) => {
-     if (dbSetupError) {
+     if (localDbSetupError) { // Check local error state
        toast({
          title: "Database Error",
          description: "Cannot save profile due to a database setup issue. Please resolve the setup errors first.",
@@ -121,6 +175,7 @@ export function ProfileDialog({
 
     startTransition(async () => {
       try {
+        // Use select() to specify columns, potentially avoiding 406 if '*' causes issues
         const { data: updatedProfile, error } = await supabase
           .from('profiles')
           .update({
@@ -128,10 +183,11 @@ export function ProfileDialog({
             updated_at: new Date().toISOString(),
           })
           .eq('id', user.id)
-          .select()
+          .select('id, updated_at, username, full_name, phone_number, composio_url, gemini_api_key') // Specify columns
           .single();
 
         if (error) {
+             console.error('Error updating profile:', error.message); // Log error
              // Check for specific DB errors during update
              if (error.message.includes("violates row-level security policy")) {
                  toast({
@@ -145,17 +201,24 @@ export function ProfileDialog({
                      description: 'The `profiles` table is missing. Please run the database setup script.',
                      variant: 'destructive',
                    });
+                   setLocalDbSetupError('The `profiles` table is missing.'); // Update local error
+             } else if (error.message.includes("406")) {
+                 toast({
+                     title: 'Save Failed',
+                     description: `Could not save profile due to a configuration issue (Error 406). Check table/column access. Details: ${error.message}`,
+                     variant: 'destructive',
+                   });
              } else {
-                 throw error; // Re-throw other errors
+                 toast({ title: 'Save Failed', description: `Could not save profile: ${error.message}`, variant: 'destructive' });
              }
         } else if (updatedProfile) {
-            setProfile(updatedProfile); // Update local state
-            onProfileUpdate(updatedProfile); // Notify parent component
+            setProfile(updatedProfile as Profile); // Update local state
+            onProfileUpdate(updatedProfile as Profile); // Notify parent component
             toast({ title: 'Profile Saved', description: 'Your changes have been saved.' });
             onOpenChange(false); // Close dialog on success
         }
       } catch (error: any) {
-        console.error('Error updating profile:', error);
+        console.error('Unexpected error updating profile:', error);
         toast({
           title: 'Save Failed',
           description: `Could not save profile: ${error.message}`,
@@ -186,12 +249,12 @@ export function ProfileDialog({
         </DialogHeader>
 
          {/* DB Setup Error Alert within Dialog */}
-         {dbSetupError && (
+         {localDbSetupError && (
           <Alert variant="destructive" className="mx-6 mt-[-10px] mb-4"> {/* Position alert */}
              <Database className="h-4 w-4" />
-            <AlertTitle>Database Setup Incomplete</AlertTitle>
+            <AlertTitle>Database Setup/Configuration Issue</AlertTitle> {/* Adjusted title */}
             <AlertDescription>
-              {dbSetupError} Saving changes is disabled until this is resolved.
+              {localDbSetupError} Saving profile changes and viewing quota might be affected until this is resolved. Please ensure the database schema (`supabase/schema.sql`) is correctly applied and RLS policies grant necessary permissions.
             </AlertDescription>
           </Alert>
         )}
@@ -222,7 +285,7 @@ export function ProfileDialog({
                            id="full_name"
                            {...register('full_name')}
                            className={`${errors.full_name ? 'border-destructive' : ''}`}
-                           disabled={!!dbSetupError} // Disable if DB error
+                           disabled={!!localDbSetupError} // Disable if DB error
                          />
                          {errors.full_name && <p className="text-xs text-destructive mt-1">{errors.full_name.message}</p>}
                        </div>
@@ -237,7 +300,7 @@ export function ProfileDialog({
                            id="username"
                            {...register('username')}
                            className={`${errors.username ? 'border-destructive' : ''}`}
-                            disabled={!!dbSetupError} // Disable if DB error
+                            disabled={!!localDbSetupError} // Disable if DB error
                          />
                          {errors.username && <p className="text-xs text-destructive mt-1">{errors.username.message}</p>}
                       </div>
@@ -252,7 +315,7 @@ export function ProfileDialog({
                             id="phone_number"
                             {...register('phone_number')}
                              className={`${errors.phone_number ? 'border-destructive' : ''}`}
-                              disabled={!!dbSetupError} // Disable if DB error
+                              disabled={!!localDbSetupError} // Disable if DB error
                           />
                          {errors.phone_number && <p className="text-xs text-destructive mt-1">{errors.phone_number.message}</p>}
                       </div>
@@ -277,7 +340,7 @@ export function ProfileDialog({
                              {...register('gemini_api_key')}
                              placeholder="Enter your Google Gemini API Key"
                              className={`${errors.gemini_api_key ? 'border-destructive' : ''}`}
-                              disabled={!!dbSetupError} // Disable if DB error
+                              disabled={!!localDbSetupError} // Disable if DB error
                            />
                            {errors.gemini_api_key && <p className="text-xs text-destructive mt-1">{errors.gemini_api_key.message}</p>}
                            <p className="text-xs text-muted-foreground mt-1">
@@ -296,7 +359,7 @@ export function ProfileDialog({
                              {...register('composio_url')}
                              placeholder="Enter your Composio MCP URL (optional)"
                              className={`${errors.composio_url ? 'border-destructive' : ''}`}
-                              disabled={!!dbSetupError} // Disable if DB error
+                              disabled={!!localDbSetupError} // Disable if DB error
                            />
                            {errors.composio_url && <p className="text-xs text-destructive mt-1">{errors.composio_url.message}</p>}
                             <p className="text-xs text-muted-foreground mt-1">
@@ -313,12 +376,12 @@ export function ProfileDialog({
             {/* Billing/Quota Section */}
             <div>
               <h3 className="text-lg font-semibold mb-4">Usage & Billing</h3>
-              {dbSetupError ? (
+              {localDbSetupError && !localDbSetupError.includes('quota') ? ( // Show error only if not quota-specific
                   <Alert variant="destructive">
                     <Database className="h-4 w-4" />
-                    <AlertTitle>Usage Unavailable</AlertTitle>
+                    <AlertTitle>Profile Data Issue</AlertTitle>
                     <AlertDescription>
-                       Cannot load usage data due to a database setup issue.
+                       Cannot load usage data due to a profile or database setup issue.
                     </AlertDescription>
                   </Alert>
               ) : quota !== null ? (
@@ -349,9 +412,15 @@ export function ProfileDialog({
                       </p>
                    )}
                 </div>
-              ) : (
+              ) : ( // Loading state or specific quota error state
                 <div className="flex items-center justify-center text-muted-foreground py-4"> {/* Added padding */}
-                  <Loader2 className="h-5 w-5 animate-spin mr-2"/> Loading usage data...
+                   {localDbSetupError && localDbSetupError.includes('quota') ? (
+                      <span className='text-destructive text-sm flex items-center gap-2'><Database className="h-4 w-4"/> Error loading quota.</span>
+                   ) : (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin mr-2"/> Loading usage data...
+                      </>
+                   )}
                 </div>
               )}
             </div>
@@ -367,7 +436,7 @@ export function ProfileDialog({
           <Button
              type="submit"
              form="profile-form"
-             disabled={isPending || !isDirty || !!dbSetupError} // Disable if pending, not dirty, or DB error
+             disabled={isPending || !isDirty || !!localDbSetupError} // Disable if pending, not dirty, or DB error
              loading={isPending}
            >
             <Save className="mr-2 h-4 w-4" /> Save Changes

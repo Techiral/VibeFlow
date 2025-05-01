@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, User as UserIcon, Database, Zap } from 'lucide-react'; // Added UserIcon, Database icon, Zap
+import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, User as UserIcon, Database } from 'lucide-react'; // Added UserIcon, Database icon
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import Link from 'next/link';
 import { ProfileDialog } from './profile-dialog'; // Import the new dialog
 import { Progress } from "@/components/ui/progress"; // Import Progress component
+import { Zap } from 'lucide-react'; // Ensure Zap is imported
 
 interface DashboardProps {
   user: User;
@@ -82,6 +83,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
               .rpc('get_user_profile', { p_user_id: user.id });
 
              if (error) {
+                  console.error("Error fetching/creating profile on client:", error.message); // Log client-side fetch error
                   if (error.message.includes("function public.get_user_profile") && error.message.includes("does not exist")) {
                       setupErrorMsg = "Database setup incomplete: Missing 'get_user_profile' function. Please run the SQL script from `supabase/schema.sql`. See README Step 3.";
                   } else if (error.message.includes("relation \"public.profiles\" does not exist")) {
@@ -112,9 +114,10 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
       // Fetch quota even if profile load failed, to check for quota table issues.
       if (!currentQuota) {
         try {
+          // Select specific columns instead of '*'
           const { data, error } = await supabase
             .from('quotas')
-            .select('*')
+            .select('user_id, request_count, quota_limit, last_reset_at')
             .eq('user_id', user.id)
             .single();
 
@@ -124,10 +127,16 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
              // Reset potential setup error if profile succeeded but quota just doesn't exist yet
              if (currentProfile && !setupErrorMsg) setDbSetupError(null);
           } else if (error) { // Other error during select
+              console.error("Error fetching/creating quota on client:", error.message); // Log client-side fetch error
               if (error.message.includes("relation \"public.quotas\" does not exist")) {
                   setupErrorMsg = "Database setup incomplete: Missing 'quotas' table. Please run the SQL script from `supabase/schema.sql`. See README Step 3.";
               } else if (error.message.includes("permission denied for table quotas")) {
                   setupErrorMsg = "Database access error: Permission denied for 'quotas' table. Check Row Level Security policies. See README Step 3.";
+              } else if (error.code === '42501') { // More specific permission denied code
+                  setupErrorMsg = "Database access error: Permission denied for 'quotas' table (Code: 42501). Verify RLS policies. See README Step 3.";
+              } else if (error.message.includes("406")) { // Handle 406 specifically
+                  setupErrorMsg = `Database configuration issue: Could not fetch quota (Error 406 - Not Acceptable). Please check table/column access and RLS policies. See README Step 3. Details: ${error.message}`;
+                  toast({ title: "Quota Load Error", description: "Could not retrieve usage data due to a configuration issue (406).", variant: "destructive" });
               } else {
                   toast({ title: "Quota Error", description: `Could not load usage data: ${error.message}`, variant: "destructive" });
                   // Set general error if specific one not found, but don't overwrite profile error
@@ -135,10 +144,17 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
               }
               if (setupErrorMsg) setDbSetupError(setupErrorMsg); // Set state if setup error found
           } else { // Select succeeded
-              currentQuota = data;
-              setQuota(currentQuota);
-              // Clear setup error if profile and quota loaded successfully
-              if (currentProfile) setDbSetupError(null);
+              // Ensure all necessary fields are present in the returned data before setting state
+              if (data && 'user_id' in data && 'request_count' in data && 'quota_limit' in data && 'last_reset_at' in data) {
+                 currentQuota = data as Quota; // Cast after checking required fields
+                 setQuota(currentQuota);
+                 // Clear setup error if profile and quota loaded successfully
+                 if (currentProfile) setDbSetupError(null);
+              } else {
+                 console.warn("Fetched quota data is missing expected fields:", data);
+                 if (!setupErrorMsg) setupErrorMsg = `Incomplete quota data received from database.`;
+                 setDbSetupError(setupErrorMsg);
+              }
           }
         } catch (error: any) { // Catch unexpected errors
           console.error("Unexpected client error fetching quota:", error.message);
@@ -183,35 +199,43 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
      // Fetch current quota state directly for the most up-to-date check
      let currentRemaining = quotaRemaining;
      if (quota) {
-       currentRemaining = Math.max(0, quota.quota_limit - quota.request_count);
+       // Ensure request_count and quota_limit are numbers before calculating
+       const currentCount = typeof quota.request_count === 'number' ? quota.request_count : 0;
+       const currentLimit = typeof quota.quota_limit === 'number' ? quota.quota_limit : DEFAULT_QUOTA_LIMIT;
+       currentRemaining = Math.max(0, currentLimit - currentCount);
      } else {
-        // If quota is not yet loaded, try fetching it once more
+        // If quota is not yet loaded, try fetching it once more using the RPC function
         try {
-             const { data: fetchedQuota, error: fetchError } = await supabase
+             const { data: fetchedQuotaRemaining, error: fetchError } = await supabase
                  .rpc('get_remaining_quota', { p_user_id: user.id });
 
              if (fetchError) {
+                 console.error("RPC Error checking remaining quota:", fetchError.message); // Log the RPC error
                  // Handle potential errors from get_remaining_quota, especially setup errors
                   if (fetchError.message.includes("function public.get_remaining_quota") && fetchError.message.includes("does not exist")) {
                      setDbSetupError("Database function 'get_remaining_quota' missing. Please run the setup script. See README Step 3.");
                      toast({ title: "Database Error", description: "Failed to check usage limit due to missing function.", variant: "destructive" });
+                  } else if (fetchError.message.includes("permission denied")) {
+                      setDbSetupError("Database permission error checking quota. Verify RLS for 'get_remaining_quota'. See README Step 3.");
+                      toast({ title: "Database Error", description: "Permission denied checking usage limit.", variant: "destructive" });
                   } else {
                       toast({ title: "Quota Check Error", description: `Failed to check usage limit: ${fetchError.message}`, variant: "destructive" });
                   }
                  return false;
              }
              // Assuming get_remaining_quota returns the remaining count directly
-             if (typeof fetchedQuota === 'number') {
-                 currentRemaining = fetchedQuota;
+             if (typeof fetchedQuotaRemaining === 'number') {
+                 currentRemaining = fetchedQuotaRemaining;
                  // Optionally update local quota state if needed, though increment_quota will provide the most accurate final state
              } else {
                  // Fallback if function doesn't return expected value
+                 console.warn("get_remaining_quota RPC did not return a number:", fetchedQuotaRemaining);
                  toast({ title: "Quota Check Error", description: "Could not determine remaining usage limit.", variant: "destructive" });
                  return false;
              }
 
         } catch (rpcError: any) {
-             console.error("RPC Error checking remaining quota:", rpcError.message);
+             console.error("Unexpected Error calling get_remaining_quota RPC:", rpcError.message);
              toast({ title: "Quota Check Error", description: `Unexpected error checking usage: ${rpcError.message}`, variant: "destructive" });
              return false;
         }
@@ -224,7 +248,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
      }
 
      // Optimistic UI update (optional but improves UX)
-     const optimisticQuota = quota ? { ...quota, request_count: quota.request_count + incrementAmount } : null;
+     const optimisticQuota = quota ? { ...quota, request_count: (quota.request_count ?? 0) + incrementAmount } : null;
      if (optimisticQuota) setQuota(optimisticQuota);
 
     try {
@@ -237,14 +261,17 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
        if (error) {
           // Revert optimistic update on error if it was applied
           if (optimisticQuota) setQuota(quota); // Revert to the state before optimistic update
-          console.error("Error incrementing quota:", error.message);
+          console.error("Error incrementing quota RPC:", error.message); // Log RPC error
           if (error.message.includes("quota_exceeded")) {
              toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
              // Ensure local state reflects exceeded quota if possible
-             if(quota) setQuota(prev => prev ? {...prev, request_count: prev.quota_limit} : null);
+             if(quota) setQuota(prev => prev ? {...prev, request_count: prev.quota_limit ?? DEFAULT_QUOTA_LIMIT} : null);
           } else if (error.message.includes("function public.increment_quota") && error.message.includes("does not exist")) {
              setDbSetupError("Database function 'increment_quota' missing. Please run the setup script. See README Step 3.");
              toast({ title: "Database Error", description: "Failed to update usage count due to missing function.", variant: "destructive" });
+          } else if (error.message.includes("permission denied")) { // Check for general permission denied
+              setDbSetupError("Database permission error incrementing quota. Verify RLS policies for 'increment_quota'. See README Step 3.");
+              toast({ title: "Database Security Error", description: "Failed to update usage count due to security policy.", variant: "destructive" });
           } else if (error.message.includes("violates row-level security policy for table \\\"quotas\\\"")) {
              setDbSetupError("RLS policy prevents quota update. Check insert/update policies for 'quotas'. See README Step 3.");
              toast({ title: "Database Security Error", description: "Failed to update usage count due to security policy.", variant: "destructive" });
@@ -258,7 +285,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
        // Refetch the full quota record to get the most accurate state after increment
        const { data: updatedQuotaData, error: fetchError } = await supabase
              .from('quotas')
-             .select('*')
+             .select('user_id, request_count, quota_limit, last_reset_at') // Select specific columns
              .eq('user_id', user.id)
              .single();
 
@@ -270,14 +297,15 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                  setQuota(prev => {
                     const currentLimit = prev?.quota_limit ?? DEFAULT_QUOTA_LIMIT;
                     const newCount = currentLimit - newRemaining;
+                    const nowISO = new Date().toISOString(); // Get current timestamp
                     return prev ?
                         { ...prev, request_count: newCount } :
                         // Construct a basic quota object if none existed
-                        { user_id: user.id, request_count: newCount, quota_limit: currentLimit, last_reset_at: new Date().toISOString(), created_at: new Date().toISOString(), ip_address: null};
+                        { user_id: user.id, request_count: newCount, quota_limit: currentLimit, last_reset_at: nowISO, created_at: nowISO, ip_address: null};
                  });
              }
        } else if (updatedQuotaData) {
-           setQuota(updatedQuotaData); // Set the full updated state from the database
+           setQuota(updatedQuotaData as Quota); // Set the full updated state from the database
        }
 
        // Double-check if the operation resulted in exceeding the quota (edge case)
@@ -290,7 +318,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
     } catch (rpcError: any) {
         // Revert optimistic update on RPC error
         if (optimisticQuota) setQuota(quota); // Revert to the state before optimistic update
-      console.error("RPC Error incrementing quota:", rpcError.message);
+      console.error("Unexpected Error calling increment_quota RPC:", rpcError.message);
       toast({ title: "Quota Error", description: `An unexpected error occurred updating usage: ${rpcError.message}`, variant: "destructive" });
       return false;
     }
@@ -433,11 +461,11 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                   // Refetch quota locally after refund attempt
                   const { data: refreshedQuota, error: refreshError } = await supabase
                       .from('quotas')
-                      .select('*')
+                      .select('user_id, request_count, quota_limit, last_reset_at') // Select specific columns
                       .eq('user_id', user.id)
                       .single();
                   if (!refreshError && refreshedQuota) {
-                      setQuota(refreshedQuota);
+                      setQuota(refreshedQuota as Quota);
                   } else if (refreshError) {
                        console.error("Error refreshing quota after refund:", refreshError.message);
                   }
@@ -492,11 +520,11 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
              // Refetch quota locally after refund attempt
              const { data: refreshedQuota, error: refreshError } = await supabase
                 .from('quotas')
-                .select('*')
+                .select('user_id, request_count, quota_limit, last_reset_at') // Select specific columns
                 .eq('user_id', user.id)
                 .single();
              if (!refreshError && refreshedQuota) {
-                setQuota(refreshedQuota);
+                setQuota(refreshedQuota as Quota);
              } else if (refreshError) {
                   console.error("Error refreshing quota after failed tuning refund:", refreshError.message);
              }
@@ -570,11 +598,11 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
             // Refetch quota locally after refund attempt
             const { data: refreshedQuota, error: refreshError } = await supabase
                 .from('quotas')
-                .select('*')
+                .select('user_id, request_count, quota_limit, last_reset_at') // Select specific columns
                 .eq('user_id', user.id)
                 .single();
             if (!refreshError && refreshedQuota) {
-                setQuota(refreshedQuota);
+                setQuota(refreshedQuota as Quota);
             } else if (refreshError) {
                 console.error("Error refreshing quota after failed publish refund:", refreshError.message);
             }

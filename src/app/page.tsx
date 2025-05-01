@@ -1,10 +1,8 @@
 
-
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import Dashboard from '@/components/dashboard/dashboard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Import Card components for error display
-// Removed incorrect import: import { isRedirectError } from 'next/dist/client/components/redirect';
 
 export default async function Home() {
   let supabase;
@@ -34,28 +32,30 @@ export default async function Home() {
 
   } catch (error: any) {
     // If error is NOT specifically "Auth session missing", handle it.
-    // Redirects are automatically handled by Next.js when thrown, so we don't need isRedirectError.
+    // Redirects are automatically handled by Next.js when thrown.
     if (!error.message?.includes("Auth session missing")) {
-        console.error("Error during Supabase initialization or user fetch:", error.message);
-        initialError = error; // Store the error to display
+        // Log the underlying error unless it's just the internal NEXT_REDIRECT signal
+        if (error.message !== 'NEXT_REDIRECT') {
+            console.error("Error during Supabase initialization or user fetch:", error.message);
+        }
+        initialError = error; // Store the error to potentially display
 
         // Determine the specific error message for configuration issues
         if (error.message.includes("URL and Key are required")) {
            errorMessage = "Supabase URL or Key is missing. Please check your environment variables (`.env.local`) and ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set correctly. Refer to the README for setup instructions.";
         } else if (error.message.includes("Invalid URL")) {
              errorMessage = "Invalid Supabase URL format. Please check the `NEXT_PUBLIC_SUPABASE_URL` in your `.env.local` file. It should look like `https://<your-project-ref>.supabase.co`.";
+        } else if (error.message === 'NEXT_REDIRECT') {
+             // This case means a redirect was triggered, likely because the user wasn't authenticated.
+             // Next.js handles this, so we don't need to show an error card here.
+             // We'll let the redirect happen. No need to set errorMessage.
+             // The function will exit due to the redirect.
+             // If we reach here unexpectedly, it might indicate a deeper issue,
+             // but normally the redirect should halt execution earlier.
+             ; // No action needed, let Next.js handle the redirect.
         } else {
-             // Handle other potential errors, but avoid showing NEXT_REDIRECT internal errors
-             if (error.message !== 'NEXT_REDIRECT') {
-                errorMessage = `An unexpected error occurred during application startup: ${error.message}. Please contact the administrator or check your Supabase configuration.`;
-             } else {
-                 // If it's NEXT_REDIRECT, suppress the specific error message display, as Next.js handles the redirect.
-                 // We might still be here if the redirect happened after the initial try block started.
-                 // We might need to return null or redirect again depending on Next.js behavior.
-                 // Let's return the error card for now, but without the confusing NEXT_REDIRECT message.
-                 errorMessage = "An unexpected redirection occurred.";
-                 // Alternatively, re-throw to ensure Next.js handles it: throw error;
-             }
+             // Handle other potential errors
+             errorMessage = `An unexpected error occurred during application startup: ${error.message}. Please contact the administrator or check your Supabase configuration.`;
         }
      } else {
          // If the error *is* "Auth session missing", redirect to login (should have been caught above, but acts as safety net)
@@ -63,8 +63,9 @@ export default async function Home() {
      }
   }
 
-  // Display specific error if client creation failed or another non-auth error occurred
-  if (initialError && errorMessage) { // Only show card if there's a specific errorMessage set
+  // Display specific error card ONLY if there's a configuration error message set
+  // Do NOT display a card for NEXT_REDIRECT, as Next.js handles it.
+  if (initialError && errorMessage) {
      return (
         <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
             <Card className="mx-auto max-w-md w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
@@ -88,7 +89,7 @@ export default async function Home() {
 
   if (!user) {
     // This should theoretically not be reached if authError was "Auth session missing"
-    // or if createClient threw an error, but acts as a fallback.
+    // or if createClient threw an error, or if a redirect happened, but acts as a fallback.
     console.log("No user session found or error occurred, redirecting to login.");
     redirect('/login');
   }

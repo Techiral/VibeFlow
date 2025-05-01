@@ -13,15 +13,46 @@ export default async function LoginPage({
 }: {
   searchParams: { message: string };
 }) {
-   const supabase = createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (user) {
-    return redirect("/");
+  // Check environment variables FIRST
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    console.error("Supabase URL or Anon Key is missing. Environment variables might not be configured properly.");
+    // Return an error state directly instead of relying on redirect after potential error
+    return (
+        <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+            <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
+                <CardHeader>
+                    <CardTitle>Configuration Error</CardTitle>
+                    <CardDescription>
+                        The application is missing necessary configuration (Supabase URL or Key). Please contact the administrator.
+                    </CardDescription>
+                </CardHeader>
+            </Card>
+        </div>
+    );
   }
+
+
+   let supabase;
+   try {
+     supabase = createClient();
+   } catch (error: any) {
+     console.error("Error creating Supabase client:", error.message);
+      // Redirect or handle error appropriately
+      // Using redirect here might still cause issues if client creation fails partially.
+      // Displaying an error is generally safer.
+      return (
+        <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+            <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
+                <CardHeader>
+                    <CardTitle>Connection Error</CardTitle>
+                    <CardDescription>
+                        Could not connect to the database. Please contact the administrator. Error: {error.message}
+                    </CardDescription>
+                </CardHeader>
+            </Card>
+        </div>
+      );
+   }
 
 
   const signIn = async (formData: FormData) => {
@@ -29,7 +60,7 @@ export default async function LoginPage({
 
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
-    const supabase = createClient();
+    const supabase = createClient(); // Safe to call here due to checks above
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -49,7 +80,7 @@ export default async function LoginPage({
     const origin = headers().get("origin");
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
-    const supabase = createClient();
+    const supabase = createClient(); // Safe to call here due to checks above
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -74,6 +105,33 @@ export default async function LoginPage({
     // Redirect to a confirmation page or show a message
     return redirect("/login?message=Check email to continue sign in process");
   };
+
+  // Check user session *after* confirming Supabase client is created
+  let user = null;
+  try {
+      const { data } = await supabase.auth.getUser();
+      user = data.user;
+  } catch (error: any) { // Catch potential errors from getUser itself
+      console.error("Error fetching Supabase user:", error.message);
+      // Display error or redirect with a specific message
+       return (
+         <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+             <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
+                 <CardHeader>
+                     <CardTitle>Authentication Error</CardTitle>
+                     <CardDescription>
+                         Could not verify user session. Please try again later or contact support. Error: {error.message}
+                     </CardDescription>
+                 </CardHeader>
+             </Card>
+         </div>
+       );
+  }
+
+  if (user) {
+    return redirect("/");
+  }
+
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-background relative overflow-hidden">

@@ -20,7 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark"> {/* Force dark theme */}
+    <html lang="en" className="dark" suppressHydrationWarning> {/* Add suppressHydrationWarning and force dark theme */}
+      <head /> {/* Add explicit head tag */}
       <body className={cn(
         geistSans.variable,
         "antialiased font-sans" // Use sans-serif font

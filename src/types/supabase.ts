@@ -10,39 +10,80 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      quotas: {
+      profiles: { // Added profiles table
         Row: {
-          created_at: string
-          id: string
-          ip_address: string | null
-          request_count: number
-          user_id: string
+          id: string // UUID, references auth.users.id
+          updated_at: string | null
+          username: string | null
+          full_name: string | null
+          phone_number: string | null
+          composio_url: string | null
+          gemini_api_key: string | null // Storing API keys directly is insecure for production! Consider encryption or Vault.
         }
         Insert: {
-          created_at?: string
-          id?: string
-          ip_address?: string | null
-          request_count?: number
-          user_id: string
+          id: string // UUID, references auth.users.id
+          updated_at?: string | null
+          username?: string | null
+          full_name?: string | null
+          phone_number?: string | null
+          composio_url?: string | null
+          gemini_api_key?: string | null
         }
         Update: {
-          created_at?: string
-          id?: string
-          ip_address?: string | null
-          request_count?: number
-          user_id?: string
+          id?: string // UUID, references auth.users.id
+          updated_at?: string | null
+          username?: string | null
+          full_name?: string | null
+          phone_number?: string | null
+          composio_url?: string | null
+          gemini_api_key?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "quotas_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "profiles_id_fkey"
+            columns: ["id"]
             isOneToOne: true
             referencedRelation: "users"
             referencedColumns: ["id"]
           }
         ]
       }
-      tokens: {
+      quotas: {
+        Row: {
+          user_id: string // Changed from id to user_id for clarity
+          request_count: number
+          last_reset_at: string // Added last_reset_at
+          quota_limit: number // Added quota_limit
+          created_at: string // Keep created_at if needed
+          ip_address: string | null // Keep ip_address if needed for specific logic
+        }
+        Insert: {
+          user_id: string
+          request_count?: number
+          last_reset_at?: string // Default to now() in DB
+          quota_limit?: number // Default to 100 in DB
+          created_at?: string // Default to now() in DB
+          ip_address?: string | null
+        }
+        Update: {
+          user_id?: string
+          request_count?: number
+          last_reset_at?: string
+          quota_limit?: number
+          created_at?: string
+          ip_address?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotas_user_id_fkey" // Ensure FK name matches DB
+            columns: ["user_id"]
+            isOneToOne: true // Assuming one quota record per user
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      tokens: { // Keep existing tokens table
         Row: {
           access_token: string
           created_at: string
@@ -83,14 +124,14 @@ export type Database = {
           }
         ]
       }
-      failed_requests: { // Added table for failed requests
+      failed_requests: { // Keep existing failed_requests table
         Row: {
           id: string;
           user_id: string | null;
           created_at: string;
-          request_type: string; // e.g., 'summary', 'generate', 'publish', 'mcp'
+          request_type: string;
           error_message: string;
-          request_payload: Json | null; // Store input payload if needed
+          request_payload: Json | null;
         };
         Insert: {
           id?: string;
@@ -123,19 +164,34 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      increment_quota: { // Function to safely increment quota
+      increment_quota: { // Updated function definition
         Args: {
           p_user_id: string
           p_increment_amount: number
-          p_ip_address: string
+          // p_ip_address removed, handle IP elsewhere if needed
         }
-        Returns: number // Returns the new count
+        Returns: number // Returns the new *remaining* quota
       }
-      get_remaining_quota: { // Function to get remaining quota
+      get_remaining_quota: { // Updated function definition
         Args: {
           p_user_id: string
         }
         Returns: number // Returns remaining requests
+      }
+       // Add function to get profile, creating if not exists
+      get_user_profile: {
+        Args: {
+          p_user_id: string
+        }
+        Returns: { // Define the return type matching profiles.Row
+          id: string
+          updated_at: string | null
+          username: string | null
+          full_name: string | null
+          phone_number: string | null
+          composio_url: string | null
+          gemini_api_key: string | null
+        } // Returns a single profile row
       }
     }
     Enums: {
@@ -147,10 +203,7 @@ export type Database = {
   }
 }
 
-// Extend User type from @supabase/supabase-js if needed
-// import type { User } from '@supabase/supabase-js'
-// export type AppUser = User & { /* custom fields */ }
-
+// Helper types remain the same
 export type Tables<
   PublicTableNameOrOptions extends
     | keyof (Database["public"]["Tables"] & Database["public"]["Views"])
@@ -230,3 +283,7 @@ export type Enums<
   : PublicEnumNameOrOptions extends keyof Database["public"]["Enums"]
   ? Database["public"]["Enums"][PublicEnumNameOrOptions]
   : never
+
+// Define specific table row types for easier usage
+export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type Quota = Database['public']['Tables']['quotas']['Row'];

@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -8,8 +9,15 @@
  * - GenerateSocialPostsOutput - The return type for the generateSocialPosts function.
  */
 
-import {ai} from '@/ai/ai-instance';
+import {ai as defaultAi} from '@/ai/ai-instance'; // Keep default instance
+import { genkit, GenkitError } from 'genkit';
+import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'genkit';
+
+// Define options type including the API key
+type FlowOptions = {
+  apiKey: string;
+};
 
 const GenerateSocialPostsInputSchema = z.object({
   summary: z.string().describe('The summarized content to generate social media posts from.'),
@@ -22,11 +30,22 @@ const GenerateSocialPostsOutputSchema = z.object({
 });
 export type GenerateSocialPostsOutput = z.infer<typeof GenerateSocialPostsOutputSchema>;
 
-export async function generateSocialPosts(input: GenerateSocialPostsInput): Promise<GenerateSocialPostsOutput> {
-  return generateSocialPostsFlow(input);
+// Modify the exported function to accept options
+export async function generateSocialPosts(
+    input: GenerateSocialPostsInput,
+    options: FlowOptions // Add options parameter
+): Promise<GenerateSocialPostsOutput> {
+   if (!options?.apiKey) {
+     throw new GenkitError({
+         status: 'INVALID_ARGUMENT',
+         message: 'API key is required for generating posts.',
+     });
+   }
+   // Pass options to the flow runner
+  return generateSocialPostsFlow(input, options);
 }
 
-const prompt = ai.definePrompt({
+const prompt = defaultAi.definePrompt({
   name: 'generateSocialPostsPrompt',
   input: {
     schema: z.object({
@@ -39,45 +58,64 @@ const prompt = ai.definePrompt({
       post: z.string().describe('The generated social media post for the specified platform.'),
     }),
   },
-  prompt: `You are a social media expert. Generate a social media post for the following platform: {{{platform}}}.\n\nHere is the content summary: {{{summary}}}.\n\nMake sure the post is engaging and tailored to the platform. The length of the post should be appropriate for the platform (e.g., Twitter posts should be less than 280 characters).`,
+  prompt: `You are a social media expert. Generate a social media post for the following platform: {{{platform}}}.\n\nHere is the content summary: {{{summary}}}.\n\nMake sure the post is engaging and tailored to the platform. The length of the post should be appropriate for the platform (e.g., Twitter posts should be less than 280 characters). For YouTube, generate a video description including relevant hashtags.`, // Added YouTube clarification
 });
 
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000; // 1 second
 
-const generateSocialPostsFlow = ai.defineFlow<
+// Modify the flow definition to accept and use options
+const generateSocialPostsFlow = genkit.defineFlow<
   typeof GenerateSocialPostsInputSchema,
-  typeof GenerateSocialPostsOutputSchema
+  typeof GenerateSocialPostsOutputSchema,
+  FlowOptions // Add FlowOptions
 >(
   {
     name: 'generateSocialPostsFlow',
     inputSchema: GenerateSocialPostsInputSchema,
     outputSchema: GenerateSocialPostsOutputSchema,
   },
-  async input => {
+  async (input, flowOptions) => { // Receive flowOptions
+      // Initialize AI instance specific to this flow run
+      const ai = genkit({
+           plugins: [
+               googleAI({ apiKey: flowOptions.apiKey }), // Use apiKey from flowOptions
+           ],
+           model: 'googleai/gemini-2.0-flash',
+      });
+
     let retries = 0;
     let backoff = INITIAL_BACKOFF_MS;
 
     while (retries < MAX_RETRIES) {
         try {
-            const {output} = await prompt(input);
+             // Use the flow-specific AI instance
+            const {output} = await ai.run(prompt, input);
             return output!;
         } catch (error: any) {
-             // Check if the error is a 503 Service Unavailable or similar overload error
-            if ((error.status === 503 || error.message?.includes("503") || error.message?.toLowerCase().includes("overloaded")) && retries < MAX_RETRIES - 1) {
-                console.warn(`GenerateSocialPostsFlow: Service unavailable (503). Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+             // Check for specific API key error
+            if (error.status === 'UNAUTHENTICATED' || error.message?.includes("API key not valid")) {
+                 console.error(`GenerateSocialPostsFlow: Invalid API Key used.`);
+                 throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
+            }
+             // Check for quota or overload errors
+             if ((error.status === 'RESOURCE_EXHAUSTED' || error.status === 503 || error.message?.includes("503") || error.message?.toLowerCase().includes("overloaded")) && retries < MAX_RETRIES - 1) {
+                console.warn(`GenerateSocialPostsFlow (${input.platform}): Service unavailable/overloaded. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
                 backoff *= 2; // Exponential backoff
             } else {
-                // If it's not a 503 or retries are exhausted, re-throw the error
-                console.error(`GenerateSocialPostsFlow: Failed after ${retries} retries.`, error);
-                throw error; // Re-throw the original error or a custom one
+                // If it's not a retriable error or retries are exhausted, re-throw
+                console.error(`GenerateSocialPostsFlow (${input.platform}): Failed after ${retries} retries.`, error);
+                 throw new GenkitError({
+                     status: error.status || 'INTERNAL',
+                     message: `Post generation for ${input.platform} failed: ${error.message || 'Unknown AI error'}`,
+                     cause: error,
+                 });
             }
         }
     }
-    // This line should theoretically be unreachable if MAX_RETRIES > 0,
-    // but needed for type safety if MAX_RETRIES could be 0.
-    throw new Error("GenerateSocialPostsFlow: Max retries reached.");
+     // Should be unreachable
+    throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: `GenerateSocialPostsFlow (${input.platform}): Max retries reached.` });
   }
 );

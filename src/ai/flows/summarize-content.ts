@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -8,9 +9,16 @@
  * - SummarizeContentOutput - The return type for the summarizeContent function.
  */
 
-import {ai} from '@/ai/ai-instance';
+import {ai as defaultAi} from '@/ai/ai-instance'; // Keep default instance for potential fallback/internal use
+import { genkit, GenkitError } from 'genkit';
+import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'genkit';
 import {parseContent} from '@/services/content-parser';
+
+// Define options type including the API key
+type FlowOptions = {
+  apiKey: string;
+};
 
 const SummarizeContentInputSchema = z.object({
   content: z.string().describe('The content to summarize, either a URL or text.'),
@@ -22,11 +30,23 @@ const SummarizeContentOutputSchema = z.object({
 });
 export type SummarizeContentOutput = z.infer<typeof SummarizeContentOutputSchema>;
 
-export async function summarizeContent(input: SummarizeContentInput): Promise<SummarizeContentOutput> {
-  return summarizeContentFlow(input);
+// Modify the exported function to accept options
+export async function summarizeContent(
+  input: SummarizeContentInput,
+  options: FlowOptions
+): Promise<SummarizeContentOutput> {
+  if (!options?.apiKey) {
+    throw new GenkitError({
+        status: 'INVALID_ARGUMENT',
+        message: 'API key is required for summarization.',
+    });
+  }
+  // Pass options to the flow runner
+  return summarizeContentFlow(input, options);
 }
 
-const summarizeContentPrompt = ai.definePrompt({
+// Define the prompt separately, it doesn't need the API key directly
+const summarizeContentPrompt = defaultAi.definePrompt({
   name: 'summarizeContentPrompt',
   input: {
     schema: z.object({
@@ -38,32 +58,40 @@ const summarizeContentPrompt = ai.definePrompt({
       summary: z.string().describe('The summarized content.'),
     }),
   },
-  prompt: `Summarize the following content:\n\n{{content}}`,
+  prompt: `Summarize the following content concisely:\n\n{{{content}}}`, // Added concisely
 });
 
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000; // 1 second
 
-
-const summarizeContentFlow = ai.defineFlow<
+// Modify the flow definition to accept and use options
+const summarizeContentFlow = genkit.defineFlow<
   typeof SummarizeContentInputSchema,
-  typeof SummarizeContentOutputSchema
+  typeof SummarizeContentOutputSchema,
+  FlowOptions // Add FlowOptions as the third generic parameter for flow context/options
 >({
   name: 'summarizeContentFlow',
   inputSchema: SummarizeContentInputSchema,
   outputSchema: SummarizeContentOutputSchema,
 },
-async input => {
+async (input, flowOptions) => { // Receive flowOptions here
+  // Initialize AI instance specific to this flow run with the provided API key
+   const ai = genkit({
+       plugins: [
+           googleAI({ apiKey: flowOptions.apiKey }), // Use apiKey from flowOptions
+       ],
+       model: 'googleai/gemini-2.0-flash', // Or get model from config/options
+       // Consider adding log level or other configs if needed
+   });
+
+
   let content = input.content;
   // If the input is a URL, parse the content from the URL.
   try {
       if (input.content.startsWith('http://') || input.content.startsWith('https://')) {
         const parsedContent = await parseContent(input.content);
-        // Basic check if parsing returned something meaningful
         if (!parsedContent || !parsedContent.body || parsedContent.body.trim().length < 10) {
             console.warn("Content parsing might have failed or returned very little content for URL:", input.content);
-            // Depending on requirements, you might throw an error here or proceed cautiously.
-            // For now, we'll proceed but use a fallback if body is empty.
             content = parsedContent?.body || "Could not parse content from URL.";
         } else {
              content = parsedContent.body;
@@ -71,8 +99,11 @@ async input => {
       }
   } catch (parseError: any) {
        console.error("Error parsing content from URL:", input.content, parseError);
-       // Re-throw a more specific error to be caught by the frontend
-       throw new Error(`Error parsing content from URL: ${parseError.message || 'Unknown parsing error'}`);
+       throw new GenkitError({
+          status: 'UNAVAILABLE', // Or another appropriate status
+          message: `Error parsing content from URL: ${parseError.message || 'Unknown parsing error'}`,
+          cause: parseError,
+       });
   }
 
   let retries = 0;
@@ -80,16 +111,22 @@ async input => {
 
    while (retries < MAX_RETRIES) {
         try {
-            const {output} = await summarizeContentPrompt({content});
+            // Use the flow-specific AI instance to run the prompt
+            const {output} = await ai.run(summarizeContentPrompt, { content }); // Use ai.run with prompt object
             if (!output?.summary) {
                 console.warn("SummarizeContentFlow: Received empty summary from AI.");
-                throw new Error("AI returned an empty summary."); // Treat empty summary as an error for retry logic
+                throw new Error("AI returned an empty summary.");
             }
             return output;
         } catch (error: any) {
-             // Check if the error is a 503 Service Unavailable or similar overload error
-            if ((error.status === 503 || error.message?.includes("503") || error.message?.toLowerCase().includes("overloaded")) && retries < MAX_RETRIES - 1) {
-                console.warn(`SummarizeContentFlow: Service unavailable (503). Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+             // Check for specific API key error
+            if (error.status === 'UNAUTHENTICATED' || error.message?.includes("API key not valid")) {
+                 console.error(`SummarizeContentFlow: Invalid API Key used.`);
+                 throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
+            }
+             // Check for quota or overload errors
+            if ((error.status === 'RESOURCE_EXHAUSTED' || error.status === 503 || error.message?.includes("503") || error.message?.toLowerCase().includes("overloaded")) && retries < MAX_RETRIES - 1) {
+                console.warn(`SummarizeContentFlow: Service unavailable/overloaded. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
                 backoff *= 2; // Exponential backoff
@@ -99,14 +136,16 @@ async input => {
                  retries++;
                  backoff *= 2;
             } else {
-                // If it's not a 503 or retries are exhausted, re-throw the error
+                // If it's not a retriable error or retries are exhausted, re-throw
                 console.error(`SummarizeContentFlow: Failed after ${retries} retries.`, error);
-                throw error; // Re-throw the original error or a custom one
+                 throw new GenkitError({
+                   status: error.status || 'INTERNAL', // Use error status or default
+                   message: `Summarization failed: ${error.message || 'Unknown AI error'}`,
+                   cause: error,
+                 });
             }
         }
     }
-     // This line should theoretically be unreachable if MAX_RETRIES > 0,
-    // but needed for type safety if MAX_RETRIES could be 0.
-    throw new Error("SummarizeContentFlow: Max retries reached after encountering errors.");
+     // Should be unreachable if MAX_RETRIES > 0
+    throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: "SummarizeContentFlow: Max retries reached after encountering errors."});
 });
-

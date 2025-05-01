@@ -137,7 +137,7 @@ export default async function DashboardPage() {
       }
       // Log only if it's NOT a handled DB setup error or config error that we already have a message for.
       if (!errorMessage) {
-        console.error("Error during Supabase initialization or data fetch:", error.message);
+        // console.error("Error during Supabase initialization or data fetch:", error.message); // Removed console.error
       }
       initialError = error; // Store the error regardless for potential display
 

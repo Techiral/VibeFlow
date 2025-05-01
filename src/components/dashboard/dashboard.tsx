@@ -79,7 +79,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
               .rpc('get_user_profile', { p_user_id: user.id }); // Use RPC function
 
              if (error) {
-                  console.error("Client Error fetching/creating profile:", error.message);
+                  // console.error("Client Error fetching/creating profile:", error.message); // Removed console.error
                   if (error.message.includes("function public.get_user_profile") && error.message.includes("does not exist")) {
                       setupErrorMsg = "Database function 'get_user_profile' missing. Please run the setup script from `supabase/schema.sql`. See README.";
                   } else if (error.message.includes("relation") && error.message.includes("does not exist")) {
@@ -118,7 +118,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                 .select()
                 .single();
              if (createError) {
-                  console.error("Client Error creating quota:", createError.message);
+                  // console.error("Client Error creating quota:", createError.message); // Removed console.error
                   if (createError.message.includes("relation \"public.quotas\" does not exist")) {
                       setupErrorMsg = "Database table 'quotas' missing. Please run the setup script from `supabase/schema.sql`. See README.";
                   } else {
@@ -130,7 +130,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                 setQuota(currentQuota);
              }
           } else if (error) { // Other error during select
-              console.error("Client Error fetching quota:", error.message);
+              // console.error("Client Error fetching quota:", error.message); // Removed console.error
               if (error.message.includes("relation \"public.quotas\" does not exist")) {
                   setupErrorMsg = "Database table 'quotas' missing. Please run the setup script from `supabase/schema.sql`. See README.";
               } else {

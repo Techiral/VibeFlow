@@ -83,15 +83,22 @@ const isRetriableError = (error: any): boolean => {
     const message = error.message?.toLowerCase() || '';
     const status = error.status || (error instanceof GenkitError ? error.status : null);
 
-    return (
-        status === 'UNAVAILABLE' ||
-        status === 'RESOURCE_EXHAUSTED' ||
-        status === 503 || // Check direct status code
-        message.includes('503') ||
-        message.includes('overloaded') ||
-        message.includes('service unavailable') ||
-        message.includes('internal error') // Sometimes Gemini returns this for overload
-    );
+     // Check for Genkit specific statuses
+    if (status === 'UNAVAILABLE' || status === 'RESOURCE_EXHAUSTED') {
+        return true;
+    }
+
+    // Check for HTTP status codes within the error message or structure
+    if (error.status === 503 || message.includes('503') || message.includes('service unavailable') || message.includes('overloaded') || message.includes('internal error')) {
+       return true;
+    }
+
+    // Check for specific error messages from Google AI
+    if (message.includes('the model is overloaded')) {
+        return true;
+    }
+
+    return false;
 };
 
 // Modify the flow definition to accept and use options
@@ -130,17 +137,13 @@ async (input, flowOptions) => { // Receive flowOptions
                  throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
             }
 
-            // Check for retriable errors (5xx, UNAVAILABLE, etc.)
-            if (isRetriableError(error) && retries < MAX_RETRIES - 1) {
-                console.warn(`TuneSocialPostsFlow: Service unavailable/overloaded. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+            // Check for retriable errors (5xx, UNAVAILABLE, etc.) or empty tuned post
+            if ((isRetriableError(error) || error.message === "AI returned an empty tuned post.") && retries < MAX_RETRIES - 1) {
+                const reason = isRetriableError(error) ? "Service unavailable/overloaded" : "Received empty tuned post";
+                console.warn(`TuneSocialPostsFlow: ${reason}. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
                 backoff *= 2; // Exponential backoff
-             } else if (error.message === "AI returned an empty tuned post." && retries < MAX_RETRIES - 1) {
-                 console.warn(`TuneSocialPostsFlow: Received empty tuned post. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
-                 await new Promise(resolve => setTimeout(resolve, backoff));
-                 retries++;
-                 backoff *= 2;
             } else {
                 // If it's not a retriable error or retries are exhausted, re-throw
                 console.error(`TuneSocialPostsFlow: Failed after ${retries} retries. Original Error:`, error);
@@ -153,12 +156,18 @@ async (input, flowOptions) => { // Receive flowOptions
                      finalStatus = error.status ?? finalStatus;
                  } else if (isRetriableError(error)) {
                       finalStatus = 'UNAVAILABLE';
-                 } else if (error.status === 400) {
+                 } else if (error.status === 400 || error.statusCode === 400) { // Check for 400 status
                        finalStatus = 'INVALID_ARGUMENT';
                  }
 
+                  // Customize messages based on status
                   if (finalStatus === 'UNAVAILABLE') {
                       finalMessage = "AI service is temporarily unavailable for tuning. Please try again later.";
+                  } else if (finalStatus === 'INVALID_ARGUMENT') {
+                       finalMessage = `Tuning failed due to invalid input or configuration: ${error.message || 'Bad request'}`;
+                  } else if (error.message === "AI returned an empty tuned post.") {
+                      finalMessage = "Tuning failed because the AI returned an empty result after multiple retries.";
+                      finalStatus = 'INTERNAL'; // Treat empty tuned post after retries as internal failure
                   }
 
                 throw new GenkitError({
@@ -172,3 +181,4 @@ async (input, flowOptions) => { // Receive flowOptions
     // Should be unreachable if MAX_RETRIES > 0
     throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: "TuneSocialPostsFlow: Max retries reached after encountering errors."});
 });
+

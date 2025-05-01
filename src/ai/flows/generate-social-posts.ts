@@ -77,15 +77,22 @@ const isRetriableError = (error: any): boolean => {
     const message = error.message?.toLowerCase() || '';
     const status = error.status || (error instanceof GenkitError ? error.status : null);
 
-    return (
-        status === 'UNAVAILABLE' ||
-        status === 'RESOURCE_EXHAUSTED' ||
-        status === 503 || // Check direct status code
-        message.includes('503') ||
-        message.includes('overloaded') ||
-        message.includes('service unavailable') ||
-        message.includes('internal error') // Sometimes Gemini returns this for overload
-    );
+     // Check for Genkit specific statuses
+    if (status === 'UNAVAILABLE' || status === 'RESOURCE_EXHAUSTED') {
+        return true;
+    }
+
+    // Check for HTTP status codes within the error message or structure
+    if (error.status === 503 || message.includes('503') || message.includes('service unavailable') || message.includes('overloaded') || message.includes('internal error')) {
+       return true;
+    }
+
+    // Check for specific error messages from Google AI
+    if (message.includes('the model is overloaded')) {
+        return true;
+    }
+
+    return false;
 };
 
 // Modify the flow definition to accept and use options
@@ -125,17 +132,13 @@ const generateSocialPostsFlow = defaultAi.defineFlow<
                  throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
             }
 
-             // Check for retriable errors (5xx, UNAVAILABLE, etc.)
-            if (isRetriableError(error) && retries < MAX_RETRIES - 1) {
-                console.warn(`GenerateSocialPostsFlow (${input.platform}): Service unavailable/overloaded. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
-                await new Promise(resolve => setTimeout(resolve, backoff));
-                retries++;
-                backoff *= 2; // Exponential backoff
-            } else if (error.message === "AI returned an empty post." && retries < MAX_RETRIES - 1) {
-                 console.warn(`GenerateSocialPostsFlow (${input.platform}): Received empty post. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+            // Check for retriable errors (5xx, UNAVAILABLE, etc.) or empty post
+            if ((isRetriableError(error) || error.message === "AI returned an empty post.") && retries < MAX_RETRIES - 1) {
+                 const reason = isRetriableError(error) ? "Service unavailable/overloaded" : "Received empty post";
+                 console.warn(`GenerateSocialPostsFlow (${input.platform}): ${reason}. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                  await new Promise(resolve => setTimeout(resolve, backoff));
                  retries++;
-                 backoff *= 2;
+                 backoff *= 2; // Exponential backoff
             } else {
                 // If it's not a retriable error or retries are exhausted, re-throw
                 console.error(`GenerateSocialPostsFlow (${input.platform}): Failed after ${retries} retries. Original Error:`, error);
@@ -148,12 +151,18 @@ const generateSocialPostsFlow = defaultAi.defineFlow<
                      finalStatus = error.status ?? finalStatus;
                  } else if (isRetriableError(error)) {
                      finalStatus = 'UNAVAILABLE';
-                 } else if (error.status === 400) {
+                 } else if (error.status === 400 || error.statusCode === 400) { // Check for 400 status
                       finalStatus = 'INVALID_ARGUMENT';
                  }
 
+                  // Customize messages based on status
                   if (finalStatus === 'UNAVAILABLE') {
                       finalMessage = `AI service is temporarily unavailable generating ${input.platform} post. Please try again later.`;
+                  } else if (finalStatus === 'INVALID_ARGUMENT') {
+                       finalMessage = `Generation for ${input.platform} failed due to invalid input or configuration: ${error.message || 'Bad request'}`;
+                  } else if (error.message === "AI returned an empty post.") {
+                      finalMessage = `Generation for ${input.platform} failed because the AI returned an empty result after multiple retries.`;
+                      finalStatus = 'INTERNAL'; // Treat empty post after retries as internal failure
                   }
 
                  throw new GenkitError({

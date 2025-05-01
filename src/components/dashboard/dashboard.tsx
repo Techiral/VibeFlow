@@ -811,6 +811,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
               onChange={(e) => setContentInput(e.target.value)}
               className="min-h-[200px] md:min-h-[300px] lg:min-h-[400px] bg-input/50 border-border/50 text-base resize-none h-full" // Make textarea take available height
               disabled={isDisabled} // Use the combined disabled state
+              suppressHydrationWarning // Prevent hydration mismatch from browser extensions
             />
           </CardContent>
           <CardFooter>
@@ -872,6 +873,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                               value={postDrafts[platform] || ''}
                               readOnly // Make textarea read-only, tuning happens via buttons
                               className="min-h-[150px] bg-input/30 border-border/30 resize-none text-sm h-full" // Full height textarea
+                              suppressHydrationWarning // Prevent hydration mismatch from browser extensions
                             />
                          )}
                         {/* Tuning Buttons (only show if post generated successfully) */}

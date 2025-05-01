@@ -9,7 +9,7 @@
  * - GenerateSocialPostsOutput - The return type for the generateSocialPosts function.
  */
 
-import {ai as defaultAi} from '@/ai/ai-instance'; // Keep default instance
+import {ai as defaultAi} from '@/ai/ai-instance'; // Use the configured instance
 import { genkit, GenkitError } from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'genkit';
@@ -65,7 +65,8 @@ const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000; // 1 second
 
 // Modify the flow definition to accept and use options
-const generateSocialPostsFlow = genkit.defineFlow<
+// Use defaultAi.defineFlow
+const generateSocialPostsFlow = defaultAi.defineFlow<
   typeof GenerateSocialPostsInputSchema,
   typeof GenerateSocialPostsOutputSchema,
   FlowOptions // Add FlowOptions
@@ -91,6 +92,10 @@ const generateSocialPostsFlow = genkit.defineFlow<
         try {
              // Use the flow-specific AI instance
             const {output} = await ai.run(prompt, input);
+             if (!output?.post) {
+                 console.warn(`GenerateSocialPostsFlow (${input.platform}): Received empty post from AI.`);
+                 throw new Error("AI returned an empty post.");
+             }
             return output!;
         } catch (error: any) {
              // Check for specific API key error
@@ -104,6 +109,11 @@ const generateSocialPostsFlow = genkit.defineFlow<
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
                 backoff *= 2; // Exponential backoff
+            } else if (error.message === "AI returned an empty post." && retries < MAX_RETRIES - 1) {
+                 console.warn(`GenerateSocialPostsFlow (${input.platform}): Received empty post. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+                 await new Promise(resolve => setTimeout(resolve, backoff));
+                 retries++;
+                 backoff *= 2;
             } else {
                 // If it's not a retriable error or retries are exhausted, re-throw
                 console.error(`GenerateSocialPostsFlow (${input.platform}): Failed after ${retries} retries.`, error);

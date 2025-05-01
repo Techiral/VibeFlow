@@ -10,7 +10,7 @@
  * - TuneSocialPostsOutput - The return type for the tuneSocialPosts function.
  */
 
-import {ai as defaultAi} from '@/ai/ai-instance'; // Keep default instance
+import {ai as defaultAi} from '@/ai/ai-instance'; // Use the configured instance
 import { genkit, GenkitError } from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'genkit';
@@ -72,7 +72,8 @@ const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000; // 1 second
 
 // Modify the flow definition to accept and use options
-const tuneSocialPostsFlow = genkit.defineFlow<
+// Use defaultAi.defineFlow
+const tuneSocialPostsFlow = defaultAi.defineFlow<
   typeof TuneSocialPostsInputSchema,
   typeof TuneSocialPostsOutputSchema,
   FlowOptions // Add FlowOptions
@@ -97,6 +98,10 @@ async (input, flowOptions) => { // Receive flowOptions
         try {
             // Use the flow-specific AI instance
             const {output} = await ai.run(prompt, input);
+            if (!output?.tunedPost) {
+                console.warn("TuneSocialPostsFlow: Received empty tuned post from AI.");
+                throw new Error("AI returned an empty tuned post.");
+            }
             return output!;
         } catch (error: any) {
              // Check for specific API key error
@@ -110,6 +115,11 @@ async (input, flowOptions) => { // Receive flowOptions
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
                 backoff *= 2; // Exponential backoff
+             } else if (error.message === "AI returned an empty tuned post." && retries < MAX_RETRIES - 1) {
+                 console.warn(`TuneSocialPostsFlow: Received empty tuned post. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+                 await new Promise(resolve => setTimeout(resolve, backoff));
+                 retries++;
+                 backoff *= 2;
             } else {
                 // If it's not a retriable error or retries are exhausted, re-throw
                 console.error(`TuneSocialPostsFlow: Failed after ${retries} retries.`, error);

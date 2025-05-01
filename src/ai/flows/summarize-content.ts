@@ -9,7 +9,7 @@
  * - SummarizeContentOutput - The return type for the summarizeContent function.
  */
 
-import {ai as defaultAi} from '@/ai/ai-instance'; // Keep default instance for potential fallback/internal use
+import {ai as defaultAi} from '@/ai/ai-instance'; // Use the configured instance
 import { genkit, GenkitError } from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'genkit';
@@ -65,7 +65,8 @@ const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000; // 1 second
 
 // Modify the flow definition to accept and use options
-const summarizeContentFlow = genkit.defineFlow<
+// Use defaultAi.defineFlow
+const summarizeContentFlow = defaultAi.defineFlow<
   typeof SummarizeContentInputSchema,
   typeof SummarizeContentOutputSchema,
   FlowOptions // Add FlowOptions as the third generic parameter for flow context/options
@@ -149,3 +150,4 @@ async (input, flowOptions) => { // Receive flowOptions here
      // Should be unreachable if MAX_RETRIES > 0
     throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: "SummarizeContentFlow: Max retries reached after encountering errors."});
 });
+

@@ -28,7 +28,7 @@ export default function RootLayout({
         "antialiased font-sans" // Use sans-serif font
         )}
         suppressHydrationWarning={true} // Add this to ignore browser extension attributes
-        >
+        >{/* No whitespace allowed here */}
         {children}
         <Toaster />
       </body>

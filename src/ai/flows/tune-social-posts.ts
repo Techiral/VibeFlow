@@ -22,6 +22,7 @@ type FlowOptions = {
 const TuneSocialPostsInputSchema = z.object({
   originalPost: z.string().describe('The original social media post.'),
   feedback: z.string().describe('User feedback on the post (e.g., Make wittier, More concise).'),
+  platform: z.enum(['linkedin', 'twitter', 'youtube']).describe('The platform the original post was intended for (influences length considerations).') // Added platform context
 });
 export type TuneSocialPostsInput = z.infer<typeof TuneSocialPostsInputSchema>;
 
@@ -51,6 +52,7 @@ const prompt = defaultAi.definePrompt({
     schema: z.object({
       originalPost: z.string().describe('The original social media post.'),
       feedback: z.string().describe('User feedback on the post (e.g., Make wittier, More concise).'),
+      platform: z.enum(['linkedin', 'twitter', 'youtube']).describe('The platform the original post was intended for (influences length considerations).') // Added platform context
     }),
   },
   output: {
@@ -58,12 +60,15 @@ const prompt = defaultAi.definePrompt({
       tunedPost: z.string().describe('The tuned social media post.'),
     }),
   },
-  prompt: `You are a social media expert. You will be given an original social media post and feedback on how to improve it. Please tune the post based on the feedback, ensuring the length remains appropriate for the likely platform.
+  prompt: `You are a social media expert. You will be given an original social media post and feedback on how to improve it. Please tune the post based on the feedback.
 
-Original Post: {{{originalPost}}}
-Feedback: {{{feedback}}}
+Original Post (intended for {{platform}}):
+{{{originalPost}}}
 
-Tuned Post:`, // Simplified prompt
+Feedback:
+{{{feedback}}}
+
+Tuned Post (keep appropriate for {{platform}}):`, // Enhanced prompt with platform context
   // Define config schema to accept API key
   configSchema: z.object({
     apiKey: z.string().optional(),
@@ -96,6 +101,11 @@ const isRetriableError = (error: any): boolean => {
     // Check for specific error messages from Google AI
     if (message.includes('the model is overloaded')) {
         return true;
+    }
+
+     // Check for rate limit exceeded errors from Google (might appear as RESOURCE_EXHAUSTED or specific messages)
+    if (message.includes('rate limit exceeded') || message.includes('quota exceeded')) {
+        return true; // Treat quota issues as potentially retriable short-term, but also handle specifically later
     }
 
     return false;
@@ -138,8 +148,13 @@ async (input, flowOptions) => { // Receive flowOptions
             }
 
             // Check for retriable errors (5xx, UNAVAILABLE, etc.) or empty tuned post
-            if ((isRetriableError(error) || error.message === "AI returned an empty tuned post.") && retries < MAX_RETRIES - 1) {
-                const reason = isRetriableError(error) ? "Service unavailable/overloaded" : "Received empty tuned post";
+            if (isRetriableError(error) && retries < MAX_RETRIES - 1) {
+                 let reason = "AI service unavailable/overloaded";
+                 if (error.message === "AI returned an empty tuned post.") {
+                      reason = "Received empty tuned post";
+                 } else if (error.status === 'RESOURCE_EXHAUSTED' || error.message?.includes('rate limit exceeded')) {
+                      reason = "AI service rate limit potentially hit";
+                 }
                 console.warn(`TuneSocialPostsFlow: ${reason}. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
@@ -155,7 +170,14 @@ async (input, flowOptions) => { // Receive flowOptions
                   if (error instanceof GenkitError) {
                      finalStatus = error.status ?? finalStatus;
                  } else if (isRetriableError(error)) {
-                      finalStatus = 'UNAVAILABLE';
+                     // Even if retriable, if retries are exhausted, report based on type
+                      if (error.status === 503 || error.message?.includes('503') || error.message?.includes('overloaded')) {
+                          finalStatus = 'UNAVAILABLE';
+                      } else if (error.status === 'RESOURCE_EXHAUSTED' || error.message?.includes('rate limit exceeded')) {
+                           finalStatus = 'RESOURCE_EXHAUSTED';
+                      } else {
+                           finalStatus = 'INTERNAL'; // Default for other retriable errors after exhaustion
+                      }
                  } else if (error.status === 400 || error.statusCode === 400) { // Check for 400 status
                        finalStatus = 'INVALID_ARGUMENT';
                  }
@@ -163,6 +185,8 @@ async (input, flowOptions) => { // Receive flowOptions
                   // Customize messages based on status
                   if (finalStatus === 'UNAVAILABLE') {
                       finalMessage = "AI service is temporarily unavailable for tuning. Please try again later.";
+                  } else if (finalStatus === 'RESOURCE_EXHAUSTED') {
+                       finalMessage = "AI service rate limit likely exceeded during tuning. Please check your Google API quota or try again later.";
                   } else if (finalStatus === 'INVALID_ARGUMENT') {
                        finalMessage = `Tuning failed due to invalid input or configuration: ${error.message || 'Bad request'}`;
                   } else if (error.message === "AI returned an empty tuned post.") {

@@ -409,6 +409,8 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                setIsProfileDialogOpen(true); // Prompt user to fix key
             } else if (summaryError.status === 'UNAVAILABLE' || summaryError.message.includes("503") || summaryError.message.toLowerCase().includes("overloaded") || summaryError.message.toLowerCase().includes("service unavailable")) {
                 description = "AI service is temporarily overloaded during summarization. Please try again later.";
+            } else if (summaryError.status === 'RESOURCE_EXHAUSTED' || summaryError.message.includes('rate limit exceeded')) {
+                description = "AI service rate limit likely exceeded during summarization. Please check your Google API quota or try again later.";
             } else if (summaryError.status === 'INVALID_ARGUMENT' && summaryError.message.includes("API key is required")) {
                  description = "API Key was missing during generation.";
                  setIsProfileDialogOpen(true); // Should be caught earlier, but handle just in case
@@ -446,6 +448,8 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                      setIsProfileDialogOpen(true);
                   } else if (err.status === 'UNAVAILABLE' || err.message.includes("503") || err.message.toLowerCase().includes("overloaded") || err.message.toLowerCase().includes("service unavailable")) {
                       description = `AI service is temporarily overloaded generating ${platform} post. Please try again later.`;
+                  } else if (err.status === 'RESOURCE_EXHAUSTED' || err.message.includes('rate limit exceeded')) {
+                      description = `AI service rate limit likely exceeded generating ${platform} post. Please check your Google API quota or try again later.`;
                   } else if (err.status === 'INVALID_ARGUMENT' && err.message.includes("API key is required")) {
                       description = "API Key was missing during generation.";
                        setIsProfileDialogOpen(true);
@@ -542,7 +546,8 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
 
     startTransition(async () => {
       try {
-        const tunedResult = await tuneSocialPosts({ originalPost, feedback }, { apiKey });
+        // Pass platform context to the tuning function
+        const tunedResult = await tuneSocialPosts({ originalPost, feedback, platform }, { apiKey });
         if (tunedResult.tunedPost) { // Check if tuned post is not empty
             setPostDrafts(prev => ({ ...prev, [platform]: tunedResult.tunedPost }));
             toast({ title: "Post Tuned!", description: `Applied feedback: "${feedback}"`, variant: "default" });
@@ -559,6 +564,8 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
              setIsProfileDialogOpen(true);
           } else if (error.status === 'UNAVAILABLE' || error.message.includes("503") || error.message.toLowerCase().includes("overloaded") || error.message.toLowerCase().includes("service unavailable")) {
               description = "AI service is temporarily overloaded. Please try tuning again later.";
+          } else if (error.status === 'RESOURCE_EXHAUSTED' || error.message.includes('rate limit exceeded')) {
+              description = "AI service rate limit likely exceeded during tuning. Please check your Google API quota or try again later.";
           } else if (error.status === 'INVALID_ARGUMENT' && error.message.includes("API key is required")) {
               description = "API Key was missing during tuning.";
               setIsProfileDialogOpen(true);

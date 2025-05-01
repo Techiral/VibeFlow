@@ -92,6 +92,12 @@ const isRetriableError = (error: any): boolean => {
         return true;
     }
 
+    // Check for rate limit exceeded errors from Google (might appear as RESOURCE_EXHAUSTED or specific messages)
+    if (message.includes('rate limit exceeded') || message.includes('quota exceeded')) {
+        return true; // Treat quota issues as potentially retriable short-term, but also handle specifically later
+    }
+
+
     return false;
 };
 
@@ -156,8 +162,13 @@ async (input, flowOptions) => { // Receive flowOptions here
             }
 
             // Check for retriable errors (5xx, UNAVAILABLE, etc.) or empty summary
-            if ((isRetriableError(error) || error.message === "AI returned an empty summary.") && retries < MAX_RETRIES - 1) {
-                const reason = isRetriableError(error) ? "Service unavailable/overloaded" : "Received empty summary";
+            if (isRetriableError(error) && retries < MAX_RETRIES - 1) {
+                let reason = "AI service unavailable/overloaded";
+                if (error.message === "AI returned an empty summary.") {
+                    reason = "Received empty summary";
+                } else if (error.status === 'RESOURCE_EXHAUSTED' || error.message?.includes('rate limit exceeded')) {
+                     reason = "AI service rate limit potentially hit";
+                }
                 console.warn(`SummarizeContentFlow: ${reason}. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
@@ -173,7 +184,14 @@ async (input, flowOptions) => { // Receive flowOptions here
                   if (error instanceof GenkitError) {
                      finalStatus = error.status ?? finalStatus;
                   } else if (isRetriableError(error)) {
-                      finalStatus = 'UNAVAILABLE';
+                      // Even if retriable, if retries are exhausted, report based on type
+                      if (error.status === 503 || error.message?.includes('503') || error.message?.includes('overloaded')) {
+                          finalStatus = 'UNAVAILABLE';
+                      } else if (error.status === 'RESOURCE_EXHAUSTED' || error.message?.includes('rate limit exceeded')) {
+                           finalStatus = 'RESOURCE_EXHAUSTED';
+                      } else {
+                           finalStatus = 'INTERNAL'; // Default for other retriable errors after exhaustion
+                      }
                   } else if (error.status === 400 || error.statusCode === 400) { // Check for 400 status
                        finalStatus = 'INVALID_ARGUMENT';
                   }
@@ -181,6 +199,8 @@ async (input, flowOptions) => { // Receive flowOptions here
                   // Customize messages based on status
                   if (finalStatus === 'UNAVAILABLE') {
                       finalMessage = "AI service is temporarily unavailable. Please try again later.";
+                  } else if (finalStatus === 'RESOURCE_EXHAUSTED') {
+                       finalMessage = "AI service rate limit likely exceeded. Please check your Google API quota or try again later.";
                   } else if (finalStatus === 'INVALID_ARGUMENT') {
                        finalMessage = `Summarization failed due to invalid input or configuration: ${error.message || 'Bad request'}`;
                   } else if (error.message === "AI returned an empty summary.") {

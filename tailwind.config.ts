@@ -96,6 +96,10 @@ export default {
         'pulse-glow': { // Added pulse-glow keyframes
           'from': { opacity: '0.6', transform: 'translate(-50%, -50%) scale(0.9)' },
           'to': { opacity: '1', transform: 'translate(-50%, -50%) scale(1.1)' },
+        },
+        'fade-in-up': { // Added fade-in-up keyframes
+            '0%': { opacity: '0', transform: 'translateY(20px)' },
+            '100%': { opacity: '1', transform: 'translateY(0)' },
         }
   		},
   		animation: {
@@ -103,6 +107,7 @@ export default {
   			'accordion-up': 'accordion-up 0.2s ease-out',
         'shimmer': 'shimmer 2s linear infinite',
         'pulse-glow': 'pulse-glow 5s infinite alternate', // Added pulse-glow animation
+        'fade-in-up': 'fade-in-up 0.6s ease-out forwards', // Added fade-in-up animation utility
   		}
   	}
   },

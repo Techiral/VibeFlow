@@ -4,24 +4,30 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { CheckCircle, Zap, BarChartHorizontal, Edit, Share2 } from 'lucide-react';
+import { CheckCircle, Zap, BarChartHorizontal, Edit, Share2, TrendingUp, Clock, Users } from 'lucide-react'; // Added more icons
 
 export const metadata: Metadata = {
   title: 'VibeFlow | AI Social Media Post Generator',
   description: 'Effortlessly generate engaging social media posts from any content using AI. Summarize URLs or text, get tailored drafts for LinkedIn, Twitter, & YouTube, and tune them to perfection.',
-  // Add more SEO metadata as needed (keywords, open graph, etc.)
+  keywords: ['ai social media', 'content generation', 'linkedin post generator', 'twitter post generator', 'youtube description generator', 'content summarization', 'social media marketing'],
+  openGraph: {
+      title: 'VibeFlow | AI Social Media Post Generator',
+      description: 'Transform content into social buzz instantly. AI-powered summarization and post generation for LinkedIn, Twitter, and YouTube.',
+      // Add image URL once available
+      // images: ['/og-image.png'],
+  }
 };
 
 export default function LandingPage() {
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground dark">
+    <div className="flex flex-col min-h-screen bg-background text-foreground dark overflow-x-hidden"> {/* Prevent horizontal scroll */}
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 max-w-screen-2xl items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="container flex h-14 max-w-screen-2xl items-center justify-between px-4 md:px-6">
+          <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
             <Zap className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-bold text-gradient">VibeFlow</h1>
-          </div>
+          </Link>
           <nav className="flex items-center gap-4">
             <Link href="/login">
               <Button>Get Started</Button>
@@ -31,63 +37,68 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative py-20 md:py-32 overflow-hidden">
+      <section className="relative py-24 md:py-40 overflow-hidden">
         {/* Animated Gradient Glow */}
         <div className="absolute inset-0 z-0 gradient-glow opacity-50"></div>
-        <div className="container relative z-10 text-center">
-          <h1 className="text-4xl md:text-6xl font-bold mb-6 text-gradient">
+        <div className="container relative z-10 text-center px-4">
+          <h1 className="text-4xl md:text-6xl font-bold mb-6 text-gradient leading-tight fade-in-up" style={{ animationDelay: '0.1s' }}>
             Transform Content into Social Buzz Instantly
           </h1>
-          <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-3xl mx-auto">
+          <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-3xl mx-auto fade-in-up" style={{ animationDelay: '0.2s' }}>
             VibeFlow uses AI to summarize articles, videos, or any text and crafts engaging posts tailored for LinkedIn, Twitter, and YouTube. Save time, boost engagement.
           </p>
-          <Link href="/login">
-            <Button size="lg" className="shadow-lg">
-              Start Generating Posts <Zap className="ml-2 h-5 w-5" />
-            </Button>
-          </Link>
+          <div className="fade-in-up" style={{ animationDelay: '0.3s' }}>
+            <Link href="/login">
+              <Button size="lg" className="shadow-lg hover:scale-105 transition-transform duration-200">
+                Start Generating Posts <Zap className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+          </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-16 md:py-24 bg-muted/20">
-        <div className="container">
-          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">How VibeFlow Works</h2>
+      <section id="features" className="py-20 md:py-28 bg-muted/20">
+        <div className="container px-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-16 fade-in-up">How VibeFlow Works</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <Card className="bg-card/80 border-border/30 shadow-lg text-center">
-              <CardHeader>
-                 <div className="flex justify-center items-center mb-4">
-                    <BarChartHorizontal className="h-10 w-10 text-primary"/>
+            {/* Feature Card 1 */}
+            <Card className="bg-card/80 border-border/30 shadow-lg text-center transform transition-transform duration-300 hover:scale-105 hover:shadow-xl fade-in-up" style={{ animationDelay: '0.1s' }}>
+              <CardHeader className="items-center"> {/* Center align header items */}
+                 <div className="flex justify-center items-center mb-4 p-3 bg-primary/10 rounded-full">
+                    <BarChartHorizontal className="h-8 w-8 text-primary"/>
                  </div>
                 <CardTitle>1. Input Content</CardTitle>
                 <CardDescription>Paste a URL (article, video) or raw text.</CardDescription>
               </CardHeader>
               <CardContent>
-                <p>VibeFlow intelligently parses the content to understand its core message.</p>
+                <p className="text-muted-foreground">VibeFlow intelligently parses the content to understand its core message.</p>
               </CardContent>
             </Card>
-            <Card className="bg-card/80 border-border/30 shadow-lg text-center">
-              <CardHeader>
-                 <div className="flex justify-center items-center mb-4">
-                    <Zap className="h-10 w-10 text-primary"/>
+            {/* Feature Card 2 */}
+            <Card className="bg-card/80 border-border/30 shadow-lg text-center transform transition-transform duration-300 hover:scale-105 hover:shadow-xl fade-in-up" style={{ animationDelay: '0.2s' }}>
+              <CardHeader className="items-center">
+                 <div className="flex justify-center items-center mb-4 p-3 bg-primary/10 rounded-full">
+                    <Zap className="h-8 w-8 text-primary"/>
                  </div>
                 <CardTitle>2. AI Generation</CardTitle>
-                <CardDescription>Get an AI-powered summary and tailored drafts for LinkedIn, Twitter & YouTube.</CardDescription>
+                <CardDescription>Get an AI summary & tailored drafts for LinkedIn, Twitter & YouTube.</CardDescription>
               </CardHeader>
               <CardContent>
-                <p>Our AI crafts posts optimized for length, tone, and style for each platform.</p>
+                <p className="text-muted-foreground">Our AI crafts posts optimized for length, tone, and style for each platform.</p>
               </CardContent>
             </Card>
-            <Card className="bg-card/80 border-border/30 shadow-lg text-center">
-              <CardHeader>
-                <div className="flex justify-center items-center mb-4">
-                    <Edit className="h-10 w-10 text-primary"/>
+            {/* Feature Card 3 */}
+            <Card className="bg-card/80 border-border/30 shadow-lg text-center transform transition-transform duration-300 hover:scale-105 hover:shadow-xl fade-in-up" style={{ animationDelay: '0.3s' }}>
+              <CardHeader className="items-center">
+                <div className="flex justify-center items-center mb-4 p-3 bg-primary/10 rounded-full">
+                    <Edit className="h-8 w-8 text-primary"/>
                  </div>
                 <CardTitle>3. Tune & Publish</CardTitle>
-                <CardDescription>Refine posts with AI suggestions (witty, concise, etc.) and publish.</CardDescription>
+                <CardDescription>Refine posts with AI suggestions and publish (soon!).</CardDescription>
               </CardHeader>
               <CardContent>
-                <p>Easily tweak posts to match your voice before sharing (publishing coming soon!).</p>
+                <p className="text-muted-foreground">Easily tweak posts to match your voice before sharing.</p>
               </CardContent>
             </Card>
           </div>
@@ -95,66 +106,78 @@ export default function LandingPage() {
       </section>
 
        {/* Screenshot Section */}
-      <section id="screenshots" className="py-16 md:py-24">
-        <div className="container">
-          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">See VibeFlow in Action</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-            <div className="rounded-lg overflow-hidden shadow-xl border border-border/30">
+      <section id="screenshots" className="py-20 md:py-28">
+        <div className="container px-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-16 fade-in-up">See VibeFlow in Action</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div className="rounded-lg overflow-hidden shadow-xl border border-border/30 transform transition-transform duration-300 hover:scale-105 fade-in-up" style={{ animationDelay: '0.1s' }}>
                <Image
                  src="https://picsum.photos/seed/dashboard1/800/600"
-                 alt="VibeFlow Dashboard Input"
+                 alt="VibeFlow Dashboard Input Screen"
                  width={800}
                  height={600}
-                 className="w-full h-auto"
-                 data-ai-hint="dashboard interface content input"
+                 className="w-full h-auto object-cover"
+                 data-ai-hint="dashboard interface content input dark theme"
                />
             </div>
-             <div className="rounded-lg overflow-hidden shadow-xl border border-border/30">
+             <div className="rounded-lg overflow-hidden shadow-xl border border-border/30 transform transition-transform duration-300 hover:scale-105 fade-in-up" style={{ animationDelay: '0.2s' }}>
                <Image
                  src="https://picsum.photos/seed/dashboard2/800/600"
-                 alt="VibeFlow Dashboard Output"
+                 alt="VibeFlow Dashboard Output Screen with generated posts"
                  width={800}
                  height={600}
-                 className="w-full h-auto"
-                 data-ai-hint="dashboard interface generated posts"
+                 className="w-full h-auto object-cover"
+                 data-ai-hint="dashboard interface generated social media posts dark theme"
                />
             </div>
           </div>
-          <p className="text-center text-muted-foreground mt-4 italic">Actual dashboard may vary.</p>
+          <p className="text-center text-muted-foreground mt-6 italic fade-in-up" style={{ animationDelay: '0.3s' }}>Actual dashboard design may vary slightly.</p>
         </div>
       </section>
 
       {/* Why VibeFlow Section */}
-      <section id="why-us" className="py-16 md:py-24 bg-muted/20">
-        <div className="container">
-          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">Why Choose VibeFlow?</h2>
-          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="flex items-start gap-4">
-              <CheckCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+      <section id="why-us" className="py-20 md:py-28 bg-muted/20">
+        <div className="container px-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-16 fade-in-up">Why Choose VibeFlow?</h2>
+          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
+            {/* Advantage 1 */}
+            <div className="flex items-start gap-4 fade-in-up" style={{ animationDelay: '0.1s' }}>
+              <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1">
+                 <TrendingUp className="h-5 w-5 text-primary" />
+              </div>
               <div>
                 <h3 className="text-xl font-semibold mb-2">AI-Powered Tuning</h3>
                 <p className="text-muted-foreground">Go beyond simple generation. Refine posts instantly with AI suggestions like "Make it wittier" or "Add emojis".</p>
               </div>
             </div>
-            <div className="flex items-start gap-4">
-              <CheckCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+            {/* Advantage 2 */}
+            <div className="flex items-start gap-4 fade-in-up" style={{ animationDelay: '0.2s' }}>
+               <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1">
+                 <Share2 className="h-5 w-5 text-primary" />
+               </div>
               <div>
                 <h3 className="text-xl font-semibold mb-2">Multi-Platform Focus</h3>
                 <p className="text-muted-foreground">Get drafts specifically tailored for LinkedIn, Twitter, and YouTube, respecting character limits and platform conventions.</p>
               </div>
             </div>
-            <div className="flex items-start gap-4">
-              <CheckCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+             {/* Advantage 3 */}
+            <div className="flex items-start gap-4 fade-in-up" style={{ animationDelay: '0.3s' }}>
+               <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1">
+                  <Clock className="h-5 w-5 text-primary" />
+               </div>
               <div>
                 <h3 className="text-xl font-semibold mb-2">Streamlined Workflow</h3>
-                <p className="text-muted-foreground">From content input to tuned drafts in seconds. VibeFlow simplifies your social media content creation process.</p>
+                <p className="text-muted-foreground">From content input to tuned drafts in seconds. VibeFlow simplifies your social media content creation process, saving hours.</p>
               </div>
             </div>
-             <div className="flex items-start gap-4">
-              <CheckCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+             {/* Advantage 4 */}
+             <div className="flex items-start gap-4 fade-in-up" style={{ animationDelay: '0.4s' }}>
+               <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1">
+                 <Users className="h-5 w-5 text-primary" />
+               </div>
               <div>
-                <h3 className="text-xl font-semibold mb-2">Effortless Summarization</h3>
-                <p className="text-muted-foreground">Instantly grasp the essence of any article or video with concise AI summaries as the foundation for your posts.</p>
+                <h3 className="text-xl font-semibold mb-2">Audience-Centric Content</h3>
+                <p className="text-muted-foreground">AI helps tailor tone and style, making your posts resonate better with each platform's unique audience.</p>
               </div>
             </div>
           </div>
@@ -162,15 +185,15 @@ export default function LandingPage() {
       </section>
 
        {/* CTA Section */}
-      <section className="py-20 md:py-32 text-center">
-        <div className="container">
-           <h2 className="text-3xl md:text-4xl font-bold mb-6">Ready to Amplify Your Social Presence?</h2>
+      <section className="py-24 md:py-36 text-center">
+        <div className="container px-4 fade-in-up">
+           <h2 className="text-3xl md:text-4xl font-bold mb-6 text-gradient">Ready to Amplify Your Social Presence?</h2>
            <p className="text-lg text-muted-foreground mb-10 max-w-xl mx-auto">
              Stop staring at a blank canvas. Start generating engaging social posts with VibeFlow today.
            </p>
            <Link href="/login">
-             <Button size="lg" className="shadow-lg">
-               Try VibeFlow Now
+             <Button size="lg" className="shadow-lg hover:scale-105 transition-transform duration-200">
+               Try VibeFlow Now - It's Free!
              </Button>
            </Link>
         </div>
@@ -178,7 +201,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="py-8 border-t border-border/40">
-        <div className="container text-center text-sm text-muted-foreground">
+        <div className="container text-center text-sm text-muted-foreground px-4">
           &copy; {new Date().getFullYear()} VibeFlow. All rights reserved. | Built with Next.js & AI
         </div>
       </footer>

@@ -5,7 +5,7 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 
 ## Getting Started
 
-**🚨 Important:** If you are seeing errors like `relation "public.profiles" does not exist` or `function public.get_user_profile does not exist`, you **must** run the SQL commands in **Step 3** below.
+**🚨 Important:** If you are seeing errors like `relation "public.profiles" does not exist` or `function public.get_user_profile does not exist`, you **must** run the SQL commands in **Step 3** below. This is **not** an optional step.
 
 1.  **Install Dependencies:**
     ```bash
@@ -28,9 +28,9 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 
     **Important:** Keep your API keys secure and do not commit `.env.local` to version control.
 
-3.  **Set Up Supabase Database (Required):**
+3.  **Set Up Supabase Database (MANDATORY):**
 
-    You **must** run SQL commands to set up the necessary tables (`profiles`, `quotas`) and functions (`increment_quota`, `get_remaining_quota`, `get_user_profile`) in your Supabase project. If you skip this step, the application will **not** work correctly and you will see database errors.
+    You **must** run SQL commands to set up the necessary tables (`profiles`, `quotas`) and functions (`increment_quota`, `get_remaining_quota`, `get_user_profile`) in your Supabase project. If you skip this step, the application will **not** work correctly and you will see database errors like `relation "public.profiles" does not exist`, `relation "public.quotas" does not exist`, or `function public.get_user_profile does not exist`.
 
     a.  Navigate to the **SQL Editor** in your Supabase project dashboard.
     b.  Create a new query.
@@ -104,7 +104,7 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 
 ## Supabase Schema (`supabase/schema.sql`)
 
-This file (`supabase/schema.sql`) contains the necessary SQL commands to set up your database. **You must execute this script in the Supabase SQL Editor** (see Step 3 in Getting Started). Failure to do so will result in application errors related to missing tables or functions.
+This file (`supabase/schema.sql`) contains the necessary SQL commands to set up your database. **You must execute this script in the Supabase SQL Editor** (see Step 3 in Getting Started). Failure to do so will result in application errors related to missing tables or functions (e.g., `relation "public.profiles" does not exist`).
 
 ```sql
 -- Content of supabase/schema.sql:

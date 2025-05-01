@@ -15,6 +15,7 @@ export default async function DashboardPage() {
   let quota: Quota | null = null;     // Type for quota
   let initialError: Error | null = null;
   let errorMessage: string | null = null;
+  let isDbSetupError = false;
 
   try {
     // Attempt to create client first. This will throw if env vars are missing or URL is invalid.
@@ -25,12 +26,10 @@ export default async function DashboardPage() {
 
     if (authError || !userData.user) {
        // If there's an auth error OR no user data, redirect to login
-       // No need to log "Auth session missing" as it's the expected case
        if (authError && !authError.message.includes("Auth session missing")) {
          console.error("Authentication error:", authError.message); // Log other auth errors
        }
-       // Don't throw redirect here, let the code below handle it
-       // throw redirect('/login'); // This causes NEXT_REDIRECT error in catch
+       // Handle redirect outside try-catch
     } else {
        user = userData.user; // Set user if fetch succeeded
 
@@ -41,10 +40,15 @@ export default async function DashboardPage() {
           .eq('id', user.id)
           .single();
 
-        if (profileError && profileError.code !== 'PGRST116') { // Ignore 'PGRST116' (no rows found) for now
+        if (profileError) {
           console.error("Error fetching profile:", profileError.message);
-          errorMessage = `Error loading user profile: ${profileError.message}`;
-          throw profileError; // Throw to be caught below
+          if (profileError.message.includes("relation \"public.profiles\" does not exist") || profileError.code === '42P01') {
+              errorMessage = "Database setup incomplete: The 'profiles' table is missing. Please run the SQL script in `supabase/schema.sql` as per the README instructions.";
+              isDbSetupError = true;
+          } else if (profileError.code !== 'PGRST116') { // Ignore 'PGRST116' (no rows found) for now
+            errorMessage = `Error loading user profile: ${profileError.message}`;
+          }
+          if (isDbSetupError || errorMessage) throw profileError; // Throw to be caught below
         }
         profile = profileData;
 
@@ -54,30 +58,55 @@ export default async function DashboardPage() {
           .eq('user_id', user.id)
           .single();
 
-         if (quotaError && quotaError.code !== 'PGRST116') { // Ignore 'PGRST116' (no rows found)
-          console.error("Error fetching quota:", quotaError.message);
-          errorMessage = `Error loading usage quota: ${quotaError.message}`;
-          throw quotaError; // Throw to be caught below
+         if (quotaError) {
+           console.error("Error fetching quota:", quotaError.message);
+           if (quotaError.message.includes("relation \"public.quotas\" does not exist") || quotaError.code === '42P01') {
+              errorMessage = "Database setup incomplete: The 'quotas' table is missing. Please run the SQL script in `supabase/schema.sql` as per the README instructions.";
+              isDbSetupError = true;
+           } else if (quotaError.code !== 'PGRST116') { // Ignore 'PGRST116' (no rows found)
+            errorMessage = `Error loading usage quota: ${quotaError.message}`;
+           }
+          if (isDbSetupError || errorMessage) throw quotaError; // Throw to be caught below
         }
         quota = quotaData;
 
         // If profile or quota is null, it might be the first login, handle in Dashboard component or create here
-        if (!profile) {
+        if (!profile && !isDbSetupError) { // Only try creating if DB seems set up
            console.log("Profile not found for user:", user.id, "Likely first login.");
-           // Potential: Create a default profile here if needed, or handle in component
+           // Use the RPC function which handles creation
+            const { data: rpcProfileData, error: rpcProfileError } = await supabase
+                .rpc('get_user_profile', { p_user_id: user.id });
+
+            if (rpcProfileError) {
+                console.error("Error calling get_user_profile RPC:", rpcProfileError.message);
+                 if (rpcProfileError.message.includes("function public.get_user_profile") && rpcProfileError.message.includes("does not exist")) {
+                     errorMessage = "Database setup incomplete: The 'get_user_profile' function is missing. Please run the SQL script in `supabase/schema.sql` as per the README instructions.";
+                     isDbSetupError = true;
+                 } else {
+                    errorMessage = `Error initializing user profile: ${rpcProfileError.message}`;
+                 }
+                 throw rpcProfileError;
+            }
+            profile = rpcProfileData as Profile; // Assuming RPC returns a single row matching Profile
         }
-        if (!quota) {
+
+        if (!quota && !isDbSetupError) { // Only try creating if DB seems set up
            console.log("Quota not found for user:", user.id, "Likely first login.");
-            // Potential: Create a default quota record here if needed, or handle in component
              const { data: newQuota, error: createQuotaError } = await supabase
                 .from('quotas')
-                .insert({ user_id: user.id }) // Let DB handle defaults for count, limit, reset_at
+                .insert({ user_id: user.id }) // Let DB handle defaults
                 .select()
                 .single();
 
             if (createQuotaError) {
                 console.error("Error creating initial quota:", createQuotaError.message);
-                errorMessage = `Error initializing usage quota: ${createQuotaError.message}`;
+                 // Check if this error is also due to missing table, although less likely if profiles worked
+                 if (createQuotaError.message.includes("relation \"public.quotas\" does not exist")) {
+                    errorMessage = "Database setup incomplete: The 'quotas' table is missing. Please run the SQL script in `supabase/schema.sql` as per the README instructions.";
+                    isDbSetupError = true;
+                 } else {
+                    errorMessage = `Error initializing usage quota: ${createQuotaError.message}`;
+                 }
                 throw createQuotaError;
             }
             quota = newQuota; // Use the newly created quota
@@ -85,43 +114,50 @@ export default async function DashboardPage() {
     }
 
   } catch (error: any) {
-      // Log the underlying error for debugging purposes
       console.error("Error during Supabase initialization or data fetch:", error.message);
-      initialError = error; // Store the error to potentially display
+      initialError = error; // Store the error
 
-      // Determine the specific error message for configuration issues
-      if (error.message.includes("URL and Key are required")) {
-         errorMessage = "Supabase URL or Key is missing. Please check your environment variables (`.env.local`) and ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set correctly. Refer to the README for setup instructions.";
-      } else if (error.message.includes("Invalid URL")) {
-           errorMessage = "Invalid Supabase URL format. Please check the `NEXT_PUBLIC_SUPABASE_URL` in your `.env.local` file. It should look like `https://<your-project-ref>.supabase.co`.";
-      } else if (!errorMessage) { // If not already set by profile/quota errors
-           // Handle other potential errors
-           errorMessage = `An unexpected error occurred during application startup: ${error.message}. Please contact the administrator or check your Supabase configuration.`;
+      // Prioritize specific known error messages
+      if (!errorMessage) { // Only set if not already set by specific DB checks
+          if (error.message.includes("URL and Key are required")) {
+             errorMessage = "Supabase URL or Key is missing. Please check your environment variables (`.env.local`) and ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set correctly. Refer to the README for setup instructions.";
+          } else if (error.message.includes("Invalid URL")) {
+               errorMessage = "Invalid Supabase URL format. Please check the `NEXT_PUBLIC_SUPABASE_URL` in your `.env.local` file. It should look like `https://<your-project-ref>.supabase.co`.";
+          } else if (error.code === 'NEXT_REDIRECT') {
+                // This error is expected if redirecting, handle gracefully below
+          } else {
+               // Generic fallback message
+               errorMessage = `An unexpected error occurred during application startup: ${error.message}. Please check your Supabase configuration and ensure the database schema is set up correctly (see README).`;
+          }
       }
   }
 
-  // Redirect to login if user fetch failed OR if there was an initial setup error
-  if (!user || (initialError && !errorMessage?.includes("loading"))) { // Redirect on critical errors, but not profile/quota load issues initially
-    // Ensure redirect happens outside the try block if auth failed initially
-     if (!user && !initialError) { // Case where auth just failed silently
+  // Redirect to login if user fetch failed OR if there was a critical initial setup error
+  if (!user || (initialError && initialError.code !== 'NEXT_REDIRECT' && !errorMessage?.includes("loading"))) {
+     if (!user && !initialError) {
         console.log("No user session found, redirecting to login.");
      }
     redirect('/login');
   }
 
 
-  // Display specific error card ONLY if there's a configuration error message set
-  if (initialError && (errorMessage?.includes("Supabase URL or Key") || errorMessage?.includes("Invalid Supabase URL"))) {
+  // Display specific error card ONLY if there's a configuration or DB setup error message set
+  if (initialError && initialError.code !== 'NEXT_REDIRECT' && errorMessage) {
      return (
         <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-            <Card className="mx-auto max-w-md w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
+            <Card className="mx-auto max-w-md w-full z-10 bg-card/80 backdrop-blur-sm border-destructive/50 shadow-xl">
                 <CardHeader>
-                    <CardTitle className="text-destructive">Configuration Error</CardTitle>
+                    <CardTitle className="text-destructive">{isDbSetupError ? "Database Setup Required" : "Configuration Error"}</CardTitle>
                     <CardDescription className="text-destructive-foreground">
                        {errorMessage}
                     </CardDescription>
                 </CardHeader>
                  <CardContent>
+                     {isDbSetupError && (
+                         <p className="text-sm text-muted-foreground mb-4">
+                           Please go to the Supabase SQL Editor in your project dashboard and run the entire script from the `supabase/schema.sql` file. You can find detailed instructions in the project's README file under "Getting Started - Step 3".
+                         </p>
+                     )}
                     <p className="text-sm text-muted-foreground">Detailed Error:</p>
                     <pre className="mt-2 w-full rounded-md bg-muted p-4 overflow-x-auto text-sm">
                         {initialError.message}

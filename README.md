@@ -5,6 +5,8 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 
 ## Getting Started
 
+**🚨 Important:** If you are seeing errors like `relation "public.profiles" does not exist` or `function public.get_user_profile does not exist`, you **must** run the SQL commands in **Step 3** below.
+
 1.  **Install Dependencies:**
     ```bash
     npm install
@@ -26,13 +28,13 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 
     **Important:** Keep your API keys secure and do not commit `.env.local` to version control.
 
-3.  **Set Up Supabase Database:**
+3.  **Set Up Supabase Database (Required):**
 
-    You need to run SQL commands to set up the necessary tables (`profiles`, `quotas`) and functions (`increment_quota`, `get_remaining_quota`, `get_user_profile`) in your Supabase project.
+    You **must** run SQL commands to set up the necessary tables (`profiles`, `quotas`) and functions (`increment_quota`, `get_remaining_quota`, `get_user_profile`) in your Supabase project. If you skip this step, the application will **not** work correctly and you will see database errors.
 
     a.  Navigate to the **SQL Editor** in your Supabase project dashboard.
     b.  Create a new query.
-    c.  Paste and run the SQL commands found in `supabase/schema.sql` (you'll need to create this file - see below). Make sure to enable Row Level Security (RLS) on the tables and define appropriate policies.
+    c.  Paste and run the **entire** content of the SQL file found at `supabase/schema.sql`. This file contains commands to create the tables, functions, enable Row Level Security (RLS), and define security policies.
 
 4.  **Run Development Server:**
     ```bash
@@ -80,7 +82,7 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 -   `public/`: Static assets.
 -   `middleware.ts`: Next.js middleware for Supabase session handling.
 -   `supabase/`: Contains SQL schema and setup files.
-    -   `schema.sql`: SQL commands for creating tables and functions.
+    -   `schema.sql`: **(Crucial)** SQL commands for creating tables and functions. **Must be run in Supabase SQL Editor.**
 -   `next.config.ts`: Next.js configuration.
 -   `tailwind.config.ts`: Tailwind CSS configuration.
 -   `tsconfig.json`: TypeScript configuration.
@@ -102,9 +104,10 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 
 ## Supabase Schema (`supabase/schema.sql`)
 
-You will need to create this file and add the necessary SQL. Below is a basic example. **Remember to enable Row Level Security (RLS) and add policies.**
+This file (`supabase/schema.sql`) contains the necessary SQL commands to set up your database. **You must execute this script in the Supabase SQL Editor** (see Step 3 in Getting Started). Failure to do so will result in application errors related to missing tables or functions.
 
 ```sql
+-- Content of supabase/schema.sql:
 -- 1. Profiles Table
 CREATE TABLE public.profiles (
   id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,

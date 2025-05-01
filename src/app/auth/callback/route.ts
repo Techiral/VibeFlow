@@ -9,7 +9,8 @@ export async function GET(request: Request) {
   const next = searchParams.get('next') ?? '/dashboard' // Default to dashboard
 
   if (code) {
-    const supabase = createClient()
+    // Await createClient as it's now async
+    const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
       // Ensure the redirect URL is relative to the origin
@@ -23,3 +24,5 @@ export async function GET(request: Request) {
   // return the user to an error page with instructions
   return NextResponse.redirect(`${origin}/login?message=Could not log in with provider. Please try again.`)
 }
+
+```

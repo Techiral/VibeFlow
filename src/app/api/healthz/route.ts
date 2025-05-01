@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server'; // Use server client for health check
 
@@ -11,7 +12,8 @@ export async function GET() {
 
   // Check Supabase Connection
   try {
-    const supabase = createClient();
+    // Await createClient as it's now async
+    const supabase = await createClient();
     // Perform a simple query to check connection, e.g., fetching user (even if null)
     const { data, error } = await supabase.auth.getUser();
 
@@ -73,3 +75,5 @@ export async function GET() {
     status: overallStatus === 'ok' ? 200 : 503, // 503 Service Unavailable if error
   });
 }
+
+```

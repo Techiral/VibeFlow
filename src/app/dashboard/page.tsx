@@ -19,7 +19,8 @@ export default async function DashboardPage() {
 
   try {
     // Attempt to create client first. This will throw if env vars are missing or URL is invalid.
-    supabase = createClient();
+    // Await createClient as it's now async
+    supabase = await createClient();
 
     // Try fetching the user *after* confirming the client was created
     const { data: userData, error: authError } = await supabase.auth.getUser();
@@ -28,6 +29,7 @@ export default async function DashboardPage() {
        // If there's an auth error OR no user data, redirect to login
        if (authError && !authError.message.includes("Auth session missing")) {
          // Ignore "Auth session missing", let logic below handle redirect
+         console.error("Auth error:", authError.message); // Log other auth errors
        }
        // Let the logic after the try-catch handle the redirect if !user
     } else {
@@ -49,6 +51,10 @@ export default async function DashboardPage() {
                  isDbSetupError = true;
              } else {
                  errorMessage = `Error initializing user profile: ${rpcProfileError.message}`;
+             }
+             // Log the original error for debugging, unless it's a specific setup error we're showing the user
+             if (!isDbSetupError) {
+                console.error("Error fetching profile:", rpcProfileError.message);
              }
              // If it's a DB setup error or another error we want to display, throw to outer catch
              if (isDbSetupError || errorMessage) throw rpcProfileError;
@@ -87,9 +93,10 @@ export default async function DashboardPage() {
                isDbSetupError = true; // Treat as setup error
            } else if (quotaError.code !== 'PGRST116') { // Ignore 'PGRST116' (no rows found), log others
              // Log only unexpected errors, don't overwrite a profile error message if one exists
-             if (!errorMessage) {
+              if (!errorMessage) {
                 errorMessage = `Error loading usage quota: ${quotaError.message}`;
              }
+             console.error("Error fetching quota:", quotaError.message); // Log other quota errors
            }
            // If it's a DB setup error or another error we want to display, throw to outer catch
            if (isDbSetupError || (errorMessage && !errorMessage.includes('profile'))) throw quotaError;
@@ -104,8 +111,11 @@ export default async function DashboardPage() {
         throw error; // Re-throw the redirect error
       }
       // Log only if it's NOT a handled DB setup error or config error that we already have a message for.
-      if (!errorMessage && !error.message.includes('Auth session missing')) {
-         // console.error("Error during Supabase initialization or data fetch:", error.message); // Reduced noise
+      if (!errorMessage && !error.message?.includes('Auth session missing')) {
+          // Avoid logging the generic "relation does not exist" if we already captured it for the UI
+          if (!error.message?.includes("relation") || !error.message?.includes("does not exist")) {
+             console.error("Error during Supabase initialization or data fetch:", error.message);
+          }
       }
       initialError = error; // Store the error regardless for potential display
 
@@ -115,7 +125,7 @@ export default async function DashboardPage() {
              errorMessage = "Supabase URL or Key is missing. Please check your environment variables (`.env.local`) and ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set correctly. Refer to the README for setup instructions.";
           } else if (error.message.includes("Invalid URL")) {
                errorMessage = "Invalid Supabase URL format. Please check the `NEXT_PUBLIC_SUPABASE_URL` in your `.env.local` file. It should look like `https://<your-project-ref>.supabase.co`.";
-          } else if (error.message.includes('Auth session missing')) {
+          } else if (error.message?.includes('Auth session missing')) {
               // This is expected if not logged in, ignore here, redirect below will handle it.
           } else if (error.message.includes("relation") && error.message.includes("does not exist")) {
               // Generic catch for missing relations if specific checks failed
@@ -183,4 +193,3 @@ export default async function DashboardPage() {
   // Pass user, profile, and quota data. Handle potential null profile/quota in the Dashboard component.
   return <Dashboard user={user!} initialProfile={profile} initialQuota={quota} />;
 }
-

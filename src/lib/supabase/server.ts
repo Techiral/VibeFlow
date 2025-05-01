@@ -5,20 +5,20 @@ import type { Database } from '@/types/supabase'; // Assuming you have types gen
 
 // Helper function to safely get cookies - Make it async
 async function getCookie(name: string): Promise<string | undefined> {
-  // cookies() can be called synchronously, but the API it interacts with might be async in nature.
-  // Using await ensures compatibility and adheres to Next.js recommendations for RSC.
-  const cookieStore = cookies();
+  // cookies() can be called synchronously, but ensure compatibility and adhere to Next.js recommendations.
+  // Await potentially helps if Next.js internals expect an async boundary here.
+  const cookieStore = await cookies(); // Await cookies() call
   return cookieStore.get(name)?.value;
 }
 
 // Helper function to safely set cookies - Make it async
 async function setCookie(name: string, value: string, options: CookieOptions): Promise<void> {
   try {
-    // cookies() can be called synchronously in Server Actions
-    const cookieStore = cookies();
+    // cookies() can be called synchronously in Server Actions/Route Handlers
+    const cookieStore = await cookies(); // Await cookies() call
     cookieStore.set({ name, value, ...options });
   } catch (error) {
-    // Log error if setting fails (e.g., called from RSC render path)
+    // Log error if setting fails (e.g., called from RSC render path where cookies() might not be writable)
     console.warn(`[Supabase Server Client] Failed to set cookie '${name}'. This might be expected if called during RSC rendering. Error: ${error}`);
   }
 }
@@ -26,8 +26,8 @@ async function setCookie(name: string, value: string, options: CookieOptions): P
 // Helper function to safely remove cookies - Make it async
 async function removeCookie(name: string, options: CookieOptions): Promise<void> {
   try {
-    // cookies() can be called synchronously in Server Actions
-    const cookieStore = cookies();
+    // cookies() can be called synchronously in Server Actions/Route Handlers
+    const cookieStore = await cookies(); // Await cookies() call
     cookieStore.set({ name, value: '', ...options });
   } catch (error) {
      // Log error if removal fails
@@ -36,7 +36,8 @@ async function removeCookie(name: string, options: CookieOptions): Promise<void>
 }
 
 
-export function createClient() {
+// Make createClient itself async
+export async function createClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -50,6 +51,8 @@ export function createClient() {
   }
 
 
+  // The createServerClient function itself doesn't need to be awaited here.
+  // It's the functions passed into the `cookies` object that need to handle async operations correctly.
   return createServerClient<Database>(
     supabaseUrl,
     supabaseAnonKey,
@@ -57,16 +60,18 @@ export function createClient() {
       cookies: {
         // Pass the async helper functions to Supabase client options
         get: async (name: string) => {
+          // Await the helper function call
           return await getCookie(name);
         },
         set: async (name: string, value: string, options: CookieOptions) => {
+           // Await the helper function call
            await setCookie(name, value, options);
         },
         remove: async (name: string, options: CookieOptions) => {
+           // Await the helper function call
            await removeCookie(name, options);
         },
       },
     }
   )
 }
-

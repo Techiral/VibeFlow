@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Zap } from "lucide-react"; // Icon for VibeFlow
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // Import Alert components
 
 export default async function LoginPage({
   searchParams,
@@ -20,7 +21,8 @@ export default async function LoginPage({
    let errorMessage: string | null = null;
 
    try {
-     supabase = createClient(); // Attempt to create client first
+     // Await createClient as it's now async
+     supabase = await createClient();
 
      // Check user session *after* confirming Supabase client is created
       const { data } = await supabase.auth.getUser();
@@ -31,7 +33,7 @@ export default async function LoginPage({
      initialError = error;
 
      // Determine the specific error message
-     if (error.message.includes("URL and Key are required")) {
+     if (error.message.includes("URL or Key is missing")) {
         errorMessage = "Authentication service configuration error: Supabase URL or Key is missing. Please contact the administrator.";
      } else if (error.message.includes("Invalid URL")) {
         errorMessage = "Authentication service configuration error: Invalid Supabase URL format. Please contact the administrator.";
@@ -82,7 +84,8 @@ export default async function LoginPage({
 
     let supabaseActionClient;
     try {
-      supabaseActionClient = createClient(); // Re-create client in action scope
+      // Await createClient as it's now async
+      supabaseActionClient = await createClient();
     } catch (error: any) {
        console.error("Sign In Action Error - Supabase client creation failed:", error.message);
         let redirectMessage = "Configuration error prevents sign in. Contact admin.";
@@ -112,7 +115,8 @@ export default async function LoginPage({
 
     let supabaseActionClient;
      try {
-       supabaseActionClient = createClient(); // Re-create client in action scope
+       // Await createClient as it's now async
+       supabaseActionClient = await createClient();
      } catch (error: any) {
         console.error("Sign Up Action Error - Supabase client creation failed:", error.message);
         let redirectMessage = "Configuration error prevents sign up. Contact admin.";
@@ -169,6 +173,17 @@ export default async function LoginPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Display Server-Side Message */}
+           {searchParams?.message && (
+                <Alert
+                    variant={searchParams.message.toLowerCase().includes("error") || searchParams.message.toLowerCase().includes("could not") || searchParams.message.toLowerCase().includes("limit reached") || searchParams.message.toLowerCase().includes("configuration") ? "destructive" : "default"}
+                    className={`mb-4 ${searchParams.message.toLowerCase().includes("error") || searchParams.message.toLowerCase().includes("could not") || searchParams.message.toLowerCase().includes("limit reached") || searchParams.message.toLowerCase().includes("configuration") ? 'bg-destructive/10 border-destructive/30' : 'bg-primary/10 border-primary/30'}`}
+                >
+                  <AlertDescription className={`text-center text-sm ${searchParams.message.toLowerCase().includes("error") || searchParams.message.toLowerCase().includes("could not") || searchParams.message.toLowerCase().includes("limit reached") || searchParams.message.toLowerCase().includes("configuration") ? 'text-destructive-foreground' : 'text-primary-foreground'}`}>
+                        {searchParams.message}
+                    </AlertDescription>
+                </Alert>
+           )}
           <form className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -185,11 +200,6 @@ export default async function LoginPage({
               <Label htmlFor="password">Password</Label>
               <Input id="password" name="password" type="password" required className="bg-input/50 border-border/50"/>
             </div>
-             {searchParams?.message && (
-              <p className={`mt-4 p-4 border rounded-md text-center text-sm ${searchParams.message.toLowerCase().includes("error") || searchParams.message.toLowerCase().includes("could not") || searchParams.message.toLowerCase().includes("limit reached") || searchParams.message.toLowerCase().includes("configuration") ? 'bg-destructive/20 text-destructive-foreground border-destructive' : 'bg-primary/10 text-primary-foreground border-primary/30'}`}>
-                {searchParams.message}
-              </p>
-            )}
             <SubmitButton
               formAction={signIn}
               className="w-full"
@@ -216,3 +226,4 @@ export default async function LoginPage({
     </div>
   );
 }
+

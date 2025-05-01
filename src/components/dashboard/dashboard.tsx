@@ -1,3 +1,4 @@
+// dashboard.tsx
 'use client';
 
 import type { User } from '@supabase/supabase-js';
@@ -11,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, Zap } from 'lucide-react'; // Import Zap
+import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, Zap } from 'lucide-react';
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
@@ -113,8 +114,15 @@ export default function Dashboard({ user }: DashboardProps) {
           .then(result => ({ platform, post: result.post }))
           .catch(err => {
              console.error(`Error generating ${platform} post:`, err);
-             // Optionally show a toast per platform failure
-             return { platform, post: `Error generating post. Please try again.` };
+              let description = `Error generating ${platform} post.`;
+              if (err.message.includes("API key not valid")) {
+                 description = "AI service configuration error. Please check the GOOGLE_GENAI_API_KEY."
+              } else if (err.message.includes("503") || err.message.toLowerCase().includes("overloaded")) {
+                  description = `AI service is temporarily overloaded generating ${platform} post. Please try again later.`;
+              }
+              toast({ title: "Generation Failed", description: description, variant: "destructive" });
+             // Return an error message for the specific platform
+             return { platform, post: `Error generating post for ${platform}.` };
           })
       );
 
@@ -136,6 +144,8 @@ export default function Dashboard({ user }: DashboardProps) {
          description = "Could not parse content from the URL. Please check the URL or paste text directly.";
       } else if (error.message.includes("API key not valid")) {
          description = "AI service configuration error. Please check the GOOGLE_GENAI_API_KEY."
+      } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded")) {
+          description = "AI service is temporarily overloaded during summarization. Please try again later.";
       }
       toast({ title: "Generation Failed", description: description, variant: "destructive" });
        setSummary(null); // Clear summary on error
@@ -171,6 +181,8 @@ export default function Dashboard({ user }: DashboardProps) {
            setQuotaExceeded(true);
         } else if (error.message.includes("API key not valid")) {
            description = "AI service configuration error. Please check the GOOGLE_GENAI_API_KEY."
+        } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded")) {
+            description = "AI service is temporarily overloaded. Please try tuning again later.";
         }
       toast({ title: "Tuning Failed", description: description, variant: "destructive" });
     } finally {

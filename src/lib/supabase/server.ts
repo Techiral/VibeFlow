@@ -3,31 +3,35 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { Database } from '@/types/supabase'; // Assuming you have types generated
 
-// Helper function to safely get cookies - No need to be async here
-function getCookie(name: string) {
-  const cookieStore = cookies(); // This can be called synchronously inside Route Handlers or Server Actions
+// Helper function to safely get cookies - Make it async
+async function getCookie(name: string): Promise<string | undefined> {
+  // cookies() can be called synchronously, but the API it interacts with might be async in nature.
+  // Using await ensures compatibility and adheres to Next.js recommendations for RSC.
+  const cookieStore = cookies();
   return cookieStore.get(name)?.value;
 }
 
-// Helper function to safely set cookies - No need to be async here
-function setCookie(name: string, value: string, options: CookieOptions) {
+// Helper function to safely set cookies - Make it async
+async function setCookie(name: string, value: string, options: CookieOptions): Promise<void> {
   try {
-    const cookieStore = cookies(); // This can be called synchronously
+    // cookies() can be called synchronously in Server Actions
+    const cookieStore = cookies();
     cookieStore.set({ name, value, ...options });
   } catch (error) {
-    // Usually happens when called from Server Components where `cookies` is read-only
-    console.warn(`Failed to set cookie '${name}' from a Server Component. This is often intended if used for reading cookies. Error: ${error}`);
+    // Log error if setting fails (e.g., called from RSC render path)
+    console.warn(`[Supabase Server Client] Failed to set cookie '${name}'. This might be expected if called during RSC rendering. Error: ${error}`);
   }
 }
 
-// Helper function to safely remove cookies - No need to be async here
-function removeCookie(name: string, options: CookieOptions) {
+// Helper function to safely remove cookies - Make it async
+async function removeCookie(name: string, options: CookieOptions): Promise<void> {
   try {
-    const cookieStore = cookies(); // This can be called synchronously
+    // cookies() can be called synchronously in Server Actions
+    const cookieStore = cookies();
     cookieStore.set({ name, value: '', ...options });
   } catch (error) {
-     // Usually happens when called from Server Components where `cookies` is read-only
-    console.warn(`Failed to remove cookie '${name}' from a Server Component. This is often intended if used for reading cookies. Error: ${error}`);
+     // Log error if removal fails
+    console.warn(`[Supabase Server Client] Failed to remove cookie '${name}'. This might be expected if called during RSC rendering. Error: ${error}`);
   }
 }
 
@@ -51,20 +55,18 @@ export function createClient() {
     supabaseAnonKey,
     {
       cookies: {
-        // `get` is called by Supabase client, it expects a sync return or Promise
-        // Since `cookies().get()` is sync, we can directly return the value
-        get: (name: string) => {
-          return getCookie(name);
+        // Pass the async helper functions to Supabase client options
+        get: async (name: string) => {
+          return await getCookie(name);
         },
-        // `set` and `remove` are called by Supabase client during auth actions (Server Actions)
-        // where `cookies().set()` is available and sync.
-        set: (name: string, value: string, options: CookieOptions) => {
-           setCookie(name, value, options);
+        set: async (name: string, value: string, options: CookieOptions) => {
+           await setCookie(name, value, options);
         },
-        remove: (name: string, options: CookieOptions) => {
-           removeCookie(name, options);
+        remove: async (name: string, options: CookieOptions) => {
+           await removeCookie(name, options);
         },
       },
     }
   )
 }
+

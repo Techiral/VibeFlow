@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, User as UserIcon, Database } from 'lucide-react'; // Added UserIcon, Database icon
+import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, User as UserIcon, Database, Zap } from 'lucide-react';
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
@@ -23,7 +23,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import Link from 'next/link';
 import { ProfileDialog } from './profile-dialog'; // Import the new dialog
 import { Progress } from "@/components/ui/progress"; // Import Progress component
-import { Zap } from 'lucide-react'; // Ensure Zap is imported
 
 interface DashboardProps {
   user: User;
@@ -380,19 +379,26 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
 
     // Pass API key to the AI flows
     const apiKey = profile.gemini_api_key;
+    let summarySuccess = false;
+    let postsSuccessCount = 0;
+    const totalCostAttempted = 4; // 1 summary + 3 posts
+
 
     startTransition(async () => {
-        let summarySuccess = false;
-        let postsSuccessCount = 0;
-        const platforms: SocialPlatform[] = ['linkedin', 'twitter', 'youtube'];
         let summaryResult: SummarizeContentOutput | null = null;
 
         try {
           // 1. Summarize Content
           summaryResult = await summarizeContent({ content: contentInput }, { apiKey });
-          console.log("Summarization successful:", summaryResult); // Added console log
-          setSummary(summaryResult.summary);
-          summarySuccess = true; // Mark summary as successful
+          if (summaryResult.summary) { // Check if summary is not empty
+             console.log("Summarization successful:", summaryResult); // Added console log
+             setSummary(summaryResult.summary);
+             summarySuccess = true; // Mark summary as successful
+          } else {
+              // Handle empty summary from AI as an error
+               console.warn("Summarization returned an empty result.");
+               throw new Error("AI returned an empty summary.");
+          }
         } catch (summaryError: any) {
            console.error("Summarization failed:", summaryError);
            let description = "Error summarizing content.";
@@ -401,28 +407,36 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
             } else if (summaryError.status === 'UNAUTHENTICATED' || summaryError.message.includes("API key not valid")) {
                description = "Invalid Gemini API Key. Please check your profile.";
                setIsProfileDialogOpen(true); // Prompt user to fix key
-            } else if (summaryError.message.includes("503") || summaryError.message.toLowerCase().includes("overloaded") || summaryError.message.toLowerCase().includes("service unavailable")) {
+            } else if (summaryError.status === 'UNAVAILABLE' || summaryError.message.includes("503") || summaryError.message.toLowerCase().includes("overloaded") || summaryError.message.toLowerCase().includes("service unavailable")) {
                 description = "AI service is temporarily overloaded during summarization. Please try again later.";
             } else if (summaryError.status === 'INVALID_ARGUMENT' && summaryError.message.includes("API key is required")) {
                  description = "API Key was missing during generation.";
                  setIsProfileDialogOpen(true); // Should be caught earlier, but handle just in case
+            } else if (summaryError.message.includes("empty summary")) {
+                 description = "Summarization failed because the AI returned an empty result. Please try again.";
             } else {
                  // Include the original error message for other Genkit errors
                  description = `Summarization failed: ${summaryError.message || 'Unknown AI error'}`;
             }
            toast({ title: "Summarization Failed", description: description, variant: "destructive" });
-           // Don't set summary, proceed to finally block for quota rollback
+           // Don't set summary, let finally block handle UI state
         } finally {
             setIsGeneratingSummary(false); // Summary attempt finished
         }
 
         // 2. Generate Posts (only if summary succeeded)
         if (summarySuccess && summaryResult) {
+           const platforms: SocialPlatform[] = ['linkedin', 'twitter', 'youtube'];
           const postPromises = platforms.map(platform =>
             generateSocialPosts({ summary: summaryResult!.summary, platform }, { apiKey })
               .then(result => {
-                  postsSuccessCount++; // Increment success count
-                  return { platform, post: result.post };
+                  if (result.post) { // Check if post is not empty
+                     postsSuccessCount++; // Increment success count only if post is valid
+                     return { platform, post: result.post };
+                  } else {
+                     console.warn(`Generation for ${platform} returned an empty post.`);
+                     throw new Error(`AI returned an empty post for ${platform}.`); // Treat empty post as error
+                  }
               })
               .catch(async (err) => { // Make catch async for potential rollback
                  console.error(`Error generating ${platform} post:`, err);
@@ -430,11 +444,13 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                   if (err.status === 'UNAUTHENTICATED' || err.message.includes("API key not valid")) {
                      description = "Invalid Gemini API Key. Please check your profile."
                      setIsProfileDialogOpen(true);
-                  } else if (err.message.includes("503") || err.message.toLowerCase().includes("overloaded") || err.message.toLowerCase().includes("service unavailable")) {
+                  } else if (err.status === 'UNAVAILABLE' || err.message.includes("503") || err.message.toLowerCase().includes("overloaded") || err.message.toLowerCase().includes("service unavailable")) {
                       description = `AI service is temporarily overloaded generating ${platform} post. Please try again later.`;
                   } else if (err.status === 'INVALID_ARGUMENT' && err.message.includes("API key is required")) {
                       description = "API Key was missing during generation.";
                        setIsProfileDialogOpen(true);
+                  } else if (err.message.includes("empty post")) {
+                       description = `Generation for ${platform} failed because the AI returned an empty result. Please try again.`;
                   } else {
                       description = `Post generation for ${platform} failed: ${err.message || 'Unknown AI error'}`;
                   }
@@ -449,13 +465,13 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
             return acc;
           }, {} as PostDrafts);
           setPostDrafts(newDrafts);
-        } else if (!summarySuccess) {
+        } else {
             // If summary failed, clear drafts as well
              setPostDrafts({});
         }
 
         // --- Final Quota Adjustment ---
-         const totalCostAttempted = 4;
+         // Calculate cost based *only* on successful generations
          const actualCost = (summarySuccess ? 1 : 0) + postsSuccessCount;
          const refundAmount = totalCostAttempted - actualCost;
 
@@ -463,22 +479,31 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
              console.log(`Refunding ${refundAmount} quota points due to errors.`);
              // Don't check quota again for refund, just attempt decrement
               try {
-                  await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -refundAmount });
-                  // Refetch quota locally after refund attempt
-                  const { data: refreshedQuota, error: refreshError } = await supabase
-                      .from('quotas')
-                      .select('user_id, request_count, quota_limit, last_reset_at') // Select specific columns
-                      .eq('user_id', user.id)
-                      .single();
-                  if (!refreshError && refreshedQuota) {
-                      setQuota(refreshedQuota as Quota);
-                  } else if (refreshError) {
-                       console.error("Error refreshing quota after refund:", refreshError.message);
+                  const { error: refundRpcError } = await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -refundAmount });
+                  if (refundRpcError) {
+                      // Handle refund RPC error separately
+                      console.error("Error during quota refund RPC:", refundRpcError.message);
+                      toast({ title: "Quota Refund Issue", description: `Failed to process quota refund for failed generations: ${refundRpcError.message}`, variant: "destructive"});
+                  } else {
+                      // Refetch quota locally after successful refund attempt
+                      const { data: refreshedQuota, error: refreshError } = await supabase
+                          .from('quotas')
+                          .select('user_id, request_count, quota_limit, last_reset_at') // Select specific columns
+                          .eq('user_id', user.id)
+                          .single();
+                      if (!refreshError && refreshedQuota) {
+                          setQuota(refreshedQuota as Quota);
+                      } else if (refreshError) {
+                           console.error("Error refreshing quota after refund:", refreshError.message);
+                      }
                   }
-              } catch (refundError: any) {
-                   console.error("Error during quota refund RPC:", refundError.message);
-                   toast({ title: "Quota Refund Issue", description: "Failed to process quota refund for failed generations.", variant: "destructive"});
+              } catch (refundCatchError: any) {
+                   console.error("Unexpected Error during quota refund attempt:", refundCatchError.message);
+                   toast({ title: "Quota Refund Issue", description: "An unexpected error occurred trying to refund quota.", variant: "destructive"});
               }
+         } else if (refundAmount < 0) {
+             // This should theoretically not happen if initial check is correct, but log if it does
+             console.warn(`Calculated negative refund amount (${refundAmount}). Initial charge might have been incorrect.`);
          }
 
          setIsGeneratingPosts(false); // All post generation attempts finished
@@ -512,48 +537,67 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
     // --- If quota check passed, proceed ---
     setIsTuning(prev => ({ ...prev, [platform]: true }));
     const apiKey = profile.gemini_api_key;
+    const totalCostAttempted = 1;
+    let tuneSuccess = false;
 
     startTransition(async () => {
       try {
         const tunedResult = await tuneSocialPosts({ originalPost, feedback }, { apiKey });
-        setPostDrafts(prev => ({ ...prev, [platform]: tunedResult.tunedPost }));
-         toast({ title: "Post Tuned!", description: `Applied feedback: "${feedback}"`, variant: "default" });
+        if (tunedResult.tunedPost) { // Check if tuned post is not empty
+            setPostDrafts(prev => ({ ...prev, [platform]: tunedResult.tunedPost }));
+            toast({ title: "Post Tuned!", description: `Applied feedback: "${feedback}"`, variant: "default" });
+            tuneSuccess = true;
+        } else {
+             console.warn(`Tuning for ${platform} returned an empty post.`);
+             throw new Error(`AI returned an empty tuned post for ${platform}.`); // Treat empty post as error
+        }
       } catch (error: any) {
         console.error(`Tuning ${platform} post failed:`, error);
-        // --- Rollback Quota on Failure ---
-         try {
-             await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -1 });
-             // Refetch quota locally after refund attempt
-             const { data: refreshedQuota, error: refreshError } = await supabase
-                .from('quotas')
-                .select('user_id, request_count, quota_limit, last_reset_at') // Select specific columns
-                .eq('user_id', user.id)
-                .single();
-             if (!refreshError && refreshedQuota) {
-                setQuota(refreshedQuota as Quota);
-             } else if (refreshError) {
-                  console.error("Error refreshing quota after failed tuning refund:", refreshError.message);
-             }
-         } catch (refundError: any) {
-             console.error("Error during quota refund RPC for tuning:", refundError.message);
-             toast({ title: "Quota Refund Issue", description: "Failed to process quota refund for failed tuning.", variant: "destructive"});
-         }
-
-
          let description = "An error occurred while tuning the post.";
          if (error.status === 'UNAUTHENTICATED' || error.message.includes("API key not valid")) {
              description = "Invalid Gemini API Key. Please check your profile."
              setIsProfileDialogOpen(true);
-          } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded") || error.message.toLowerCase().includes("service unavailable")) {
+          } else if (error.status === 'UNAVAILABLE' || error.message.includes("503") || error.message.toLowerCase().includes("overloaded") || error.message.toLowerCase().includes("service unavailable")) {
               description = "AI service is temporarily overloaded. Please try tuning again later.";
           } else if (error.status === 'INVALID_ARGUMENT' && error.message.includes("API key is required")) {
               description = "API Key was missing during tuning.";
               setIsProfileDialogOpen(true);
+          } else if (error.message.includes("empty tuned post")) {
+              description = `Tuning for ${platform} failed because the AI returned an empty result. Please try again.`;
           } else {
               description = `Post tuning failed: ${error.message || 'Unknown AI error'}`;
           }
         toast({ title: "Tuning Failed", description: description, variant: "destructive" });
       } finally {
+        // --- Quota Adjustment for Tuning ---
+        const actualCost = tuneSuccess ? 1 : 0;
+        const refundAmount = totalCostAttempted - actualCost;
+
+        if (refundAmount > 0) {
+          console.log(`Refunding ${refundAmount} quota point for failed tuning.`);
+          try {
+            const { error: refundRpcError } = await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -refundAmount });
+            if (refundRpcError) {
+              console.error("Error during quota refund RPC for tuning:", refundRpcError.message);
+              toast({ title: "Quota Refund Issue", description: `Failed to process quota refund for failed tuning: ${refundRpcError.message}`, variant: "destructive" });
+            } else {
+              // Refetch quota locally after successful refund
+              const { data: refreshedQuota, error: refreshError } = await supabase
+                .from('quotas')
+                .select('user_id, request_count, quota_limit, last_reset_at')
+                .eq('user_id', user.id)
+                .single();
+              if (!refreshError && refreshedQuota) {
+                setQuota(refreshedQuota as Quota);
+              } else if (refreshError) {
+                console.error("Error refreshing quota after tuning refund:", refreshError.message);
+              }
+            }
+          } catch (refundCatchError: any) {
+            console.error("Unexpected Error during tuning quota refund attempt:", refundCatchError.message);
+            toast({ title: "Quota Refund Issue", description: "An unexpected error occurred trying to refund quota for tuning.", variant: "destructive" });
+          }
+        }
         setIsTuning(prev => ({ ...prev, [platform]: false }));
       }
     });
@@ -586,6 +630,8 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
 
      // --- If quota check passed, proceed ---
     setIsPublishing(prev => ({ ...prev, [platform]: true }));
+    const totalCostAttempted = 1;
+    let publishSuccess = false;
 
     startTransition(async () => {
       try {
@@ -597,29 +643,10 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
         // await publishPost({ platform, content: postContent, composioUrl: profile.composio_url });
 
         toast({ title: "Post Published!", description: `Successfully published to ${platform}.`, variant: "default" });
+        publishSuccess = true;
 
       } catch (error: any) {
          console.error(`Publishing to ${platform} failed:`, error);
-        // --- Rollback Quota on Failure ---
-        try {
-            await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -1 });
-            // Refetch quota locally after refund attempt
-            const { data: refreshedQuota, error: refreshError } = await supabase
-                .from('quotas')
-                .select('user_id, request_count, quota_limit, last_reset_at') // Select specific columns
-                .eq('user_id', user.id)
-                .single();
-            if (!refreshError && refreshedQuota) {
-                setQuota(refreshedQuota as Quota);
-            } else if (refreshError) {
-                console.error("Error refreshing quota after failed publish refund:", refreshError.message);
-            }
-        } catch (refundError: any) {
-            console.error("Error during quota refund RPC for publishing:", refundError.message);
-            toast({ title: "Quota Refund Issue", description: "Failed to process quota refund for failed publishing.", variant: "destructive"});
-        }
-
-
          let description = "An error occurred while publishing the post.";
           if (error.message.includes("authentication") || error.message.includes("connect")) { // Example error check
               description = `Please connect your ${platform} account via Composio first.`
@@ -630,6 +657,35 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
           }
         toast({ title: "Publishing Failed", description: description, variant: "destructive" });
       } finally {
+         // --- Quota Adjustment for Publishing ---
+         const actualCost = publishSuccess ? 1 : 0;
+         const refundAmount = totalCostAttempted - actualCost;
+
+         if (refundAmount > 0) {
+             console.log(`Refunding ${refundAmount} quota point for failed publishing.`);
+             try {
+                 const { error: refundRpcError } = await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -refundAmount });
+                 if(refundRpcError) {
+                     console.error("Error during quota refund RPC for publishing:", refundRpcError.message);
+                     toast({ title: "Quota Refund Issue", description: `Failed to process quota refund for failed publishing: ${refundRpcError.message}`, variant: "destructive"});
+                 } else {
+                     // Refetch quota locally after successful refund
+                     const { data: refreshedQuota, error: refreshError } = await supabase
+                         .from('quotas')
+                         .select('user_id, request_count, quota_limit, last_reset_at')
+                         .eq('user_id', user.id)
+                         .single();
+                     if (!refreshError && refreshedQuota) {
+                         setQuota(refreshedQuota as Quota);
+                     } else if (refreshError) {
+                          console.error("Error refreshing quota after publishing refund:", refreshError.message);
+                     }
+                 }
+             } catch (refundCatchError: any) {
+                 console.error("Unexpected Error during publishing quota refund attempt:", refundCatchError.message);
+                 toast({ title: "Quota Refund Issue", description: "An unexpected error occurred trying to refund quota for publishing.", variant: "destructive"});
+             }
+         }
         setIsPublishing(prev => ({ ...prev, [platform]: false }));
       }
    });
@@ -889,3 +945,4 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
     </TooltipProvider>
   );
 }
+

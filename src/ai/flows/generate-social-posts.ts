@@ -175,9 +175,9 @@ const generateSocialPostsFlow = defaultAi.defineFlow<
 
                   // Customize messages based on status
                   if (finalStatus === 'UNAVAILABLE') {
-                      finalMessage = `AI service is temporarily unavailable generating ${input.platform} post. Please try again later.`;
+                      finalMessage = `AI service was unavailable generating ${input.platform} post after multiple retry attempts.`; // Updated message
                   } else if (finalStatus === 'RESOURCE_EXHAUSTED') {
-                       finalMessage = `AI service rate limit likely exceeded generating ${input.platform} post. Please check your Google API quota or try again later.`;
+                       finalMessage = `AI service rate limit issues persisted generating ${input.platform} post after multiple retry attempts. Please check your Google API quota.`; // Updated message
                   } else if (finalStatus === 'INVALID_ARGUMENT') {
                        finalMessage = `Generation for ${input.platform} failed due to invalid input or configuration: ${error.message || 'Bad request'}`;
                   } else if (error.message === "AI returned an empty post.") {
@@ -197,3 +197,4 @@ const generateSocialPostsFlow = defaultAi.defineFlow<
     throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: `GenerateSocialPostsFlow (${input.platform}): Max retries reached after encountering errors.` });
   }
 );
+

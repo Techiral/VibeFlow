@@ -185,9 +185,9 @@ async (input, flowOptions) => { // Receive flowOptions
 
                   // Customize messages based on status
                   if (finalStatus === 'UNAVAILABLE') {
-                      finalMessage = "AI service is temporarily unavailable for tuning. Please try again later.";
+                      finalMessage = "AI service was unavailable for tuning after multiple retry attempts."; // Updated message
                   } else if (finalStatus === 'RESOURCE_EXHAUSTED') {
-                       finalMessage = "AI service rate limit likely exceeded during tuning. Please check your Google API quota or try again later.";
+                       finalMessage = "AI service rate limit issues persisted during tuning after multiple retry attempts. Please check your Google API quota."; // Updated message
                   } else if (finalStatus === 'INVALID_ARGUMENT') {
                        finalMessage = `Tuning failed due to invalid input or configuration: ${error.message || 'Bad request'}`;
                   } else if (error.message === "AI returned an empty tuned post.") {
@@ -206,3 +206,4 @@ async (input, flowOptions) => { // Receive flowOptions
     // Should be unreachable if MAX_RETRIES > 0
     throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: "TuneSocialPostsFlow: Max retries reached after encountering errors."});
 });
+

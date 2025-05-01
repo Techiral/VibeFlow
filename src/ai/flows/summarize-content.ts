@@ -199,9 +199,9 @@ async (input, flowOptions) => { // Receive flowOptions here
 
                   // Customize messages based on status
                   if (finalStatus === 'UNAVAILABLE') {
-                      finalMessage = "AI service is temporarily unavailable. Please try again later.";
+                      finalMessage = "AI service was unavailable after multiple retry attempts."; // Updated message
                   } else if (finalStatus === 'RESOURCE_EXHAUSTED') {
-                       finalMessage = "AI service rate limit likely exceeded. Please check your Google API quota or try again later.";
+                       finalMessage = "AI service rate limit issues persisted after multiple retry attempts. Please check your Google API quota."; // Updated message
                   } else if (finalStatus === 'INVALID_ARGUMENT') {
                        finalMessage = `Summarization failed due to invalid input or configuration: ${error.message || 'Bad request'}`;
                   } else if (error.message === "AI returned an empty summary.") {

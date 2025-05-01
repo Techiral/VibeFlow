@@ -78,6 +78,22 @@ Tuned Post:`, // Simplified prompt
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000; // 1 second
 
+// Function to check if an error is retriable (5xx, unavailable, overloaded)
+const isRetriableError = (error: any): boolean => {
+    const message = error.message?.toLowerCase() || '';
+    const status = error.status || (error instanceof GenkitError ? error.status : null);
+
+    return (
+        status === 'UNAVAILABLE' ||
+        status === 'RESOURCE_EXHAUSTED' ||
+        status === 503 || // Check direct status code
+        message.includes('503') ||
+        message.includes('overloaded') ||
+        message.includes('service unavailable') ||
+        message.includes('internal error') // Sometimes Gemini returns this for overload
+    );
+};
+
 // Modify the flow definition to accept and use options
 // Use defaultAi.defineFlow
 const tuneSocialPostsFlow = defaultAi.defineFlow<
@@ -111,19 +127,12 @@ async (input, flowOptions) => { // Receive flowOptions
              // Check for specific API key error
             if (error instanceof GenkitError && error.status === 'UNAUTHENTICATED' || error.message?.includes("API key not valid")) {
                  console.error(`TuneSocialPostsFlow: Invalid API Key used.`);
-                 // Re-throw as GenkitError to ensure status code is preserved
                  throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
             }
-            // Check for quota or overload errors (503 Service Unavailable)
-             const isServiceUnavailable = (error instanceof GenkitError && error.status === 'UNAVAILABLE') ||
-                                           error.status === 503 || // Check status code directly if not GenkitError
-                                           error.status === 'RESOURCE_EXHAUSTED' ||
-                                           error.message?.includes("503") ||
-                                           error.message?.toLowerCase().includes("overloaded") ||
-                                           error.message?.toLowerCase().includes("service unavailable");
 
-            if (isServiceUnavailable && retries < MAX_RETRIES - 1) {
-                console.warn(`TuneSocialPostsFlow: Service unavailable/overloaded (503 or similar). Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+            // Check for retriable errors (5xx, UNAVAILABLE, etc.)
+            if (isRetriableError(error) && retries < MAX_RETRIES - 1) {
+                console.warn(`TuneSocialPostsFlow: Service unavailable/overloaded. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
                 backoff *= 2; // Exponential backoff
@@ -134,27 +143,32 @@ async (input, flowOptions) => { // Receive flowOptions
                  backoff *= 2;
             } else {
                 // If it's not a retriable error or retries are exhausted, re-throw
-                console.error(`TuneSocialPostsFlow: Failed after ${retries} retries.`, error);
+                console.error(`TuneSocialPostsFlow: Failed after ${retries} retries. Original Error:`, error);
 
-                 // Ensure we throw a GenkitError for consistency downstream
-                 const status = (error instanceof GenkitError ? error.status : null) ||
-                                (isServiceUnavailable ? 'UNAVAILABLE' : null) ||
-                                (error.status === 400 ? 'INVALID_ARGUMENT' : null) || // Example: map 400 to INVALID_ARGUMENT
-                                'INTERNAL'; // Default to INTERNAL
+                 // Determine the best status code and message
+                 let finalStatus: GenkitError['status'] = 'INTERNAL';
+                 let finalMessage = `Post tuning failed: ${error.message || 'Unknown AI error'}`;
 
-                 let message = `Post tuning failed: ${error.message || 'Unknown AI error'}`;
-                  if (status === 'UNAVAILABLE') {
-                      message = "AI service is temporarily unavailable for tuning. Please try again later.";
+                  if (error instanceof GenkitError) {
+                     finalStatus = error.status ?? finalStatus;
+                 } else if (isRetriableError(error)) {
+                      finalStatus = 'UNAVAILABLE';
+                 } else if (error.status === 400) {
+                       finalStatus = 'INVALID_ARGUMENT';
+                 }
+
+                  if (finalStatus === 'UNAVAILABLE') {
+                      finalMessage = "AI service is temporarily unavailable for tuning. Please try again later.";
                   }
 
                 throw new GenkitError({
-                     status: status,
-                     message: message,
-                     cause: error,
+                     status: finalStatus,
+                     message: finalMessage,
+                     cause: error, // Include the original error as cause
                  });
             }
         }
     }
-    // Should be unreachable
-    throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: "TuneSocialPostsFlow: Max retries reached."});
+    // Should be unreachable if MAX_RETRIES > 0
+    throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: "TuneSocialPostsFlow: Max retries reached after encountering errors."});
 });

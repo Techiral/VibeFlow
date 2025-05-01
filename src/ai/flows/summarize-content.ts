@@ -72,6 +72,23 @@ const summarizeContentPrompt = defaultAi.definePrompt({
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000; // 1 second
 
+// Function to check if an error is retriable (5xx, unavailable, overloaded)
+const isRetriableError = (error: any): boolean => {
+    const message = error.message?.toLowerCase() || '';
+    const status = error.status || (error instanceof GenkitError ? error.status : null);
+
+    return (
+        status === 'UNAVAILABLE' ||
+        status === 'RESOURCE_EXHAUSTED' ||
+        status === 503 || // Check direct status code
+        message.includes('503') ||
+        message.includes('overloaded') ||
+        message.includes('service unavailable') ||
+        message.includes('internal error') // Sometimes Gemini returns this for overload
+    );
+};
+
+
 // Modify the flow definition to accept and use options
 // Use defaultAi.defineFlow
 const summarizeContentFlow = defaultAi.defineFlow<
@@ -92,16 +109,18 @@ async (input, flowOptions) => { // Receive flowOptions here
         const parsedContent = await parseContent(input.content);
         if (!parsedContent || !parsedContent.body || parsedContent.body.trim().length < 10) {
             console.warn("Content parsing might have failed or returned very little content for URL:", input.content);
-            content = parsedContent?.body || "Could not parse content from URL.";
+            // Use a more descriptive placeholder if parsing fails substantially
+            content = `Could not extract meaningful content from the URL: ${input.content}. Please paste the text directly.`;
         } else {
              content = parsedContent.body;
         }
       }
   } catch (parseError: any) {
        console.error("Error parsing content from URL:", input.content, parseError);
+       // Use a specific error status and message for parsing failures
        throw new GenkitError({
-          status: 'UNAVAILABLE', // Or another appropriate status
-          message: `Error parsing content from URL: ${parseError.message || 'Unknown parsing error'}`,
+          status: 'INVALID_ARGUMENT', // Indicate bad input (the URL)
+          message: `Error parsing content from URL: ${parseError.message || 'Unknown parsing error'}. Please check the URL or paste text directly.`,
           cause: parseError,
        });
   }
@@ -126,21 +145,12 @@ async (input, flowOptions) => { // Receive flowOptions here
              // Check for specific API key error
             if (error instanceof GenkitError && error.status === 'UNAUTHENTICATED' || error.message?.includes("API key not valid")) {
                  console.error(`SummarizeContentFlow: Invalid API Key used.`);
-                 // Re-throw as GenkitError to ensure status code is preserved
                  throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
             }
-             // Check for quota or overload errors (503 Service Unavailable)
-             // Use error.status if available (GenkitError might set it) or check message/status code
-             const isServiceUnavailable = (error instanceof GenkitError && error.status === 'UNAVAILABLE') ||
-                                           error.status === 503 || // Check status code directly if not GenkitError
-                                           error.status === 'RESOURCE_EXHAUSTED' ||
-                                           error.message?.includes("503") ||
-                                           error.message?.toLowerCase().includes("overloaded") ||
-                                           error.message?.toLowerCase().includes("service unavailable");
 
-
-            if (isServiceUnavailable && retries < MAX_RETRIES - 1) {
-                console.warn(`SummarizeContentFlow: Service unavailable/overloaded (503 or similar). Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+            // Check for retriable errors (5xx, UNAVAILABLE, etc.)
+            if (isRetriableError(error) && retries < MAX_RETRIES - 1) {
+                console.warn(`SummarizeContentFlow: Service unavailable/overloaded. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
                 backoff *= 2; // Exponential backoff
@@ -151,23 +161,28 @@ async (input, flowOptions) => { // Receive flowOptions here
                  backoff *= 2;
             } else {
                 // If it's not a retriable error or retries are exhausted, re-throw
-                console.error(`SummarizeContentFlow: Failed after ${retries} retries.`, error);
+                console.error(`SummarizeContentFlow: Failed after ${retries} retries. Original Error:`, error);
 
-                 // Ensure we throw a GenkitError for consistency downstream
-                 const status = (error instanceof GenkitError ? error.status : null) ||
-                                (isServiceUnavailable ? 'UNAVAILABLE' : null) ||
-                                (error.status === 400 ? 'INVALID_ARGUMENT' : null) || // Example: map 400 to INVALID_ARGUMENT
-                                'INTERNAL'; // Default to INTERNAL
+                 // Determine the best status code and message
+                 let finalStatus: GenkitError['status'] = 'INTERNAL';
+                 let finalMessage = `Summarization failed: ${error.message || 'Unknown AI error'}`;
 
-                 let message = `Summarization failed: ${error.message || 'Unknown AI error'}`;
-                 if (status === 'UNAVAILABLE') {
-                     message = "AI service is temporarily unavailable. Please try again later.";
+                  if (error instanceof GenkitError) {
+                     finalStatus = error.status ?? finalStatus;
+                 } else if (isRetriableError(error)) {
+                      finalStatus = 'UNAVAILABLE';
+                 } else if (error.status === 400) {
+                       finalStatus = 'INVALID_ARGUMENT';
                  }
 
+                  if (finalStatus === 'UNAVAILABLE') {
+                      finalMessage = "AI service is temporarily unavailable. Please try again later.";
+                  }
+
                  throw new GenkitError({
-                   status: status,
-                   message: message,
-                   cause: error,
+                   status: finalStatus,
+                   message: finalMessage,
+                   cause: error, // Include the original error as cause
                  });
             }
         }

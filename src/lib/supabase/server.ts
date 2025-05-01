@@ -3,36 +3,36 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { Database } from '@/types/supabase'; // Assuming you have types generated
 
-// Helper function to safely get cookies
-async function getCookie(name: string) {
-  const cookieStore = cookies(); // This can be called synchronously
+// Helper function to safely get cookies - No need to be async here
+function getCookie(name: string) {
+  const cookieStore = cookies(); // This can be called synchronously inside Route Handlers or Server Actions
   return cookieStore.get(name)?.value;
 }
 
-// Helper function to safely set cookies
-async function setCookie(name: string, value: string, options: CookieOptions) {
+// Helper function to safely set cookies - No need to be async here
+function setCookie(name: string, value: string, options: CookieOptions) {
   try {
     const cookieStore = cookies(); // This can be called synchronously
     cookieStore.set({ name, value, ...options });
   } catch (error) {
-    // Ignore errors when called from Server Components
+    // Usually happens when called from Server Components where `cookies` is read-only
+    console.warn(`Failed to set cookie '${name}' from a Server Component. This is often intended if used for reading cookies. Error: ${error}`);
   }
 }
 
-// Helper function to safely remove cookies
-async function removeCookie(name: string, options: CookieOptions) {
+// Helper function to safely remove cookies - No need to be async here
+function removeCookie(name: string, options: CookieOptions) {
   try {
     const cookieStore = cookies(); // This can be called synchronously
     cookieStore.set({ name, value: '', ...options });
   } catch (error) {
-    // Ignore errors when called from Server Components
+     // Usually happens when called from Server Components where `cookies` is read-only
+    console.warn(`Failed to remove cookie '${name}' from a Server Component. This is often intended if used for reading cookies. Error: ${error}`);
   }
 }
 
 
 export function createClient() {
-  // const cookieStore = cookies() // Moved inside helper functions
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -51,17 +51,18 @@ export function createClient() {
     supabaseAnonKey,
     {
       cookies: {
-        // Make get async and await the helper
-        get: async (name: string) => {
-          return await getCookie(name);
+        // `get` is called by Supabase client, it expects a sync return or Promise
+        // Since `cookies().get()` is sync, we can directly return the value
+        get: (name: string) => {
+          return getCookie(name);
         },
-        // Make set async and await the helper
-        set: async (name: string, value: string, options: CookieOptions) => {
-           await setCookie(name, value, options);
+        // `set` and `remove` are called by Supabase client during auth actions (Server Actions)
+        // where `cookies().set()` is available and sync.
+        set: (name: string, value: string, options: CookieOptions) => {
+           setCookie(name, value, options);
         },
-        // Make remove async and await the helper
-        remove: async (name: string, options: CookieOptions) => {
-           await removeCookie(name, options);
+        remove: (name: string, options: CookieOptions) => {
+           removeCookie(name, options);
         },
       },
     }

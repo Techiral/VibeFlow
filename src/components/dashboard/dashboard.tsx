@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart } from 'lucide-react';
+import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, Zap } from 'lucide-react'; // Import Zap
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
@@ -134,6 +134,8 @@ export default function Dashboard({ user }: DashboardProps) {
          setQuotaExceeded(true);
       } else if (error.message.includes("parsing")) {
          description = "Could not parse content from the URL. Please check the URL or paste text directly.";
+      } else if (error.message.includes("API key not valid")) {
+         description = "AI service configuration error. Please check the GOOGLE_GENAI_API_KEY."
       }
       toast({ title: "Generation Failed", description: description, variant: "destructive" });
        setSummary(null); // Clear summary on error
@@ -167,6 +169,8 @@ export default function Dashboard({ user }: DashboardProps) {
         if (error.message.includes("Quota exceeded")) {
            description = "You have reached your monthly usage limit.";
            setQuotaExceeded(true);
+        } else if (error.message.includes("API key not valid")) {
+           description = "AI service configuration error. Please check the GOOGLE_GENAI_API_KEY."
         }
       toast({ title: "Tuning Failed", description: description, variant: "destructive" });
     } finally {

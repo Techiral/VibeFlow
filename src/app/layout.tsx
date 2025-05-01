@@ -20,7 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning> {/* Add suppressHydrationWarning and force dark theme */}
+    <html lang="en" className="dark">{/* Force dark theme */}
+      {/* No whitespace allowed here */}
       <head /> {/* Add explicit head tag */}
       <body className={cn(
         geistSans.variable,

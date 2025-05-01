@@ -13,56 +13,76 @@ export default async function LoginPage({
 }: {
   searchParams: { message: string };
 }) {
-  // Check environment variables FIRST
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    console.error("Supabase URL or Anon Key is missing. Environment variables might not be configured properly.");
-    // Return an error state directly instead of relying on redirect after potential error
-    return (
-        <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-            <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
-                <CardHeader>
-                    <CardTitle>Configuration Error</CardTitle>
-                    <CardDescription>
-                        The application is missing necessary configuration (Supabase URL or Key). Please contact the administrator.
-                    </CardDescription>
-                </CardHeader>
-            </Card>
-        </div>
-    );
+   let supabase;
+   let initialError: Error | null = null;
+   let user = null;
+
+   try {
+     supabase = createClient(); // Attempt to create client first
+
+     // Check user session *after* confirming Supabase client is created
+      const { data } = await supabase.auth.getUser();
+      user = data.user;
+
+   } catch (error: any) { // Catch potential errors from client creation or getUser
+     console.error("Error during Supabase initialization or user check:", error.message);
+     initialError = error;
+     // Don't try to use supabase client further if creation failed
+   }
+
+   // If client creation failed, show an error and disable login/signup
+   if (initialError) {
+      let errorMessage = "Could not connect to the authentication service.";
+       if (initialError.message.includes("URL and Key are required")) {
+          errorMessage = "Authentication service configuration error: Supabase URL or Key is missing. Please contact the administrator.";
+       } else {
+           errorMessage = `An unexpected error occurred: ${initialError.message}`;
+       }
+       return (
+         <div className="flex min-h-screen w-full items-center justify-center bg-background relative overflow-hidden p-4">
+             <div className="absolute inset-0 z-0 gradient-glow"></div>
+             <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
+                 <CardHeader className="space-y-1 text-center">
+                     <div className="flex justify-center items-center mb-4">
+                         <Zap className="h-8 w-8 text-primary" />
+                     </div>
+                     <CardTitle className="text-2xl font-bold text-gradient">VibeFlow</CardTitle>
+                     <CardDescription className="text-destructive-foreground font-semibold pt-2">
+                         {errorMessage}
+                     </CardDescription>
+                 </CardHeader>
+                 {/* Optionally show disabled form elements or just the message */}
+             </Card>
+         </div>
+       );
+   }
+
+
+  // If user is already logged in (and client creation succeeded), redirect
+  if (user) {
+    return redirect("/");
   }
 
 
-   let supabase;
-   try {
-     supabase = createClient();
-   } catch (error: any) {
-     console.error("Error creating Supabase client:", error.message);
-      // Redirect or handle error appropriately
-      // Using redirect here might still cause issues if client creation fails partially.
-      // Displaying an error is generally safer.
-      return (
-        <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-            <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
-                <CardHeader>
-                    <CardTitle>Connection Error</CardTitle>
-                    <CardDescription>
-                        Could not connect to the database. Please contact the administrator. Error: {error.message}
-                    </CardDescription>
-                </CardHeader>
-            </Card>
-        </div>
-      );
-   }
-
+  // --- Server Actions ---
+  // These should ideally also check if supabase client is available,
+  // but createClient() will throw if called when vars are missing.
 
   const signIn = async (formData: FormData) => {
     "use server";
 
+    let supabaseActionClient;
+    try {
+      supabaseActionClient = createClient(); // Re-create client in action scope
+    } catch (error: any) {
+       console.error("Sign In Action Error - Supabase client creation failed:", error.message);
+       return redirect(`/login?message=Configuration error prevents sign in. Contact admin.`);
+    }
+
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
-    const supabase = createClient(); // Safe to call here due to checks above
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabaseActionClient.auth.signInWithPassword({
       email,
       password,
     });
@@ -77,12 +97,20 @@ export default async function LoginPage({
   const signUp = async (formData: FormData) => {
     "use server";
 
+    let supabaseActionClient;
+     try {
+       supabaseActionClient = createClient(); // Re-create client in action scope
+     } catch (error: any) {
+        console.error("Sign Up Action Error - Supabase client creation failed:", error.message);
+        return redirect(`/login?message=Configuration error prevents sign up. Contact admin.`);
+     }
+
     const origin = headers().get("origin");
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
-    const supabase = createClient(); // Safe to call here due to checks above
 
-    const { error } = await supabase.auth.signUp({
+
+    const { error } = await supabaseActionClient.auth.signUp({
       email,
       password,
       options: {
@@ -106,35 +134,10 @@ export default async function LoginPage({
     return redirect("/login?message=Check email to continue sign in process");
   };
 
-  // Check user session *after* confirming Supabase client is created
-  let user = null;
-  try {
-      const { data } = await supabase.auth.getUser();
-      user = data.user;
-  } catch (error: any) { // Catch potential errors from getUser itself
-      console.error("Error fetching Supabase user:", error.message);
-      // Display error or redirect with a specific message
-       return (
-         <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-             <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
-                 <CardHeader>
-                     <CardTitle>Authentication Error</CardTitle>
-                     <CardDescription>
-                         Could not verify user session. Please try again later or contact support. Error: {error.message}
-                     </CardDescription>
-                 </CardHeader>
-             </Card>
-         </div>
-       );
-  }
 
-  if (user) {
-    return redirect("/");
-  }
-
-
+  // Render the login form if no initial error and no user logged in
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-background relative overflow-hidden">
+    <div className="flex min-h-screen w-full items-center justify-center bg-background relative overflow-hidden p-4">
        {/* Animated Gradient Glow */}
        <div className="absolute inset-0 z-0 gradient-glow"></div>
 
@@ -166,7 +169,7 @@ export default async function LoginPage({
               <Input id="password" name="password" type="password" required className="bg-input/50 border-border/50"/>
             </div>
              {searchParams?.message && (
-              <p className="mt-4 p-4 bg-destructive/20 text-destructive-foreground border border-destructive rounded-md text-center text-sm">
+              <p className={`mt-4 p-4 border rounded-md text-center text-sm ${searchParams.message.toLowerCase().includes("error") || searchParams.message.toLowerCase().includes("could not") || searchParams.message.toLowerCase().includes("limit reached") ? 'bg-destructive/20 text-destructive-foreground border-destructive' : 'bg-primary/10 text-primary-foreground border-primary/30'}`}>
                 {searchParams.message}
               </p>
             )}

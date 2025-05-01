@@ -9,9 +9,29 @@ export async function updateSession(request: NextRequest) {
     },
   })
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error(
+      "Middleware: Your project's URL and Key are required to create a Supabase client!\n\n" +
+      "Check your Supabase project's API settings to find these values\n\n" +
+      "https://supabase.com/dashboard/project/_/settings/api"
+    );
+    // Cannot throw here easily, let downstream handle errors, but log the issue.
+    // Alternatively, redirect to an error page:
+    // const url = request.nextUrl.clone();
+    // url.pathname = '/error';
+    // url.searchParams.set('message', 'Supabase configuration missing');
+    // return NextResponse.redirect(url);
+    // For now, just continue and let auth fail later.
+    return response;
+  }
+
+
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         get(name: string) {
@@ -56,6 +76,7 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Refresh session if expired - required for Server Components
+  // This might fail if keys were invalid, but Supabase client handles it internally.
   await supabase.auth.getUser()
 
   return response

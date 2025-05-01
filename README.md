@@ -1,4 +1,3 @@
-
 # Firebase Studio - VibeFlow
 
 This is a NextJS starter project called VibeFlow, built within Firebase Studio. It allows users to input content (URL or text), summarize it using AI, and generate tailored social media posts for different platforms (LinkedIn, Twitter, YouTube). Users can then tune these posts and (placeholder for) publish them.
@@ -30,10 +29,15 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 
 3.  **Set Up Supabase Database (MANDATORY):**
 
-    You **must** run SQL commands to set up the necessary tables (`profiles`, `quotas`) and functions (`increment_quota`, `get_remaining_quota`, `get_user_profile`) in your Supabase project. If you skip this step, the application will **not** work correctly and you will see database errors like `relation "public.profiles" does not exist`, `relation "public.quotas" does not exist`, or `function public.get_user_profile does not exist`.
+    You **must** run SQL commands to set up the necessary tables (`profiles`, `quotas`) and functions (`increment_quota`, `get_remaining_quota`, `get_user_profile`) in your Supabase project. If you skip this step, the application will **not** work correctly and you will see database errors like:
+     * `relation "public.profiles" does not exist`
+     * `relation "public.quotas" does not exist`
+     * `function public.get_user_profile does not exist`
+     * `function public.increment_quota does not exist`
+     * `function public.get_remaining_quota does not exist`
 
     a.  Navigate to the **SQL Editor** in your Supabase project dashboard.
-    b.  Create a new query.
+    b.  Click **+ New query**.
     c.  Paste and run the **entire** content of the SQL file found at `supabase/schema.sql`. This file contains commands to create the tables, functions, enable Row Level Security (RLS), and define security policies.
 
 4.  **Run Development Server:**
@@ -352,4 +356,3 @@ GRANT EXECUTE ON FUNCTION public.get_remaining_quota(uuid) TO authenticated;
 ```
 
 **Security Note:** Storing API keys directly in the database (`profiles.gemini_api_key`) is generally **not recommended for production environments** without proper security measures like encryption at rest or using a secrets management service (like HashiCorp Vault or cloud provider secrets managers). For this hackathon project, it's a simplification.
-

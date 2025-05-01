@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, User as UserIcon, Database } from 'lucide-react'; // Added UserIcon, Database icon
+import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, User as UserIcon, Database, Zap } from 'lucide-react'; // Added UserIcon, Database icon, Zap
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
@@ -89,7 +89,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                   }
                   if (setupErrorMsg) setDbSetupError(setupErrorMsg); // Set state for UI
                   // Don't throw here, let it proceed to quota check maybe
-             } else if (data) {
+             } else if (data && Array.isArray(data) && data.length > 0) {
                  // The RPC returns an array, even for single result
                  currentProfile = data[0] as Profile; // Assuming the first element is the profile
                  setProfile(currentProfile);
@@ -163,7 +163,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
    // Function to check quota and increment if allowed
   const checkAndIncrementQuota = async (incrementAmount: number = 1): Promise<boolean> => {
      if (dbSetupError) {
-         toast({ title: "Database Error", description: "Cannot process request due to database setup issue.", variant: "destructive" });
+         toast({ title: "Database Error", description: "Cannot process request due to database setup issue. Please run the SQL script from the README.", variant: "destructive" });
          return false;
      }
      if (!quota) {
@@ -484,7 +484,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
          </Link>
         <div className="flex items-center gap-3 md:gap-4">
            {/* Quota Display */}
-           {quota !== null ? (
+           {quota !== null && !dbSetupError ? ( // Hide quota if DB error
              <Tooltip>
                <TooltipTrigger asChild>
                   <div className="flex flex-col items-end cursor-help">
@@ -500,7 +500,17 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                   {/* Add billing info/link here later */}
                </TooltipContent>
              </Tooltip>
-           ) : (
+           ) : dbSetupError ? (
+                <Tooltip>
+                   <TooltipTrigger asChild>
+                       <div className="flex items-center gap-1 text-sm text-destructive">
+                           <Database className="h-4 w-4" />
+                           <span>DB Error</span>
+                       </div>
+                   </TooltipTrigger>
+                   <TooltipContent><p>Database setup required</p></TooltipContent>
+               </Tooltip>
+           ) : ( // Loading state
                <div className="flex items-center gap-1 text-sm text-muted-foreground">
                    <Loader2 className="h-4 w-4 animate-spin"/>
                    <span>Loading quota...</span>

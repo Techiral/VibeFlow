@@ -87,7 +87,17 @@ export default async function DashboardPage() {
                  }
                  throw rpcProfileError;
             }
-            profile = rpcProfileData as Profile; // Assuming RPC returns a single row matching Profile
+             // The RPC function `get_user_profile` returns an array (SETOF).
+             // Check if the array is empty or if the first element is null.
+             if (rpcProfileData && Array.isArray(rpcProfileData) && rpcProfileData.length > 0) {
+                 profile = rpcProfileData[0] as Profile; // Use the first profile returned by the RPC
+             } else {
+                 // This case should ideally not happen if the RPC function works correctly (inserts if not found).
+                 // Log a warning if profile is still unexpectedly null.
+                 console.warn("get_user_profile RPC returned no data for user:", user.id);
+                 errorMessage = "Failed to initialize user profile. Please try logging out and back in.";
+                 throw new Error(errorMessage); // Throw to trigger the error display logic
+             }
         }
 
         if (!quota && !isDbSetupError) { // Only try creating if DB seems set up
@@ -133,7 +143,8 @@ export default async function DashboardPage() {
   }
 
   // Redirect to login if user fetch failed OR if there was a critical initial setup error
-  if (!user || (initialError && initialError.code !== 'NEXT_REDIRECT' && !errorMessage?.includes("loading"))) {
+  // Check if the error is NEXT_REDIRECT before redirecting, to avoid redirect loops
+  if ((!user || (initialError && initialError.code !== 'NEXT_REDIRECT')) && initialError?.code !== 'NEXT_REDIRECT') {
      if (!user && !initialError) {
         console.log("No user session found, redirecting to login.");
      }
@@ -170,5 +181,5 @@ export default async function DashboardPage() {
 
   // If user is logged in and critical setup is ok, show the dashboard
   // Pass user, profile, and quota data. Handle potential null profile/quota in the Dashboard component.
-  return <Dashboard user={user} initialProfile={profile} initialQuota={quota} />;
+  return <Dashboard user={user!} initialProfile={profile} initialQuota={quota} />;
 }

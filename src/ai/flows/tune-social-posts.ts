@@ -65,6 +65,14 @@ Original Post: {{{originalPost}}}
 Feedback: {{{feedback}}}
 
 Tuned Post:`, // Simplified prompt
+  // Define config schema to accept API key
+  configSchema: z.object({
+    apiKey: z.string().optional(),
+  }),
+  // Use the apiKey from config for the Google AI plugin
+  plugins: [googleAI(config => ({ apiKey: config?.apiKey }))],
+  // Ensure the model is specified, can be overridden per call if needed
+  model: 'googleai/gemini-2.0-flash',
 });
 
 
@@ -83,21 +91,19 @@ const tuneSocialPostsFlow = defaultAi.defineFlow<
   outputSchema: TuneSocialPostsOutputSchema,
 },
 async (input, flowOptions) => { // Receive flowOptions
-     // Initialize AI instance specific to this flow run
-     const ai = genkit({
-          plugins: [
-              googleAI({ apiKey: flowOptions.apiKey }), // Use apiKey from flowOptions
-          ],
-          model: 'googleai/gemini-2.0-flash',
-     });
+     // REMOVED: Initialization of local AI instance using genkit({...})
 
     let retries = 0;
     let backoff = INITIAL_BACKOFF_MS;
 
     while (retries < MAX_RETRIES) {
         try {
-            // Use the flow-specific AI instance
-            const {output} = await ai.run(prompt, input);
+            // Call the prompt object directly, passing the API key via config
+            const {output} = await prompt(
+                input, // Prompt input
+                { config: { apiKey: flowOptions.apiKey } } // Prompt config with API key
+            );
+
             if (!output?.tunedPost) {
                 console.warn("TuneSocialPostsFlow: Received empty tuned post from AI.");
                 throw new Error("AI returned an empty tuned post.");
@@ -110,7 +116,7 @@ async (input, flowOptions) => { // Receive flowOptions
                  throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
             }
             // Check for quota or overload errors
-             if ((error.status === 'RESOURCE_EXHAUSTED' || error.status === 503 || error.message?.includes("503") || error.message?.toLowerCase().includes("overloaded")) && retries < MAX_RETRIES - 1) {
+             if ((error.status === 'RESOURCE_EXHAUSTED' || error.status === 503 || error.message?.includes("503") || error.message?.toLowerCase().includes("overloaded") || error.message?.toLowerCase().includes("service unavailable")) && retries < MAX_RETRIES - 1) {
                 console.warn(`TuneSocialPostsFlow: Service unavailable/overloaded. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;

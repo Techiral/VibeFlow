@@ -59,6 +59,14 @@ const prompt = defaultAi.definePrompt({
     }),
   },
   prompt: `You are a social media expert. Generate a social media post for the following platform: {{{platform}}}.\n\nHere is the content summary: {{{summary}}}.\n\nMake sure the post is engaging and tailored to the platform. The length of the post should be appropriate for the platform (e.g., Twitter posts should be less than 280 characters). For YouTube, generate a video description including relevant hashtags.`, // Added YouTube clarification
+  // Define config schema to accept API key
+  configSchema: z.object({
+    apiKey: z.string().optional(),
+  }),
+  // Use the apiKey from config for the Google AI plugin
+  plugins: [googleAI(config => ({ apiKey: config?.apiKey }))],
+  // Ensure the model is specified, can be overridden per call if needed
+  model: 'googleai/gemini-2.0-flash',
 });
 
 const MAX_RETRIES = 3;
@@ -77,21 +85,19 @@ const generateSocialPostsFlow = defaultAi.defineFlow<
     outputSchema: GenerateSocialPostsOutputSchema,
   },
   async (input, flowOptions) => { // Receive flowOptions
-      // Initialize AI instance specific to this flow run
-      const ai = genkit({
-           plugins: [
-               googleAI({ apiKey: flowOptions.apiKey }), // Use apiKey from flowOptions
-           ],
-           model: 'googleai/gemini-2.0-flash',
-      });
+      // REMOVED: Initialization of local AI instance using genkit({...})
 
     let retries = 0;
     let backoff = INITIAL_BACKOFF_MS;
 
     while (retries < MAX_RETRIES) {
         try {
-             // Use the flow-specific AI instance
-            const {output} = await ai.run(prompt, input);
+             // Call the prompt object directly, passing the API key via config
+            const {output} = await prompt(
+                input, // Prompt input
+                { config: { apiKey: flowOptions.apiKey } } // Prompt config with API key
+            );
+
              if (!output?.post) {
                  console.warn(`GenerateSocialPostsFlow (${input.platform}): Received empty post from AI.`);
                  throw new Error("AI returned an empty post.");
@@ -104,7 +110,7 @@ const generateSocialPostsFlow = defaultAi.defineFlow<
                  throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
             }
              // Check for quota or overload errors
-             if ((error.status === 'RESOURCE_EXHAUSTED' || error.status === 503 || error.message?.includes("503") || error.message?.toLowerCase().includes("overloaded")) && retries < MAX_RETRIES - 1) {
+             if ((error.status === 'RESOURCE_EXHAUSTED' || error.status === 503 || error.message?.includes("503") || error.message?.toLowerCase().includes("overloaded") || error.message?.toLowerCase().includes("service unavailable")) && retries < MAX_RETRIES - 1) {
                 console.warn(`GenerateSocialPostsFlow (${input.platform}): Service unavailable/overloaded. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;

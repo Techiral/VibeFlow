@@ -390,6 +390,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
         try {
           // 1. Summarize Content
           summaryResult = await summarizeContent({ content: contentInput }, { apiKey });
+          console.log("Summarization successful:", summaryResult); // Added console log
           setSummary(summaryResult.summary);
           summarySuccess = true; // Mark summary as successful
         } catch (summaryError: any) {
@@ -400,11 +401,14 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
             } else if (summaryError.status === 'UNAUTHENTICATED' || summaryError.message.includes("API key not valid")) {
                description = "Invalid Gemini API Key. Please check your profile.";
                setIsProfileDialogOpen(true); // Prompt user to fix key
-            } else if (summaryError.message.includes("503") || summaryError.message.toLowerCase().includes("overloaded")) {
+            } else if (summaryError.message.includes("503") || summaryError.message.toLowerCase().includes("overloaded") || summaryError.message.toLowerCase().includes("service unavailable")) {
                 description = "AI service is temporarily overloaded during summarization. Please try again later.";
             } else if (summaryError.status === 'INVALID_ARGUMENT' && summaryError.message.includes("API key is required")) {
                  description = "API Key was missing during generation.";
                  setIsProfileDialogOpen(true); // Should be caught earlier, but handle just in case
+            } else {
+                 // Include the original error message for other Genkit errors
+                 description = `Summarization failed: ${summaryError.message || 'Unknown AI error'}`;
             }
            toast({ title: "Summarization Failed", description: description, variant: "destructive" });
            // Don't set summary, proceed to finally block for quota rollback
@@ -426,11 +430,13 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                   if (err.status === 'UNAUTHENTICATED' || err.message.includes("API key not valid")) {
                      description = "Invalid Gemini API Key. Please check your profile."
                      setIsProfileDialogOpen(true);
-                  } else if (err.message.includes("503") || err.message.toLowerCase().includes("overloaded")) {
+                  } else if (err.message.includes("503") || err.message.toLowerCase().includes("overloaded") || err.message.toLowerCase().includes("service unavailable")) {
                       description = `AI service is temporarily overloaded generating ${platform} post. Please try again later.`;
                   } else if (err.status === 'INVALID_ARGUMENT' && err.message.includes("API key is required")) {
                       description = "API Key was missing during generation.";
                        setIsProfileDialogOpen(true);
+                  } else {
+                      description = `Post generation for ${platform} failed: ${err.message || 'Unknown AI error'}`;
                   }
                   toast({ title: "Post Generation Failed", description: description, variant: "destructive" });
                  return { platform, post: `Error generating post for ${platform}.` }; // Return error placeholder
@@ -538,11 +544,13 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
          if (error.status === 'UNAUTHENTICATED' || error.message.includes("API key not valid")) {
              description = "Invalid Gemini API Key. Please check your profile."
              setIsProfileDialogOpen(true);
-          } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded")) {
+          } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded") || error.message.toLowerCase().includes("service unavailable")) {
               description = "AI service is temporarily overloaded. Please try tuning again later.";
           } else if (error.status === 'INVALID_ARGUMENT' && error.message.includes("API key is required")) {
               description = "API Key was missing during tuning.";
               setIsProfileDialogOpen(true);
+          } else {
+              description = `Post tuning failed: ${error.message || 'Unknown AI error'}`;
           }
         toast({ title: "Tuning Failed", description: description, variant: "destructive" });
       } finally {

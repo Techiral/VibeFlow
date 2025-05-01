@@ -59,6 +59,14 @@ const summarizeContentPrompt = defaultAi.definePrompt({
     }),
   },
   prompt: `Summarize the following content concisely:\n\n{{{content}}}`, // Added concisely
+  // Define config schema to accept API key
+  configSchema: z.object({
+    apiKey: z.string().optional(),
+  }),
+  // Use the apiKey from config for the Google AI plugin
+  plugins: [googleAI(config => ({ apiKey: config?.apiKey }))],
+  // Ensure the model is specified, can be overridden per call if needed
+  model: 'googleai/gemini-2.0-flash',
 });
 
 const MAX_RETRIES = 3;
@@ -76,15 +84,7 @@ const summarizeContentFlow = defaultAi.defineFlow<
   outputSchema: SummarizeContentOutputSchema,
 },
 async (input, flowOptions) => { // Receive flowOptions here
-  // Initialize AI instance specific to this flow run with the provided API key
-   const ai = genkit({
-       plugins: [
-           googleAI({ apiKey: flowOptions.apiKey }), // Use apiKey from flowOptions
-       ],
-       model: 'googleai/gemini-2.0-flash', // Or get model from config/options
-       // Consider adding log level or other configs if needed
-   });
-
+  // REMOVED: Initialization of local AI instance using genkit({...})
 
   let content = input.content;
   // If the input is a URL, parse the content from the URL.
@@ -112,8 +112,12 @@ async (input, flowOptions) => { // Receive flowOptions here
 
    while (retries < MAX_RETRIES) {
         try {
-            // Use the flow-specific AI instance to run the prompt
-            const {output} = await ai.run(summarizeContentPrompt, { content }); // Use ai.run with prompt object
+            // Call the prompt object directly, passing the API key via config
+            const {output} = await summarizeContentPrompt(
+              { content }, // Prompt input
+              { config: { apiKey: flowOptions.apiKey } } // Prompt config with API key
+            );
+
             if (!output?.summary) {
                 console.warn("SummarizeContentFlow: Received empty summary from AI.");
                 throw new Error("AI returned an empty summary.");
@@ -126,7 +130,7 @@ async (input, flowOptions) => { // Receive flowOptions here
                  throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
             }
              // Check for quota or overload errors
-            if ((error.status === 'RESOURCE_EXHAUSTED' || error.status === 503 || error.message?.includes("503") || error.message?.toLowerCase().includes("overloaded")) && retries < MAX_RETRIES - 1) {
+            if ((error.status === 'RESOURCE_EXHAUSTED' || error.status === 503 || error.message?.includes("503") || error.message?.toLowerCase().includes("overloaded") || error.message?.toLowerCase().includes("service unavailable")) && retries < MAX_RETRIES - 1) {
                 console.warn(`SummarizeContentFlow: Service unavailable/overloaded. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
@@ -150,4 +154,3 @@ async (input, flowOptions) => { // Receive flowOptions here
      // Should be unreachable if MAX_RETRIES > 0
     throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: "SummarizeContentFlow: Max retries reached after encountering errors."});
 });
-

@@ -1,3 +1,4 @@
+
 import Link from "next/link";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
@@ -66,9 +67,9 @@ export default async function LoginPage({
    }
 
 
-  // If user is already logged in (and client creation succeeded), redirect
+  // If user is already logged in (and client creation succeeded), redirect to dashboard
   if (user) {
-    return redirect("/");
+    return redirect("/dashboard");
   }
 
 
@@ -103,7 +104,7 @@ export default async function LoginPage({
       return redirect(`/login?message=Could not authenticate user: ${error.message}`);
     }
 
-    return redirect("/");
+    return redirect("/dashboard"); // Redirect to dashboard on successful sign-in
   };
 
   const signUp = async (formData: FormData) => {
@@ -130,7 +131,7 @@ export default async function LoginPage({
       email,
       password,
       options: {
-        emailRedirectTo: `${origin}/auth/callback`,
+        emailRedirectTo: `${origin}/auth/callback`, // Callback will redirect to dashboard
       },
     });
 
@@ -159,9 +160,9 @@ export default async function LoginPage({
 
       <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
         <CardHeader className="space-y-1 text-center">
-           <div className="flex justify-center items-center mb-4">
+           <Link href="/" className="flex justify-center items-center mb-4 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
              <Zap className="h-8 w-8 text-primary" />
-           </div>
+           </Link>
           <CardTitle className="text-2xl font-bold text-gradient">VibeFlow</CardTitle>
           <CardDescription className="text-muted-foreground">
             Enter your email below to login or sign up
@@ -205,6 +206,11 @@ export default async function LoginPage({
               Sign Up
             </SubmitButton>
           </form>
+           <div className="mt-4 text-center text-sm">
+              <Link href="/" className="underline text-muted-foreground hover:text-primary">
+                Back to Landing Page
+              </Link>
+            </div>
         </CardContent>
       </Card>
     </div>

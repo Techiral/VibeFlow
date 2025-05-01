@@ -1,3 +1,4 @@
+
 // dashboard.tsx
 'use client';
 
@@ -18,6 +19,7 @@ import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import Link from 'next/link'; // Import Link for the logo
 
 interface DashboardProps {
   user: User;
@@ -92,68 +94,70 @@ export default function Dashboard({ user }: DashboardProps) {
     setSummary(null);
     setPostDrafts({});
 
-    try {
-       // Placeholder for quota check/increment
-       // const remaining = await incrementQuota();
-       // setQuotaRemaining(remaining);
-       // if (remaining < 0) { // Should be handled by increment error ideally
-       //    setQuotaExceeded(true);
-       //    throw new Error("Quota exceeded");
-       // }
+    startTransition(async () => {
+        try {
+         // Placeholder for quota check/increment
+         // const remaining = await incrementQuota();
+         // setQuotaRemaining(remaining);
+         // if (remaining < 0) { // Should be handled by increment error ideally
+         //    setQuotaExceeded(true);
+         //    throw new Error("Quota exceeded");
+         // }
 
 
-      // 1. Summarize Content
-      const summaryResult = await summarizeContent({ content: contentInput });
-      setSummary(summaryResult.summary);
-      setIsGeneratingSummary(false);
+        // 1. Summarize Content
+        const summaryResult = await summarizeContent({ content: contentInput });
+        setSummary(summaryResult.summary);
+        setIsGeneratingSummary(false); // Summary done
 
-      // 2. Generate Posts for all platforms concurrently
-      const platforms: SocialPlatform[] = ['linkedin', 'twitter', 'youtube'];
-      const postPromises = platforms.map(platform =>
-        generateSocialPosts({ summary: summaryResult.summary, platform })
-          .then(result => ({ platform, post: result.post }))
-          .catch(err => {
-             console.error(`Error generating ${platform} post:`, err);
-              let description = `Error generating ${platform} post.`;
-              if (err.message.includes("API key not valid")) {
-                 description = "AI service configuration error. Please check the GOOGLE_GENAI_API_KEY."
-              } else if (err.message.includes("503") || err.message.toLowerCase().includes("overloaded")) {
-                  description = `AI service is temporarily overloaded generating ${platform} post. Please try again later.`;
-              }
-              toast({ title: "Generation Failed", description: description, variant: "destructive" });
-             // Return an error message for the specific platform
-             return { platform, post: `Error generating post for ${platform}.` };
-          })
-      );
+        // 2. Generate Posts for all platforms concurrently
+        const platforms: SocialPlatform[] = ['linkedin', 'twitter', 'youtube'];
+        const postPromises = platforms.map(platform =>
+          generateSocialPosts({ summary: summaryResult.summary, platform })
+            .then(result => ({ platform, post: result.post }))
+            .catch(err => {
+               console.error(`Error generating ${platform} post:`, err);
+                let description = `Error generating ${platform} post.`;
+                if (err.message.includes("API key not valid")) {
+                   description = "AI service configuration error. Please check the GOOGLE_GENAI_API_KEY."
+                } else if (err.message.includes("503") || err.message.toLowerCase().includes("overloaded")) {
+                    description = `AI service is temporarily overloaded generating ${platform} post. Please try again later.`;
+                }
+                toast({ title: "Generation Failed", description: description, variant: "destructive" });
+               // Return an error message for the specific platform
+               return { platform, post: `Error generating post for ${platform}.` };
+            })
+        );
 
-      const results = await Promise.all(postPromises);
-      const newDrafts = results.reduce((acc, { platform, post }) => {
-        acc[platform] = post;
-        return acc;
-      }, {} as PostDrafts);
+        const results = await Promise.all(postPromises);
+        const newDrafts = results.reduce((acc, { platform, post }) => {
+          acc[platform] = post;
+          return acc;
+        }, {} as PostDrafts);
 
-      setPostDrafts(newDrafts);
+        setPostDrafts(newDrafts);
 
-    } catch (error: any) {
-      console.error("Generation failed:", error);
-      let description = "An error occurred during generation.";
-      if (error.message.includes("Quota exceeded")) {
-         description = "You have reached your monthly usage limit.";
-         setQuotaExceeded(true);
-      } else if (error.message.includes("parsing")) {
-         description = "Could not parse content from the URL. Please check the URL or paste text directly.";
-      } else if (error.message.includes("API key not valid")) {
-         description = "AI service configuration error. Please check the GOOGLE_GENAI_API_KEY."
-      } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded")) {
-          description = "AI service is temporarily overloaded during summarization. Please try again later.";
+      } catch (error: any) {
+        console.error("Generation failed:", error);
+        let description = "An error occurred during generation.";
+        if (error.message.includes("Quota exceeded")) {
+           description = "You have reached your monthly usage limit.";
+           setQuotaExceeded(true);
+        } else if (error.message.includes("parsing")) {
+           description = "Could not parse content from the URL. Please check the URL or paste text directly.";
+        } else if (error.message.includes("API key not valid")) {
+           description = "AI service configuration error. Please check the GOOGLE_GENAI_API_KEY."
+        } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded")) {
+            description = "AI service is temporarily overloaded during summarization. Please try again later.";
+        }
+        toast({ title: "Generation Failed", description: description, variant: "destructive" });
+         setSummary(null); // Clear summary on error
+         setPostDrafts({}); // Clear drafts on error
+      } finally {
+        setIsGeneratingSummary(false); // Ensure both are false at the end
+        setIsGeneratingPosts(false);
       }
-      toast({ title: "Generation Failed", description: description, variant: "destructive" });
-       setSummary(null); // Clear summary on error
-       setPostDrafts({}); // Clear drafts on error
-    } finally {
-      setIsGeneratingSummary(false);
-      setIsGeneratingPosts(false);
-    }
+    });
   };
 
  const handleTunePost = async (platform: SocialPlatform, feedback: string) => {
@@ -166,28 +170,30 @@ export default function Dashboard({ user }: DashboardProps) {
 
     setIsTuning(prev => ({ ...prev, [platform]: true }));
 
-    try {
-      // Placeholder for quota check/increment
-      // await incrementQuota();
+    startTransition(async () => {
+      try {
+        // Placeholder for quota check/increment
+        // await incrementQuota();
 
-      const tunedResult = await tuneSocialPosts({ originalPost, feedback });
-      setPostDrafts(prev => ({ ...prev, [platform]: tunedResult.tunedPost }));
-       toast({ title: "Post Tuned!", description: `Applied feedback: "${feedback}"`, variant: "default" });
-    } catch (error: any) {
-      console.error(`Tuning ${platform} post failed:`, error);
-       let description = "An error occurred while tuning the post.";
-        if (error.message.includes("Quota exceeded")) {
-           description = "You have reached your monthly usage limit.";
-           setQuotaExceeded(true);
-        } else if (error.message.includes("API key not valid")) {
-           description = "AI service configuration error. Please check the GOOGLE_GENAI_API_KEY."
-        } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded")) {
-            description = "AI service is temporarily overloaded. Please try tuning again later.";
-        }
-      toast({ title: "Tuning Failed", description: description, variant: "destructive" });
-    } finally {
-      setIsTuning(prev => ({ ...prev, [platform]: false }));
-    }
+        const tunedResult = await tuneSocialPosts({ originalPost, feedback });
+        setPostDrafts(prev => ({ ...prev, [platform]: tunedResult.tunedPost }));
+         toast({ title: "Post Tuned!", description: `Applied feedback: "${feedback}"`, variant: "default" });
+      } catch (error: any) {
+        console.error(`Tuning ${platform} post failed:`, error);
+         let description = "An error occurred while tuning the post.";
+          if (error.message.includes("Quota exceeded")) {
+             description = "You have reached your monthly usage limit.";
+             setQuotaExceeded(true);
+          } else if (error.message.includes("API key not valid")) {
+             description = "AI service configuration error. Please check the GOOGLE_GENAI_API_KEY."
+          } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded")) {
+              description = "AI service is temporarily overloaded. Please try tuning again later.";
+          }
+        toast({ title: "Tuning Failed", description: description, variant: "destructive" });
+      } finally {
+        setIsTuning(prev => ({ ...prev, [platform]: false }));
+      }
+    });
   };
 
   const handlePublishPost = async (platform: SocialPlatform) => {
@@ -200,33 +206,35 @@ export default function Dashboard({ user }: DashboardProps) {
 
     setIsPublishing(prev => ({ ...prev, [platform]: true }));
 
-    try {
-        // Placeholder for quota check/increment
-        // await incrementQuota();
+    startTransition(async () => {
+      try {
+          // Placeholder for quota check/increment
+          // await incrementQuota();
 
-      // Placeholder for actual Composio MCP publishing call
-      console.log(`Publishing to ${platform}:`, postContent);
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+        // Placeholder for actual Composio MCP publishing call
+        console.log(`Publishing to ${platform}:`, postContent);
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
 
-      // TODO: Replace with actual API call:
-      // await publishPost({ platform, content: postContent });
+        // TODO: Replace with actual API call:
+        // await publishPost({ platform, content: postContent });
 
-      toast({ title: "Post Published!", description: `Successfully published to ${platform}.`, variant: "default" });
+        toast({ title: "Post Published!", description: `Successfully published to ${platform}.`, variant: "default" });
 
-    } catch (error: any) {
-       console.error(`Publishing to ${platform} failed:`, error);
-       let description = "An error occurred while publishing the post.";
-        if (error.message.includes("Quota exceeded")) {
-           description = "You have reached your monthly usage limit.";
-           setQuotaExceeded(true);
-        } else if (error.message.includes("authentication")) { // Example error check
-            description = `Please connect your ${platform} account first.`
-            // TODO: Add link/button to connect account via Composio OAuth flow
-        }
-      toast({ title: "Publishing Failed", description: description, variant: "destructive" });
-    } finally {
-      setIsPublishing(prev => ({ ...prev, [platform]: false }));
-    }
+      } catch (error: any) {
+         console.error(`Publishing to ${platform} failed:`, error);
+         let description = "An error occurred while publishing the post.";
+          if (error.message.includes("Quota exceeded")) {
+             description = "You have reached your monthly usage limit.";
+             setQuotaExceeded(true);
+          } else if (error.message.includes("authentication")) { // Example error check
+              description = `Please connect your ${platform} account first.`
+              // TODO: Add link/button to connect account via Composio OAuth flow
+          }
+        toast({ title: "Publishing Failed", description: description, variant: "destructive" });
+      } finally {
+        setIsPublishing(prev => ({ ...prev, [platform]: false }));
+      }
+   });
   };
 
   const copyToClipboard = (text: string | undefined) => {
@@ -242,10 +250,10 @@ export default function Dashboard({ user }: DashboardProps) {
     <div className="flex flex-col min-h-screen bg-background text-foreground p-4 md:p-8">
       {/* Header */}
       <header className="flex justify-between items-center mb-8">
-        <div className="flex items-center gap-2">
+         <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
            <Zap className="h-6 w-6 text-primary" />
            <h1 className="text-2xl font-bold text-gradient">VibeFlow</h1>
-        </div>
+         </Link>
         <div className="flex items-center gap-4">
            {quotaRemaining !== null && (
              <Tooltip>
@@ -300,14 +308,14 @@ export default function Dashboard({ user }: DashboardProps) {
               value={contentInput}
               onChange={(e) => setContentInput(e.target.value)}
               className="min-h-[200px] bg-input/50 border-border/50 text-base resize-none"
-              disabled={isGeneratingSummary || isGeneratingPosts || quotaExceeded}
+              disabled={isPending || quotaExceeded} // Disable during any transition
             />
           </CardContent>
           <CardFooter>
             <Button
               onClick={handleGenerate}
-              disabled={isGeneratingSummary || isGeneratingPosts || !contentInput.trim() || quotaExceeded}
-              loading={isGeneratingSummary || isGeneratingPosts}
+              disabled={isPending || !contentInput.trim() || quotaExceeded} // Disable during any transition
+              loading={isGeneratingSummary || isGeneratingPosts} // Show loading only for generation
               className="w-full md:w-auto ml-auto"
             >
               <Wand2 className="mr-2" /> Generate Posts
@@ -360,10 +368,10 @@ export default function Dashboard({ user }: DashboardProps) {
                         {/* Tuning Buttons */}
                          <div className="flex flex-wrap gap-2">
                           <span className="text-xs text-muted-foreground mr-2 mt-1.5">Tune:</span>
-                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Make wittier')} disabled={isTuning[platform] || isPublishing[platform] || quotaExceeded}>Witty</Button>
-                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More concise')} disabled={isTuning[platform] || isPublishing[platform] || quotaExceeded}>Concise</Button>
-                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More professional')} disabled={isTuning[platform] || isPublishing[platform] || quotaExceeded}>Professional</Button>
-                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Add emojis')} disabled={isTuning[platform] || isPublishing[platform] || quotaExceeded}>Add Emojis ✨</Button>
+                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Make wittier')} disabled={isPending || quotaExceeded}>Witty</Button>
+                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More concise')} disabled={isPending || quotaExceeded}>Concise</Button>
+                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More professional')} disabled={isPending || quotaExceeded}>Professional</Button>
+                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Add emojis')} disabled={isPending || quotaExceeded}>Add Emojis ✨</Button>
                          </div>
                       </CardContent>
                       <CardFooter className="flex justify-end gap-2">
@@ -379,14 +387,14 @@ export default function Dashboard({ user }: DashboardProps) {
                           <TooltipTrigger asChild>
                             <Button
                               onClick={() => handlePublishPost(platform)}
-                              disabled={!postDrafts[platform] || isPublishing[platform] || isTuning[platform] || quotaExceeded}
+                              disabled={!postDrafts[platform] || isPending || quotaExceeded} // Disable during any transition
                               loading={isPublishing[platform]}
                               size="sm"
                             >
                               <Send className="mr-1.5 h-4 w-4" /> Publish to {platform.charAt(0).toUpperCase() + platform.slice(1)}
                             </Button>
                           </TooltipTrigger>
-                           <TooltipContent><p>Publish this post</p></TooltipContent>
+                           <TooltipContent><p>Publish this post (Coming Soon)</p></TooltipContent>
                         </Tooltip>
 
                       </CardFooter>
@@ -442,3 +450,4 @@ export default function Dashboard({ user }: DashboardProps) {
 //    }
 //   console.log("Publish API call successful.");
 // }
+

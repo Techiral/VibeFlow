@@ -1,3 +1,4 @@
+
 import type {Metadata} from 'next';
 import { Geist } from 'next/font/google'; // Only Geist Sans needed
 import './globals.css';
@@ -9,6 +10,7 @@ const geistSans = Geist({
   subsets: ['latin'],
 });
 
+// Default metadata - can be overridden by page metadata
 export const metadata: Metadata = {
   title: 'VibeFlow',
   description: 'Generate Social Posts with AI',
@@ -20,15 +22,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>{/* Force dark theme and suppress hydration warning */}
-      <head />{/* Add explicit head tag */}
-      {/* No whitespace allowed here */}
-      <body className={cn(
-        geistSans.variable,
-        "antialiased font-sans" // Use sans-serif font
+    <html lang="en" className="dark" suppressHydrationWarning>{/* Force dark theme via class, suppress warning */}
+      <head />{/* Explicit head tag */}
+      {/* No whitespace allowed between html and head or head and body */}
+      <body
+        className={cn(
+          geistSans.variable,
+          "antialiased font-sans" // Use sans-serif font
         )}
-        suppressHydrationWarning={true} // Add this to ignore browser extension attributes
-        >{/* No whitespace allowed here */}
+        suppressHydrationWarning // Suppress hydration warning on body for browser extensions
+      >
         {children}
         <Toaster />
       </body>

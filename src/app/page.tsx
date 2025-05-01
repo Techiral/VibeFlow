@@ -1,99 +1,187 @@
 
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import Dashboard from '@/components/dashboard/dashboard';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Import Card components for error display
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import Image from 'next/image';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { CheckCircle, Zap, BarChartHorizontal, Edit, Share2 } from 'lucide-react';
 
-export default async function Home() {
-  let supabase;
-  let user = null;
-  let initialError: Error | null = null;
-  let errorMessage: string | null = null;
+export const metadata: Metadata = {
+  title: 'VibeFlow | AI Social Media Post Generator',
+  description: 'Effortlessly generate engaging social media posts from any content using AI. Summarize URLs or text, get tailored drafts for LinkedIn, Twitter, & YouTube, and tune them to perfection.',
+  // Add more SEO metadata as needed (keywords, open graph, etc.)
+};
 
-  try {
-    // Attempt to create client first. This will throw if env vars are missing or URL is invalid.
-    supabase = createClient();
-
-    // Try fetching the user *after* confirming the client was created
-    const { data, error: authError } = await supabase.auth.getUser();
-
-    if (authError) {
-       // Check if it's an expected "Auth session missing" state
-       if (authError.message.includes("Auth session missing")) {
-           // Normal case, user not logged in - redirect silently
-           redirect('/login'); // Use redirect function directly
-       }
-       // Log other auth errors and redirect with a generic message
-      console.error("Authentication error:", authError.message); // Keep this log for other auth errors
-      redirect(`/login?message=Error+authenticating+user`); // Use redirect function directly
-    }
-
-    user = data.user;
-
-  } catch (error: any) {
-    // If error is NOT specifically "Auth session missing", handle it.
-    // Redirects are automatically handled by Next.js when thrown.
-    if (!error.message?.includes("Auth session missing")) {
-        // Log the underlying error unless it's just the internal NEXT_REDIRECT signal
-        if (error.message !== 'NEXT_REDIRECT') {
-            console.error("Error during Supabase initialization or user fetch:", error.message);
-        }
-        initialError = error; // Store the error to potentially display
-
-        // Determine the specific error message for configuration issues
-        if (error.message.includes("URL and Key are required")) {
-           errorMessage = "Supabase URL or Key is missing. Please check your environment variables (`.env.local`) and ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set correctly. Refer to the README for setup instructions.";
-        } else if (error.message.includes("Invalid URL")) {
-             errorMessage = "Invalid Supabase URL format. Please check the `NEXT_PUBLIC_SUPABASE_URL` in your `.env.local` file. It should look like `https://<your-project-ref>.supabase.co`.";
-        } else if (error.message === 'NEXT_REDIRECT') {
-             // This case means a redirect was triggered, likely because the user wasn't authenticated.
-             // Next.js handles this, so we don't need to show an error card here.
-             // We'll let the redirect happen. No need to set errorMessage.
-             // The function will exit due to the redirect.
-             // If we reach here unexpectedly, it might indicate a deeper issue,
-             // but normally the redirect should halt execution earlier.
-             ; // No action needed, let Next.js handle the redirect.
-        } else {
-             // Handle other potential errors
-             errorMessage = `An unexpected error occurred during application startup: ${error.message}. Please contact the administrator or check your Supabase configuration.`;
-        }
-     } else {
-         // If the error *is* "Auth session missing", redirect to login (should have been caught above, but acts as safety net)
-         redirect('/login');
-     }
-  }
-
-  // Display specific error card ONLY if there's a configuration error message set
-  // Do NOT display a card for NEXT_REDIRECT, as Next.js handles it.
-  if (initialError && errorMessage) {
-     return (
-        <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-            <Card className="mx-auto max-w-md w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
-                <CardHeader>
-                    <CardTitle className="text-destructive">Configuration Error</CardTitle>
-                    <CardDescription className="text-destructive-foreground">
-                       {errorMessage}
-                    </CardDescription>
-                </CardHeader>
-                 <CardContent>
-                    <p className="text-sm text-muted-foreground">Detailed Error:</p>
-                    <pre className="mt-2 w-full rounded-md bg-muted p-4 overflow-x-auto text-sm">
-                        {initialError.message}
-                    </pre>
-                 </CardContent>
-            </Card>
+export default function LandingPage() {
+  return (
+    <div className="flex flex-col min-h-screen bg-background text-foreground dark">
+      {/* Header */}
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-14 max-w-screen-2xl items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap className="h-6 w-6 text-primary" />
+            <h1 className="text-xl font-bold text-gradient">VibeFlow</h1>
+          </div>
+          <nav className="flex items-center gap-4">
+            <Link href="/login">
+              <Button>Get Started</Button>
+            </Link>
+          </nav>
         </div>
-    );
-  }
+      </header>
 
+      {/* Hero Section */}
+      <section className="relative py-20 md:py-32 overflow-hidden">
+        {/* Animated Gradient Glow */}
+        <div className="absolute inset-0 z-0 gradient-glow opacity-50"></div>
+        <div className="container relative z-10 text-center">
+          <h1 className="text-4xl md:text-6xl font-bold mb-6 text-gradient">
+            Transform Content into Social Buzz Instantly
+          </h1>
+          <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-3xl mx-auto">
+            VibeFlow uses AI to summarize articles, videos, or any text and crafts engaging posts tailored for LinkedIn, Twitter, and YouTube. Save time, boost engagement.
+          </p>
+          <Link href="/login">
+            <Button size="lg" className="shadow-lg">
+              Start Generating Posts <Zap className="ml-2 h-5 w-5" />
+            </Button>
+          </Link>
+        </div>
+      </section>
 
-  if (!user) {
-    // This should theoretically not be reached if authError was "Auth session missing"
-    // or if createClient threw an error, or if a redirect happened, but acts as a fallback.
-    console.log("No user session found or error occurred, redirecting to login.");
-    redirect('/login');
-  }
+      {/* Features Section */}
+      <section id="features" className="py-16 md:py-24 bg-muted/20">
+        <div className="container">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">How VibeFlow Works</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <Card className="bg-card/80 border-border/30 shadow-lg text-center">
+              <CardHeader>
+                 <div className="flex justify-center items-center mb-4">
+                    <BarChartHorizontal className="h-10 w-10 text-primary"/>
+                 </div>
+                <CardTitle>1. Input Content</CardTitle>
+                <CardDescription>Paste a URL (article, video) or raw text.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p>VibeFlow intelligently parses the content to understand its core message.</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-card/80 border-border/30 shadow-lg text-center">
+              <CardHeader>
+                 <div className="flex justify-center items-center mb-4">
+                    <Zap className="h-10 w-10 text-primary"/>
+                 </div>
+                <CardTitle>2. AI Generation</CardTitle>
+                <CardDescription>Get an AI-powered summary and tailored drafts for LinkedIn, Twitter & YouTube.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p>Our AI crafts posts optimized for length, tone, and style for each platform.</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-card/80 border-border/30 shadow-lg text-center">
+              <CardHeader>
+                <div className="flex justify-center items-center mb-4">
+                    <Edit className="h-10 w-10 text-primary"/>
+                 </div>
+                <CardTitle>3. Tune & Publish</CardTitle>
+                <CardDescription>Refine posts with AI suggestions (witty, concise, etc.) and publish.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p>Easily tweak posts to match your voice before sharing (publishing coming soon!).</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
 
-  // If user is logged in and no errors occurred, show the dashboard
-  return <Dashboard user={user} />;
+       {/* Screenshot Section */}
+      <section id="screenshots" className="py-16 md:py-24">
+        <div className="container">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">See VibeFlow in Action</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            <div className="rounded-lg overflow-hidden shadow-xl border border-border/30">
+               <Image
+                 src="https://picsum.photos/seed/dashboard1/800/600"
+                 alt="VibeFlow Dashboard Input"
+                 width={800}
+                 height={600}
+                 className="w-full h-auto"
+                 data-ai-hint="dashboard interface content input"
+               />
+            </div>
+             <div className="rounded-lg overflow-hidden shadow-xl border border-border/30">
+               <Image
+                 src="https://picsum.photos/seed/dashboard2/800/600"
+                 alt="VibeFlow Dashboard Output"
+                 width={800}
+                 height={600}
+                 className="w-full h-auto"
+                 data-ai-hint="dashboard interface generated posts"
+               />
+            </div>
+          </div>
+          <p className="text-center text-muted-foreground mt-4 italic">Actual dashboard may vary.</p>
+        </div>
+      </section>
+
+      {/* Why VibeFlow Section */}
+      <section id="why-us" className="py-16 md:py-24 bg-muted/20">
+        <div className="container">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">Why Choose VibeFlow?</h2>
+          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="flex items-start gap-4">
+              <CheckCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="text-xl font-semibold mb-2">AI-Powered Tuning</h3>
+                <p className="text-muted-foreground">Go beyond simple generation. Refine posts instantly with AI suggestions like "Make it wittier" or "Add emojis".</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-4">
+              <CheckCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="text-xl font-semibold mb-2">Multi-Platform Focus</h3>
+                <p className="text-muted-foreground">Get drafts specifically tailored for LinkedIn, Twitter, and YouTube, respecting character limits and platform conventions.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-4">
+              <CheckCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="text-xl font-semibold mb-2">Streamlined Workflow</h3>
+                <p className="text-muted-foreground">From content input to tuned drafts in seconds. VibeFlow simplifies your social media content creation process.</p>
+              </div>
+            </div>
+             <div className="flex items-start gap-4">
+              <CheckCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="text-xl font-semibold mb-2">Effortless Summarization</h3>
+                <p className="text-muted-foreground">Instantly grasp the essence of any article or video with concise AI summaries as the foundation for your posts.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+       {/* CTA Section */}
+      <section className="py-20 md:py-32 text-center">
+        <div className="container">
+           <h2 className="text-3xl md:text-4xl font-bold mb-6">Ready to Amplify Your Social Presence?</h2>
+           <p className="text-lg text-muted-foreground mb-10 max-w-xl mx-auto">
+             Stop staring at a blank canvas. Start generating engaging social posts with VibeFlow today.
+           </p>
+           <Link href="/login">
+             <Button size="lg" className="shadow-lg">
+               Try VibeFlow Now
+             </Button>
+           </Link>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-8 border-t border-border/40">
+        <div className="container text-center text-sm text-muted-foreground">
+          &copy; {new Date().getFullYear()} VibeFlow. All rights reserved. | Built with Next.js & AI
+        </div>
+      </footer>
+    </div>
+  );
 }

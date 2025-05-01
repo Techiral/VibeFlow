@@ -3,50 +3,67 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { Database } from '@/types/supabase'; // Assuming you have types generated
 
+// Helper function to safely get cookies
+async function getCookie(name: string) {
+  const cookieStore = cookies(); // This can be called synchronously
+  return cookieStore.get(name)?.value;
+}
+
+// Helper function to safely set cookies
+async function setCookie(name: string, value: string, options: CookieOptions) {
+  try {
+    const cookieStore = cookies(); // This can be called synchronously
+    cookieStore.set({ name, value, ...options });
+  } catch (error) {
+    // Ignore errors when called from Server Components
+  }
+}
+
+// Helper function to safely remove cookies
+async function removeCookie(name: string, options: CookieOptions) {
+  try {
+    const cookieStore = cookies(); // This can be called synchronously
+    cookieStore.set({ name, value: '', ...options });
+  } catch (error) {
+    // Ignore errors when called from Server Components
+  }
+}
+
+
 export function createClient() {
-  const cookieStore = cookies()
+  // const cookieStore = cookies() // Moved inside helper functions
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
    // Explicitly check for environment variables and throw if missing
    if (!supabaseUrl || !supabaseAnonKey) {
+    // This error should be caught by the calling code (e.g., in page.tsx)
+    // to display a user-friendly message.
     throw new Error(
-      "Your project's URL and Key are required to create a Supabase client!\n\n" +
-      "Check your Supabase project's API settings to find these values\n\n" +
-      "https://supabase.com/dashboard/project/_/settings/api"
+      "Supabase URL or Key is missing. Please check your environment variables (.env.local)."
     );
   }
 
 
   return createServerClient<Database>(
-    supabaseUrl, // No longer need non-null assertion '!'
-    supabaseAnonKey, // No longer need non-null assertion '!'
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
+        // Make get async and await the helper
+        get: async (name: string) => {
+          return await getCookie(name);
         },
-        set(name: string, value: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value, ...options })
-          } catch (error) {
-            // The `set` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
-          }
+        // Make set async and await the helper
+        set: async (name: string, value: string, options: CookieOptions) => {
+           await setCookie(name, value, options);
         },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: '', ...options })
-          } catch (error) {
-            // The `delete` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
-          }
+        // Make remove async and await the helper
+        remove: async (name: string, options: CookieOptions) => {
+           await removeCookie(name, options);
         },
       },
     }
   )
 }
-

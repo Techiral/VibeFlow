@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -9,7 +10,7 @@
  */
 
 import {ai as defaultAi} from '@/ai/ai-instance'; // Use the configured instance
-import { genkit, GenkitError } from 'genkit';
+import { GenkitError } from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'genkit';
 
@@ -89,7 +90,6 @@ const tuneSocialPostsFlow = defaultAi.defineFlow<
   outputSchema: TuneSocialPostsOutputSchema,
 },
 async (input, flowOptions) => { // Receive flowOptions
-     // REMOVED: Initialization of local AI instance using genkit({...})
 
     let retries = 0;
     let backoff = INITIAL_BACKOFF_MS;
@@ -109,12 +109,14 @@ async (input, flowOptions) => { // Receive flowOptions
             return output!;
         } catch (error: any) {
              // Check for specific API key error
-            if (error.status === 'UNAUTHENTICATED' || error.message?.includes("API key not valid")) {
+            if (error instanceof GenkitError && error.status === 'UNAUTHENTICATED' || error.message?.includes("API key not valid")) {
                  console.error(`TuneSocialPostsFlow: Invalid API Key used.`);
+                 // Re-throw as GenkitError to ensure status code is preserved
                  throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
             }
             // Check for quota or overload errors (503 Service Unavailable)
-            const isServiceUnavailable = error.status === 503 || // Check status code directly
+             const isServiceUnavailable = (error instanceof GenkitError && error.status === 'UNAVAILABLE') ||
+                                           error.status === 503 || // Check status code directly if not GenkitError
                                            error.status === 'RESOURCE_EXHAUSTED' ||
                                            error.message?.includes("503") ||
                                            error.message?.toLowerCase().includes("overloaded") ||
@@ -133,9 +135,21 @@ async (input, flowOptions) => { // Receive flowOptions
             } else {
                 // If it's not a retriable error or retries are exhausted, re-throw
                 console.error(`TuneSocialPostsFlow: Failed after ${retries} retries.`, error);
+
+                 // Ensure we throw a GenkitError for consistency downstream
+                 const status = (error instanceof GenkitError ? error.status : null) ||
+                                (isServiceUnavailable ? 'UNAVAILABLE' : null) ||
+                                (error.status === 400 ? 'INVALID_ARGUMENT' : null) || // Example: map 400 to INVALID_ARGUMENT
+                                'INTERNAL'; // Default to INTERNAL
+
+                 let message = `Post tuning failed: ${error.message || 'Unknown AI error'}`;
+                  if (status === 'UNAVAILABLE') {
+                      message = "AI service is temporarily unavailable for tuning. Please try again later.";
+                  }
+
                 throw new GenkitError({
-                     status: error.status || 'INTERNAL',
-                     message: `Post tuning failed: ${error.message || 'Unknown AI error'}`,
+                     status: status,
+                     message: message,
                      cause: error,
                  });
             }

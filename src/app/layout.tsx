@@ -21,11 +21,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>{/* Force dark theme and suppress hydration warning */}
+      {/* No whitespace allowed here */}
       <head /> {/* Add explicit head tag */}
+      {/* No whitespace allowed here */}
       <body className={cn(
         geistSans.variable,
         "antialiased font-sans" // Use sans-serif font
-        )}>
+        )}
+        suppressHydrationWarning={true} // Add this to ignore browser extension attributes
+        >
         {children}
         <Toaster />
       </body>

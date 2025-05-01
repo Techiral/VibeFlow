@@ -18,15 +18,14 @@ export default async function Home() {
     const { data, error: authError } = await supabase.auth.getUser();
 
     if (authError) {
-      console.error("Error fetching user:", authError.message);
-      // Redirect to login, but include a more specific error if possible
-      // Check if it's an auth error vs. a connection error already handled by createClient throw
+       // Check if it's an expected "Auth session missing" state
        if (authError.message.includes("Auth session missing")) {
-           // Normal case, user not logged in
+           // Normal case, user not logged in - redirect silently
            return redirect('/login');
        }
-      // For other auth errors, redirect with message
-      return redirect(`/login?message=Error+authenticating+user:+${encodeURIComponent(authError.message)}`);
+       // Log other auth errors and redirect with a generic message
+      console.error("Authentication error:", authError.message);
+      return redirect(`/login?message=Error+authenticating+user`);
     }
 
     user = data.user;
@@ -35,7 +34,7 @@ export default async function Home() {
     console.error("Error during Supabase initialization or user fetch:", error.message);
     initialError = error; // Store the error to display
 
-    // Determine the specific error message
+    // Determine the specific error message for configuration issues
     if (error.message.includes("URL and Key are required")) {
        errorMessage = "Supabase URL or Key is missing. Please check your environment variables (`.env.local`) and ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set correctly. Refer to the README for setup instructions.";
     } else if (error.message.includes("Invalid URL")) {
@@ -69,7 +68,9 @@ export default async function Home() {
 
 
   if (!user) {
-    // If there was no error during initialization but no user, redirect to login normally
+    // This should theoretically not be reached if authError was "Auth session missing",
+    // but acts as a fallback if getUser returns no error but also no user.
+    console.log("No user session found, redirecting to login.");
     return redirect('/login');
   }
 

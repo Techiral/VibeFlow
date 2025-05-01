@@ -21,7 +21,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>{/* Force dark theme and suppress hydration warning */}
-      {/* No whitespace allowed here */}
       <head /> {/* Add explicit head tag */}
       {/* No whitespace allowed here */}
       <body className={cn(

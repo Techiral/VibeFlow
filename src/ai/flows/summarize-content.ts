@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -129,9 +128,15 @@ async (input, flowOptions) => { // Receive flowOptions here
                  console.error(`SummarizeContentFlow: Invalid API Key used.`);
                  throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
             }
-             // Check for quota or overload errors
-            if ((error.status === 'RESOURCE_EXHAUSTED' || error.status === 503 || error.message?.includes("503") || error.message?.toLowerCase().includes("overloaded") || error.message?.toLowerCase().includes("service unavailable")) && retries < MAX_RETRIES - 1) {
-                console.warn(`SummarizeContentFlow: Service unavailable/overloaded. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+             // Check for quota or overload errors (503 Service Unavailable)
+             const isServiceUnavailable = error.status === 503 || // Check status code directly
+                                           error.status === 'RESOURCE_EXHAUSTED' ||
+                                           error.message?.includes("503") ||
+                                           error.message?.toLowerCase().includes("overloaded") ||
+                                           error.message?.toLowerCase().includes("service unavailable");
+
+            if (isServiceUnavailable && retries < MAX_RETRIES - 1) {
+                console.warn(`SummarizeContentFlow: Service unavailable/overloaded (503 or similar). Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
                 backoff *= 2; // Exponential backoff

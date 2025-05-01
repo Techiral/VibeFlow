@@ -124,6 +124,10 @@ export default async function DashboardPage() {
     }
 
   } catch (error: any) {
+      // Check if it's a redirect error, if so, let Next.js handle it
+      if (error.code === 'NEXT_REDIRECT') {
+        throw error; // Re-throw the redirect error
+      }
       console.error("Error during Supabase initialization or data fetch:", error.message);
       initialError = error; // Store the error
 
@@ -133,18 +137,15 @@ export default async function DashboardPage() {
              errorMessage = "Supabase URL or Key is missing. Please check your environment variables (`.env.local`) and ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set correctly. Refer to the README for setup instructions.";
           } else if (error.message.includes("Invalid URL")) {
                errorMessage = "Invalid Supabase URL format. Please check the `NEXT_PUBLIC_SUPABASE_URL` in your `.env.local` file. It should look like `https://<your-project-ref>.supabase.co`.";
-          } else if (error.code === 'NEXT_REDIRECT') {
-                // This error is expected if redirecting, handle gracefully below
           } else {
-               // Generic fallback message
+               // Generic fallback message (if not already set by DB checks)
                errorMessage = `An unexpected error occurred during application startup: ${error.message}. Please check your Supabase configuration and ensure the database schema is set up correctly (see README).`;
           }
       }
   }
 
   // Redirect to login if user fetch failed OR if there was a critical initial setup error
-  // Check if the error is NEXT_REDIRECT before redirecting, to avoid redirect loops
-  if ((!user || (initialError && initialError.code !== 'NEXT_REDIRECT')) && initialError?.code !== 'NEXT_REDIRECT') {
+  if (!user || initialError) {
      if (!user && !initialError) {
         console.log("No user session found, redirecting to login.");
      }
@@ -153,7 +154,7 @@ export default async function DashboardPage() {
 
 
   // Display specific error card ONLY if there's a configuration or DB setup error message set
-  if (initialError && initialError.code !== 'NEXT_REDIRECT' && errorMessage) {
+  if (errorMessage) { // Check directly for errorMessage instead of initialError
      return (
         <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
             <Card className="mx-auto max-w-md w-full z-10 bg-card/80 backdrop-blur-sm border-destructive/50 shadow-xl">
@@ -169,10 +170,14 @@ export default async function DashboardPage() {
                            Please go to the Supabase SQL Editor in your project dashboard and run the entire script from the `supabase/schema.sql` file. You can find detailed instructions in the project's README file under "Getting Started - Step 3".
                          </p>
                      )}
-                    <p className="text-sm text-muted-foreground">Detailed Error:</p>
-                    <pre className="mt-2 w-full rounded-md bg-muted p-4 overflow-x-auto text-sm">
-                        {initialError.message}
-                    </pre>
+                     {initialError && ( // Only show technical details if an actual error object exists
+                       <>
+                         <p className="text-sm text-muted-foreground">Detailed Error:</p>
+                         <pre className="mt-2 w-full rounded-md bg-muted p-4 overflow-x-auto text-sm">
+                            {initialError.message}
+                         </pre>
+                       </>
+                     )}
                  </CardContent>
             </Card>
         </div>

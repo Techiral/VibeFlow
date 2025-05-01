@@ -27,7 +27,7 @@ export default async function DashboardPage() {
     if (authError || !userData.user) {
        // If there's an auth error OR no user data, redirect to login
        if (authError && !authError.message.includes("Auth session missing")) {
-         console.error("Authentication error:", authError.message); // Log other auth errors
+         // console.error("Authentication error:", authError.message); // Removed console.error
        }
        // Let the logic after the try-catch handle the redirect if !user
     } else {
@@ -131,21 +131,24 @@ export default async function DashboardPage() {
     }
 
   } catch (error: any) {
-      // Log only if it's NOT a handled DB setup error that we already have a message for.
-      // Also skip logging NEXT_REDIRECT errors which are handled internally by Next.js
-      if (!errorMessage && error.message !== 'NEXT_REDIRECT') {
+      // Check if it's a redirect error first, and re-throw it if so
+      if (error.message === 'NEXT_REDIRECT') {
+        throw error; // Re-throw the redirect error
+      }
+      // Log only if it's NOT a handled DB setup error or config error that we already have a message for.
+      if (!errorMessage) {
         console.error("Error during Supabase initialization or data fetch:", error.message);
       }
       initialError = error; // Store the error regardless for potential display
 
-      // Prioritize specific known error messages
-      if (!errorMessage) { // Only set generic message if not already set by specific DB checks inside the try block
+      // Prioritize specific known error messages (only set generic message if not already set by specific checks inside the try block)
+      if (!errorMessage) {
           if (error.message.includes("URL and Key are required")) {
              errorMessage = "Supabase URL or Key is missing. Please check your environment variables (`.env.local`) and ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set correctly. Refer to the README for setup instructions.";
           } else if (error.message.includes("Invalid URL")) {
                errorMessage = "Invalid Supabase URL format. Please check the `NEXT_PUBLIC_SUPABASE_URL` in your `.env.local` file. It should look like `https://<your-project-ref>.supabase.co`.";
-          } else if (error.message !== 'NEXT_REDIRECT') { // Don't show generic message for redirects
-               // Generic fallback message (if not already set by DB checks)
+          } else {
+               // Generic fallback message
                errorMessage = `An unexpected error occurred during application startup: ${error.message}. Please check your Supabase configuration and ensure the database schema is set up correctly (see README).`;
           }
       }
@@ -155,7 +158,7 @@ export default async function DashboardPage() {
 
   // 1. If no user session exists, redirect to login immediately.
   if (!user) {
-     console.log("No user session found, redirecting to login.");
+     // console.log("No user session found, redirecting to login."); // Removed console log
      redirect('/login');
   }
 
@@ -177,7 +180,7 @@ export default async function DashboardPage() {
                            Please go to the Supabase SQL Editor in your project dashboard and run the entire script from the `supabase/schema.sql` file. You can find detailed instructions in the project's README file under "Getting Started - Step 3".
                          </p>
                      )}
-                     {initialError && !isDbSetupError && initialError.message !== 'NEXT_REDIRECT' && ( // Show technical details for non-setup/non-redirect errors
+                     {initialError && !isDbSetupError && ( // Show technical details for non-setup errors
                        <>
                          <p className="text-sm text-muted-foreground">Detailed Error:</p>
                          <pre className="mt-2 w-full rounded-md bg-muted p-4 overflow-x-auto text-sm">

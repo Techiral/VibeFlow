@@ -30,7 +30,7 @@ export default function LandingPage() {
           </Link>
           <nav className="flex items-center gap-4">
             <Link href="/login">
-              <Button>Get Started</Button>
+              <Button className="transition-transform duration-200 hover:scale-105">Get Started</Button>
             </Link>
           </nav>
         </div>
@@ -65,7 +65,7 @@ export default function LandingPage() {
             {/* Feature Card 1 */}
             <Card className="bg-card/80 border-border/30 shadow-lg text-center transform transition-transform duration-300 hover:scale-105 hover:shadow-xl fade-in-up" style={{ animationDelay: '0.1s' }}>
               <CardHeader className="items-center"> {/* Center align header items */}
-                 <div className="flex justify-center items-center mb-4 p-3 bg-primary/10 rounded-full">
+                 <div className="flex justify-center items-center mb-4 p-3 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20">
                     <BarChartHorizontal className="h-8 w-8 text-primary"/>
                  </div>
                 <CardTitle>1. Input Content</CardTitle>
@@ -78,7 +78,7 @@ export default function LandingPage() {
             {/* Feature Card 2 */}
             <Card className="bg-card/80 border-border/30 shadow-lg text-center transform transition-transform duration-300 hover:scale-105 hover:shadow-xl fade-in-up" style={{ animationDelay: '0.2s' }}>
               <CardHeader className="items-center">
-                 <div className="flex justify-center items-center mb-4 p-3 bg-primary/10 rounded-full">
+                 <div className="flex justify-center items-center mb-4 p-3 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20">
                     <Zap className="h-8 w-8 text-primary"/>
                  </div>
                 <CardTitle>2. AI Generation</CardTitle>
@@ -91,7 +91,7 @@ export default function LandingPage() {
             {/* Feature Card 3 */}
             <Card className="bg-card/80 border-border/30 shadow-lg text-center transform transition-transform duration-300 hover:scale-105 hover:shadow-xl fade-in-up" style={{ animationDelay: '0.3s' }}>
               <CardHeader className="items-center">
-                <div className="flex justify-center items-center mb-4 p-3 bg-primary/10 rounded-full">
+                <div className="flex justify-center items-center mb-4 p-3 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20">
                     <Edit className="h-8 w-8 text-primary"/>
                  </div>
                 <CardTitle>3. Tune & Publish</CardTitle>
@@ -141,8 +141,8 @@ export default function LandingPage() {
           <h2 className="text-3xl md:text-4xl font-bold text-center mb-16 fade-in-up">Why Choose VibeFlow?</h2>
           <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
             {/* Advantage 1 */}
-            <div className="flex items-start gap-4 fade-in-up" style={{ animationDelay: '0.1s' }}>
-              <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1">
+            <div className="flex items-start gap-4 fade-in-up group" style={{ animationDelay: '0.1s' }}>
+              <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1 transition-transform duration-300 group-hover:scale-110">
                  <TrendingUp className="h-5 w-5 text-primary" />
               </div>
               <div>
@@ -151,8 +151,8 @@ export default function LandingPage() {
               </div>
             </div>
             {/* Advantage 2 */}
-            <div className="flex items-start gap-4 fade-in-up" style={{ animationDelay: '0.2s' }}>
-               <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1">
+            <div className="flex items-start gap-4 fade-in-up group" style={{ animationDelay: '0.2s' }}>
+               <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1 transition-transform duration-300 group-hover:scale-110">
                  <Share2 className="h-5 w-5 text-primary" />
                </div>
               <div>
@@ -161,8 +161,8 @@ export default function LandingPage() {
               </div>
             </div>
              {/* Advantage 3 */}
-            <div className="flex items-start gap-4 fade-in-up" style={{ animationDelay: '0.3s' }}>
-               <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1">
+            <div className="flex items-start gap-4 fade-in-up group" style={{ animationDelay: '0.3s' }}>
+               <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1 transition-transform duration-300 group-hover:scale-110">
                   <Clock className="h-5 w-5 text-primary" />
                </div>
               <div>
@@ -171,8 +171,8 @@ export default function LandingPage() {
               </div>
             </div>
              {/* Advantage 4 */}
-             <div className="flex items-start gap-4 fade-in-up" style={{ animationDelay: '0.4s' }}>
-               <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1">
+             <div className="flex items-start gap-4 fade-in-up group" style={{ animationDelay: '0.4s' }}>
+               <div className="flex-shrink-0 p-2 bg-primary/10 rounded-full mt-1 transition-transform duration-300 group-hover:scale-110">
                  <Users className="h-5 w-5 text-primary" />
                </div>
               <div>

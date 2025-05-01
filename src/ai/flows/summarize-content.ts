@@ -72,7 +72,7 @@ const summarizeContentPrompt = defaultAi.definePrompt({
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000; // 1 second
 
-// Function to check if an error is retriable (5xx, unavailable, overloaded)
+// Function to check if an error is retriable (5xx, unavailable, overloaded, rate limit)
 const isRetriableError = (error: any): boolean => {
     const message = error.message?.toLowerCase() || '';
     const status = error.status || (error instanceof GenkitError ? error.status : null);
@@ -82,21 +82,20 @@ const isRetriableError = (error: any): boolean => {
         return true;
     }
 
-    // Check for HTTP status codes within the error message or structure
-    if (error.status === 503 || message.includes('503') || message.includes('service unavailable') || message.includes('overloaded') || message.includes('internal error')) {
+    // Check for HTTP status codes within the error message or structure (e.g., 503)
+    // Also check for common textual indicators of temporary issues.
+    if (
+        error.status === 503 ||
+        message.includes('503') ||
+        message.includes('service unavailable') ||
+        message.includes('overloaded') ||
+        message.includes('internal error') || // Sometimes 500s are temporary
+        message.includes('the model is overloaded') ||
+        message.includes('rate limit exceeded') ||
+        message.includes('quota exceeded') // Treat quota issues as potentially retriable short-term
+    ) {
        return true;
     }
-
-    // Check for specific error messages from Google AI
-    if (message.includes('the model is overloaded')) {
-        return true;
-    }
-
-    // Check for rate limit exceeded errors from Google (might appear as RESOURCE_EXHAUSTED or specific messages)
-    if (message.includes('rate limit exceeded') || message.includes('quota exceeded')) {
-        return true; // Treat quota issues as potentially retriable short-term, but also handle specifically later
-    }
-
 
     return false;
 };
@@ -153,18 +152,19 @@ async (input, flowOptions) => { // Receive flowOptions here
                 console.warn("SummarizeContentFlow: Received empty summary from AI.");
                 throw new Error("AI returned an empty summary.");
             }
-            return output;
+            return output; // Success! Exit the loop and return.
         } catch (error: any) {
-             // Check for specific API key error
+             // Check for specific API key error - this is not retriable
             if (error instanceof GenkitError && error.status === 'UNAUTHENTICATED' || error.message?.includes("API key not valid")) {
                  console.error(`SummarizeContentFlow: Invalid API Key used.`);
+                 // Throw immediately, no retry
                  throw new GenkitError({ status: 'UNAUTHENTICATED', message: "Invalid API key provided.", cause: error });
             }
 
-            // Check for retriable errors (5xx, UNAVAILABLE, etc.) or empty summary
-            const message = error.message?.toLowerCase() || ''; // Get lowercase message for checks
+            // Check for retriable errors *before* reaching max retries
             if (isRetriableError(error) && retries < MAX_RETRIES - 1) {
                 let reason = "AI service unavailable/overloaded";
+                const message = error.message?.toLowerCase() || '';
                 if (error.message === "AI returned an empty summary.") {
                     reason = "Received empty summary";
                 } else if (error.status === 'RESOURCE_EXHAUSTED' || message.includes('rate limit exceeded')) {
@@ -174,41 +174,38 @@ async (input, flowOptions) => { // Receive flowOptions here
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
                 backoff *= 2; // Exponential backoff
+                continue; // Explicitly continue to the next iteration of the loop
             } else {
-                // If it's not a retriable error or retries are exhausted, re-throw
+                // If it's not a retriable error OR retries are exhausted, prepare to throw
                 console.error(`SummarizeContentFlow: Failed after ${retries} retries. Original Error:`, error);
 
-                 // Determine the best status code and message
+                 // Determine the best status code and message for the final error
                  let finalStatus: GenkitError['status'] = 'INTERNAL';
                  let finalMessage = `Summarization failed: ${error.message || 'Unknown AI error'}`;
+                 const messageLower = error.message?.toLowerCase() || '';
 
                   if (error instanceof GenkitError) {
                      finalStatus = error.status ?? finalStatus;
-                 } else if (isRetriableError(error)) {
-                      // Even if retriable, if retries are exhausted, report based on type
-                      if (error.status === 503 || message.includes('503') || message.includes('overloaded') || message.includes('service unavailable')) {
+                 } else if (isRetriableError(error)) { // If it was retriable but retries exhausted
+                      if (error.status === 503 || messageLower.includes('503') || messageLower.includes('overloaded') || messageLower.includes('service unavailable')) {
                           finalStatus = 'UNAVAILABLE';
-                      } else if (error.status === 'RESOURCE_EXHAUSTED' || message.includes('rate limit exceeded')) {
+                          finalMessage = "AI service was unavailable for summarization after multiple retry attempts."; // Specific message
+                      } else if (error.status === 'RESOURCE_EXHAUSTED' || messageLower.includes('rate limit exceeded')) {
                            finalStatus = 'RESOURCE_EXHAUSTED';
+                           finalMessage = "AI service rate limit issues persisted during summarization after multiple retry attempts. Please check your Google API quota."; // Specific message
                       } else {
                            finalStatus = 'INTERNAL'; // Default for other retriable errors after exhaustion
+                           finalMessage = `Summarization failed due to a temporary AI service issue after ${MAX_RETRIES} attempts. Please try again later. Original error: ${error.message}`;
                       }
                   } else if (error.status === 400 || error.statusCode === 400) { // Check for 400 status
                        finalStatus = 'INVALID_ARGUMENT';
-                  }
-
-                  // Customize messages based on status
-                  if (finalStatus === 'UNAVAILABLE') {
-                      finalMessage = "AI service was unavailable after multiple retry attempts."; // Updated message
-                  } else if (finalStatus === 'RESOURCE_EXHAUSTED') {
-                       finalMessage = "AI service rate limit issues persisted after multiple retry attempts. Please check your Google API quota."; // Updated message
-                  } else if (finalStatus === 'INVALID_ARGUMENT') {
                        finalMessage = `Summarization failed due to invalid input or configuration: ${error.message || 'Bad request'}`;
                   } else if (error.message === "AI returned an empty summary.") {
-                      finalMessage = "Summarization failed because the AI returned an empty result after multiple retries.";
+                      finalMessage = `Summarization failed because the AI returned an empty result after ${MAX_RETRIES} attempts.`;
                       finalStatus = 'INTERNAL'; // Treat empty summary after retries as internal failure
                   }
 
+                 // Throw the final, consolidated error
                  throw new GenkitError({
                    status: finalStatus,
                    message: finalMessage,
@@ -217,6 +214,8 @@ async (input, flowOptions) => { // Receive flowOptions here
             }
         }
     }
-     // Should be unreachable if MAX_RETRIES > 0
-    throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: "SummarizeContentFlow: Max retries reached after encountering errors."});
+     // Should be unreachable if MAX_RETRIES > 0, but needed for TypeScript compilation
+    throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: `SummarizeContentFlow: Max retries (${MAX_RETRIES}) reached after encountering errors.`});
 });
+
+    

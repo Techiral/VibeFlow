@@ -1,3 +1,4 @@
+
 // components/dashboard/profile-dialog.tsx
 'use client';
 
@@ -23,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info, Loader2, Save, ExternalLink, CreditCard } from 'lucide-react';
+import { Info, Loader2, Save, ExternalLink, CreditCard, Database } from 'lucide-react'; // Added Database icon
 import { Separator } from '@/components/ui/separator'; // Import Separator
 import { ScrollArea } from '@/components/ui/scroll-area'; // Import ScrollArea
 
@@ -34,6 +35,7 @@ interface ProfileDialogProps {
   initialProfile: Profile | null;
   initialQuota: Quota | null;
   onProfileUpdate: (profile: Profile) => void; // Callback to update parent state
+  dbSetupError: string | null; // Receive DB setup error status
 }
 
 const profileSchema = z.object({
@@ -56,6 +58,7 @@ export function ProfileDialog({
   initialProfile,
   initialQuota,
   onProfileUpdate,
+  dbSetupError, // Use the prop
 }: ProfileDialogProps) {
   const supabase = createClient();
   const { toast } = useToast();
@@ -103,6 +106,14 @@ export function ProfileDialog({
   const quotaExceeded = quotaRemaining <= 0 && !!quota; // Only exceeded if quota loaded
 
   const onSubmit = async (data: ProfileFormData) => {
+     if (dbSetupError) {
+       toast({
+         title: "Database Error",
+         description: "Cannot save profile due to a database setup issue. Please resolve the setup errors first.",
+         variant: "destructive",
+       });
+       return;
+     }
     // Ensure empty strings are treated as null for the database update
     const updateData = Object.fromEntries(
       Object.entries(data).map(([key, value]) => [key, value === '' ? null : value])
@@ -120,14 +131,29 @@ export function ProfileDialog({
           .select()
           .single();
 
-        if (error) throw error;
-
-        if (updatedProfile) {
-          setProfile(updatedProfile); // Update local state
-          onProfileUpdate(updatedProfile); // Notify parent component
+        if (error) {
+             // Check for specific DB errors during update
+             if (error.message.includes("violates row-level security policy")) {
+                 toast({
+                   title: 'Save Failed',
+                   description: 'Could not save profile due to database security policy. Check RLS for updates on the `profiles` table.',
+                   variant: 'destructive',
+                 });
+             } else if (error.message.includes("relation \"public.profiles\" does not exist")) {
+                  toast({
+                     title: 'Save Failed',
+                     description: 'The `profiles` table is missing. Please run the database setup script.',
+                     variant: 'destructive',
+                   });
+             } else {
+                 throw error; // Re-throw other errors
+             }
+        } else if (updatedProfile) {
+            setProfile(updatedProfile); // Update local state
+            onProfileUpdate(updatedProfile); // Notify parent component
+            toast({ title: 'Profile Saved', description: 'Your changes have been saved.' });
+            onOpenChange(false); // Close dialog on success
         }
-        toast({ title: 'Profile Saved', description: 'Your changes have been saved.' });
-        onOpenChange(false); // Close dialog on success
       } catch (error: any) {
         console.error('Error updating profile:', error);
         toast({
@@ -159,8 +185,20 @@ export function ProfileDialog({
           </DialogDescription>
         </DialogHeader>
 
+         {/* DB Setup Error Alert within Dialog */}
+         {dbSetupError && (
+          <Alert variant="destructive" className="mx-6 mt-[-10px] mb-4"> {/* Position alert */}
+             <Database className="h-4 w-4" />
+            <AlertTitle>Database Setup Incomplete</AlertTitle>
+            <AlertDescription>
+              {dbSetupError} Saving changes is disabled until this is resolved.
+            </AlertDescription>
+          </Alert>
+        )}
+
+
         {/* Scrollable Content Area */}
-        <ScrollArea className="overflow-y-auto pr-6 -mr-6"> {/* Added ScrollArea */}
+        <ScrollArea className="overflow-y-auto px-6 -mx-6"> {/* Added padding to ScrollArea itself */}
           <div className="grid gap-8 py-4"> {/* Increased gap */}
 
             {/* Profile Form */}
@@ -172,7 +210,7 @@ export function ProfileDialog({
                       <Label htmlFor="email" className="sm:text-right sm:col-span-1">
                         Email
                       </Label>
-                      <Input id="email" value={user.email ?? 'N/A'} readOnly disabled className="col-span-1 sm:col-span-2" />
+                      <Input id="email" value={user.email ?? 'N/A'} readOnly disabled className="col-span-1 sm:col-span-2 bg-muted/50" />
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
@@ -184,6 +222,7 @@ export function ProfileDialog({
                            id="full_name"
                            {...register('full_name')}
                            className={`${errors.full_name ? 'border-destructive' : ''}`}
+                           disabled={!!dbSetupError} // Disable if DB error
                          />
                          {errors.full_name && <p className="text-xs text-destructive mt-1">{errors.full_name.message}</p>}
                        </div>
@@ -198,6 +237,7 @@ export function ProfileDialog({
                            id="username"
                            {...register('username')}
                            className={`${errors.username ? 'border-destructive' : ''}`}
+                            disabled={!!dbSetupError} // Disable if DB error
                          />
                          {errors.username && <p className="text-xs text-destructive mt-1">{errors.username.message}</p>}
                       </div>
@@ -212,6 +252,7 @@ export function ProfileDialog({
                             id="phone_number"
                             {...register('phone_number')}
                              className={`${errors.phone_number ? 'border-destructive' : ''}`}
+                              disabled={!!dbSetupError} // Disable if DB error
                           />
                          {errors.phone_number && <p className="text-xs text-destructive mt-1">{errors.phone_number.message}</p>}
                       </div>
@@ -219,7 +260,7 @@ export function ProfileDialog({
                  </div>
               </div>
 
-             <Separator className="my-6" /> {/* Replaced hr with Separator */}
+             <Separator className="my-2" /> {/* Reduced margin */}
 
               {/* API Keys & URLs */}
                <div>
@@ -236,6 +277,7 @@ export function ProfileDialog({
                              {...register('gemini_api_key')}
                              placeholder="Enter your Google Gemini API Key"
                              className={`${errors.gemini_api_key ? 'border-destructive' : ''}`}
+                              disabled={!!dbSetupError} // Disable if DB error
                            />
                            {errors.gemini_api_key && <p className="text-xs text-destructive mt-1">{errors.gemini_api_key.message}</p>}
                            <p className="text-xs text-muted-foreground mt-1">
@@ -254,6 +296,7 @@ export function ProfileDialog({
                              {...register('composio_url')}
                              placeholder="Enter your Composio MCP URL (optional)"
                              className={`${errors.composio_url ? 'border-destructive' : ''}`}
+                              disabled={!!dbSetupError} // Disable if DB error
                            />
                            {errors.composio_url && <p className="text-xs text-destructive mt-1">{errors.composio_url.message}</p>}
                             <p className="text-xs text-muted-foreground mt-1">
@@ -265,12 +308,20 @@ export function ProfileDialog({
                </div>
             </form>
 
-           <Separator className="my-6" />
+           <Separator className="my-2" /> {/* Reduced margin */}
 
             {/* Billing/Quota Section */}
             <div>
               <h3 className="text-lg font-semibold mb-4">Usage & Billing</h3>
-              {quota ? (
+              {dbSetupError ? (
+                  <Alert variant="destructive">
+                    <Database className="h-4 w-4" />
+                    <AlertTitle>Usage Unavailable</AlertTitle>
+                    <AlertDescription>
+                       Cannot load usage data due to a database setup issue.
+                    </AlertDescription>
+                  </Alert>
+              ) : quota !== null ? (
                 <div className="space-y-4"> {/* Increased spacing */}
                   <div className="flex justify-between items-center text-sm">
                     <span>Monthly Requests Used:</span>
@@ -307,13 +358,18 @@ export function ProfileDialog({
           </div>
         </ScrollArea>
 
-        <DialogFooter className="pt-4 border-t border-border/50">
+        <DialogFooter className="pt-4 border-t border-border/50 px-6 pb-4"> {/* Added padding */}
            <DialogClose asChild>
                <Button type="button" variant="outline">
                   Cancel
                </Button>
             </DialogClose>
-          <Button type="submit" form="profile-form" disabled={isPending || !isDirty} loading={isPending}>
+          <Button
+             type="submit"
+             form="profile-form"
+             disabled={isPending || !isDirty || !!dbSetupError} // Disable if pending, not dirty, or DB error
+             loading={isPending}
+           >
             <Save className="mr-2 h-4 w-4" /> Save Changes
           </Button>
         </DialogFooter>
@@ -321,5 +377,3 @@ export function ProfileDialog({
     </Dialog>
   );
 }
-
-    

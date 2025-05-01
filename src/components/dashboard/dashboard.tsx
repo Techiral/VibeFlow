@@ -64,6 +64,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
   const quotaUsed = quota?.request_count ?? 0;
   const quotaLimit = quota?.quota_limit ?? DEFAULT_QUOTA_LIMIT;
   const quotaRemaining = Math.max(0, quotaLimit - quotaUsed);
+  const quotaPercentage = quotaLimit > 0 ? (quotaUsed / quotaLimit) * 100 : 0;
   const quotaExceeded = quotaRemaining <= 0 && !!quota; // Only exceeded if quota is loaded
 
   // Fetch or confirm profile/quota data on client-side if needed
@@ -82,14 +83,15 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
 
              if (error) {
                   if (error.message.includes("function public.get_user_profile") && error.message.includes("does not exist")) {
-                      setupErrorMsg = "Database function 'get_user_profile' missing. Please run the setup script from `supabase/schema.sql`. See README.";
-                  } else if (error.message.includes("relation") && error.message.includes("does not exist")) {
-                     // This might mean profiles table is missing, which get_user_profile also needs
-                     setupErrorMsg = "Database table 'profiles' missing. Please run the setup script from `supabase/schema.sql`. See README.";
+                      setupErrorMsg = "Database setup incomplete: Missing 'get_user_profile' function. Please run the SQL script from `supabase/schema.sql`. See README Step 3.";
+                  } else if (error.message.includes("relation \"public.profiles\" does not exist")) {
+                     setupErrorMsg = "Database setup incomplete: Missing 'profiles' table. Please run the SQL script from `supabase/schema.sql`. See README Step 3.";
+                  } else if (error.message.includes("permission denied")) {
+                      setupErrorMsg = "Database access error: Permission denied for profile data. Check Row Level Security policies. See README Step 3.";
                   } else {
                      toast({ title: "Profile Error", description: `Could not load your profile data: ${error.message}`, variant: "destructive" });
                   }
-                  if (setupErrorMsg) setDbSetupError(setupErrorMsg);
+                  if (setupErrorMsg) setDbSetupError(setupErrorMsg); // Set state if setup error found
              } else if (data && Array.isArray(data) && data.length > 0) {
                  currentProfile = data[0] as Profile;
                  setProfile(currentProfile);
@@ -101,14 +103,13 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
          } catch (error: any) { // Catch unexpected errors during RPC call itself
              console.error("Unexpected client error fetching/creating profile:", error.message);
              toast({ title: "Profile Error", description: `Unexpected error: ${error.message}`, variant: "destructive" });
-             setupErrorMsg = "Unexpected error loading profile data."; // Generic setup error
+             setupErrorMsg = `Unexpected error loading profile data. Check console. Details: ${error.message}`; // Generic setup error
              setDbSetupError(setupErrorMsg);
          }
       }
 
       // --- Ensure Quota ---
-      // We assume the quota record is created by the trigger or the increment function.
-      // We just fetch it here. If it's missing initially, increment_quota will handle creation later.
+      // Fetch quota even if profile load failed, to check for quota table issues.
       if (!currentQuota) {
         try {
           const { data, error } = await supabase
@@ -120,66 +121,109 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
           if (error && error.code === 'PGRST116') { // Not found - This is expected on first load before any generation
              // console.log("Quota record not found yet for user:", user.id); // Normal case initially
              // Do nothing, `increment_quota` will create it on first action.
+             // Reset potential setup error if profile succeeded but quota just doesn't exist yet
+             if (currentProfile && !setupErrorMsg) setDbSetupError(null);
           } else if (error) { // Other error during select
               if (error.message.includes("relation \"public.quotas\" does not exist")) {
-                  setupErrorMsg = "Database table 'quotas' missing. Please run the setup script from `supabase/schema.sql`. See README.";
+                  setupErrorMsg = "Database setup incomplete: Missing 'quotas' table. Please run the SQL script from `supabase/schema.sql`. See README Step 3.";
+              } else if (error.message.includes("permission denied for table quotas")) {
+                  setupErrorMsg = "Database access error: Permission denied for 'quotas' table. Check Row Level Security policies. See README Step 3.";
               } else {
                   toast({ title: "Quota Error", description: `Could not load usage data: ${error.message}`, variant: "destructive" });
-                  if (!setupErrorMsg) setupErrorMsg = "Error loading quota data."; // Set general error if specific one not found
+                  // Set general error if specific one not found, but don't overwrite profile error
+                  if (!setupErrorMsg) setupErrorMsg = `Error loading quota data. Details: ${error.message}`;
               }
-              if (setupErrorMsg) setDbSetupError(setupErrorMsg);
+              if (setupErrorMsg) setDbSetupError(setupErrorMsg); // Set state if setup error found
           } else { // Select succeeded
               currentQuota = data;
               setQuota(currentQuota);
+              // Clear setup error if profile and quota loaded successfully
+              if (currentProfile) setDbSetupError(null);
           }
         } catch (error: any) { // Catch unexpected errors
           console.error("Unexpected client error fetching quota:", error.message);
           toast({ title: "Quota Error", description: `Unexpected error: ${error.message}`, variant: "destructive" });
-           if (!setupErrorMsg) setupErrorMsg = "Unexpected error loading quota data.";
+           if (!setupErrorMsg) setupErrorMsg = `Unexpected error loading quota data. Check console. Details: ${error.message}`;
            setDbSetupError(setupErrorMsg);
         }
+      } else {
+         // Quota was loaded initially, clear potential setup error if profile also loaded
+         if (currentProfile && !setupErrorMsg) {
+             setDbSetupError(null);
+         }
       }
 
-      // If any setup error was detected, ensure it's reflected in the state
+      // Final check: if a setup error was detected at any point, make sure it's set
        if (setupErrorMsg) {
          setDbSetupError(setupErrorMsg);
        }
 
     };
 
-    // Only run ensureData if initialProfile or initialQuota was null
-    if (!initialProfile || !initialQuota) {
-        ensureData();
-    }
-    // We still listen to user.id changes in case of user switch without full page reload
-  }, [user.id, supabase, toast, initialProfile, initialQuota, profile, quota]); // Rerun if needed
+    // Run ensureData on initial mount or if user changes
+    ensureData();
+    // Rerun if user.id changes (e.g., logout/login without full refresh)
+  }, [user.id, supabase, toast, profile, quota]); // Dependencies
 
 
   // Function to handle profile updates from the dialog
   const handleProfileUpdate = (updatedProfile: Profile) => {
     setProfile(updatedProfile);
     // If quota limit can be updated via profile, update it here too
-    // setQuota(prev => ({ ...prev, quota_limit: updatedProfile.some_new_limit_field ?? DEFAULT_QUOTA_LIMIT }));
+    // setQuota(prev => prev ? { ...prev, quota_limit: updatedProfile.some_new_limit_field ?? DEFAULT_QUOTA_LIMIT } : null);
     toast({ title: "Profile Updated", description: "Your profile information has been saved." });
   };
 
    // Function to check quota and increment if allowed
   const checkAndIncrementQuota = async (incrementAmount: number = 1): Promise<boolean> => {
      if (dbSetupError) {
-         toast({ title: "Database Error", description: "Cannot process request due to database setup issue. Please run the SQL script from the README.", variant: "destructive" });
+         toast({ title: "Database Error", description: `Cannot process request due to database setup issue: ${dbSetupError}`, variant: "destructive" });
          return false;
      }
-     // It's possible quota is still null if user hasn't done anything yet.
-     // The increment_quota function handles the initial creation.
+     // Fetch current quota state directly for the most up-to-date check
+     let currentRemaining = quotaRemaining;
+     if (quota) {
+       currentRemaining = Math.max(0, quota.quota_limit - quota.request_count);
+     } else {
+        // If quota is not yet loaded, try fetching it once more
+        try {
+             const { data: fetchedQuota, error: fetchError } = await supabase
+                 .rpc('get_remaining_quota', { p_user_id: user.id });
 
-     // Check if quota *is* loaded and *is* exceeded
-     if (quota && quotaExceeded) {
+             if (fetchError) {
+                 // Handle potential errors from get_remaining_quota, especially setup errors
+                  if (fetchError.message.includes("function public.get_remaining_quota") && fetchError.message.includes("does not exist")) {
+                     setDbSetupError("Database function 'get_remaining_quota' missing. Please run the setup script. See README Step 3.");
+                     toast({ title: "Database Error", description: "Failed to check usage limit due to missing function.", variant: "destructive" });
+                  } else {
+                      toast({ title: "Quota Check Error", description: `Failed to check usage limit: ${fetchError.message}`, variant: "destructive" });
+                  }
+                 return false;
+             }
+             // Assuming get_remaining_quota returns the remaining count directly
+             if (typeof fetchedQuota === 'number') {
+                 currentRemaining = fetchedQuota;
+                 // Optionally update local quota state if needed, though increment_quota will provide the most accurate final state
+             } else {
+                 // Fallback if function doesn't return expected value
+                 toast({ title: "Quota Check Error", description: "Could not determine remaining usage limit.", variant: "destructive" });
+                 return false;
+             }
+
+        } catch (rpcError: any) {
+             console.error("RPC Error checking remaining quota:", rpcError.message);
+             toast({ title: "Quota Check Error", description: `Unexpected error checking usage: ${rpcError.message}`, variant: "destructive" });
+             return false;
+        }
+     }
+
+
+     if (currentRemaining < incrementAmount) {
        toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
        return false;
      }
 
      // Optimistic UI update (optional but improves UX)
-     // Only update optimistically if quota is already loaded
      const optimisticQuota = quota ? { ...quota, request_count: quota.request_count + incrementAmount } : null;
      if (optimisticQuota) setQuota(optimisticQuota);
 
@@ -192,19 +236,18 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
 
        if (error) {
           // Revert optimistic update on error if it was applied
-          if (optimisticQuota) setQuota(quota);
+          if (optimisticQuota) setQuota(quota); // Revert to the state before optimistic update
           console.error("Error incrementing quota:", error.message);
           if (error.message.includes("quota_exceeded")) {
              toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
              // Ensure local state reflects exceeded quota if possible
              if(quota) setQuota(prev => prev ? {...prev, request_count: prev.quota_limit} : null);
           } else if (error.message.includes("function public.increment_quota") && error.message.includes("does not exist")) {
-             setDbSetupError("Database function 'increment_quota' missing. Please run the setup script. See README.");
+             setDbSetupError("Database function 'increment_quota' missing. Please run the setup script. See README Step 3.");
              toast({ title: "Database Error", description: "Failed to update usage count due to missing function.", variant: "destructive" });
-          } else if (error.message.includes("Failed to create or find quota record")) {
-              // This might happen if the INSERT policy is missing or failed
-              setDbSetupError("Failed to initialize quota record. Check RLS policies for 'quotas' table.");
-              toast({ title: "Database Error", description: "Failed to initialize usage data. Check database setup.", variant: "destructive" });
+          } else if (error.message.includes("violates row-level security policy for table \\\"quotas\\\"")) {
+             setDbSetupError("RLS policy prevents quota update. Check insert/update policies for 'quotas'. See README Step 3.");
+             toast({ title: "Database Security Error", description: "Failed to update usage count due to security policy.", variant: "destructive" });
           } else {
              toast({ title: "Quota Error", description: `Failed to update usage count: ${error.message}`, variant: "destructive" });
           }
@@ -212,51 +255,41 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
        }
 
        // --- Success ---
-       // The RPC returns the new *remaining* quota. Update local state accurately.
-       if (typeof newRemaining === 'number') {
-            // Fetch the potentially updated quota record (including last_reset_at and limit)
-            const { data: updatedQuotaData, error: fetchError } = await supabase
-               .from('quotas')
-               .select('*')
-               .eq('user_id', user.id)
-               .single();
+       // Refetch the full quota record to get the most accurate state after increment
+       const { data: updatedQuotaData, error: fetchError } = await supabase
+             .from('quotas')
+             .select('*')
+             .eq('user_id', user.id)
+             .single();
 
-            if (fetchError){
-                console.error("Error fetching quota after increment:", fetchError.message);
-                toast({ title: "Quota Update Warning", description: "Usage updated, but failed to refresh full quota details.", variant: "default" });
-                // Fallback: update count based on remaining, keep old limit/reset time
-                 setQuota(prev => prev ?
-                    { ...prev, request_count: prev.quota_limit - newRemaining } :
-                    { user_id: user.id, request_count: DEFAULT_QUOTA_LIMIT - newRemaining, quota_limit: DEFAULT_QUOTA_LIMIT, last_reset_at: new Date().toISOString(), created_at: new Date().toISOString(), ip_address: null} // Basic fallback structure
-                 );
+       if (fetchError){
+           console.error("Error fetching quota after increment:", fetchError.message);
+           toast({ title: "Quota Update Warning", description: "Usage updated, but failed to refresh full quota details.", variant: "default" });
+           // Fallback: Try to update count based on returned remaining value (less reliable for limit/reset time)
+            if (typeof newRemaining === 'number' && newRemaining >= 0) {
+                 setQuota(prev => {
+                    const currentLimit = prev?.quota_limit ?? DEFAULT_QUOTA_LIMIT;
+                    const newCount = currentLimit - newRemaining;
+                    return prev ?
+                        { ...prev, request_count: newCount } :
+                        // Construct a basic quota object if none existed
+                        { user_id: user.id, request_count: newCount, quota_limit: currentLimit, last_reset_at: new Date().toISOString(), created_at: new Date().toISOString(), ip_address: null};
+                 });
+             }
+       } else if (updatedQuotaData) {
+           setQuota(updatedQuotaData); // Set the full updated state from the database
+       }
 
-            } else if (updatedQuotaData) {
-                setQuota(updatedQuotaData); // Set the full updated state
-            }
-
-           if (newRemaining < 0) { // Should be caught by DB, but double-check
-               toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
-               return false; // Treat as failure if somehow negative remaining
-           }
-       } else {
-            // Fallback: refetch quota state if RPC doesn't return remaining (less ideal)
-            console.warn("increment_quota RPC did not return a number. Refetching quota.");
-            const { data: refreshedQuota, error: refreshError } = await supabase
-                .from('quotas')
-                .select('*')
-                .eq('user_id', user.id)
-                .single();
-            if (refreshError) {
-                 toast({ title: "Quota Error", description: "Failed to refresh usage data after update.", variant: "destructive" });
-            } else {
-                setQuota(refreshedQuota);
-            }
+       // Double-check if the operation resulted in exceeding the quota (edge case)
+       if (typeof newRemaining === 'number' && newRemaining < 0) {
+           toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
+           return false;
        }
 
       return true; // Increment successful
     } catch (rpcError: any) {
         // Revert optimistic update on RPC error
-        if (optimisticQuota) setQuota(quota);
+        if (optimisticQuota) setQuota(quota); // Revert to the state before optimistic update
       console.error("RPC Error incrementing quota:", rpcError.message);
       toast({ title: "Quota Error", description: `An unexpected error occurred updating usage: ${rpcError.message}`, variant: "destructive" });
       return false;
@@ -269,8 +302,14 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
     if (error) {
       toast({ title: "Error Signing Out", description: error.message, variant: "destructive" });
     } else {
+      setProfile(null); // Clear local state on sign out
+      setQuota(null);
+      setContentInput('');
+      setSummary(null);
+      setPostDrafts({});
+      setDbSetupError(null); // Clear DB error on sign out
       router.push('/login'); // Redirect to login page after sign out
-      router.refresh(); // Refresh server components
+      // router.refresh(); // This might cause issues, push should be enough
     }
   };
 
@@ -330,12 +369,14 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
            let description = "Error summarizing content.";
             if (summaryError.message.includes("parsing")) {
                description = "Could not parse content from the URL. Please check the URL or paste text directly.";
-            } else if (summaryError.message.includes("API key not valid")) {
-               description = "AI service configuration error (API key). Please check your profile.";
+            } else if (summaryError.status === 'UNAUTHENTICATED' || summaryError.message.includes("API key not valid")) {
+               description = "Invalid Gemini API Key. Please check your profile.";
+               setIsProfileDialogOpen(true); // Prompt user to fix key
             } else if (summaryError.message.includes("503") || summaryError.message.toLowerCase().includes("overloaded")) {
                 description = "AI service is temporarily overloaded during summarization. Please try again later.";
             } else if (summaryError.status === 'INVALID_ARGUMENT' && summaryError.message.includes("API key is required")) {
                  description = "API Key was missing during generation.";
+                 setIsProfileDialogOpen(true); // Should be caught earlier, but handle just in case
             }
            toast({ title: "Summarization Failed", description: description, variant: "destructive" });
            // Don't set summary, proceed to finally block for quota rollback
@@ -354,12 +395,14 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
               .catch(async (err) => { // Make catch async for potential rollback
                  console.error(`Error generating ${platform} post:`, err);
                   let description = `Error generating ${platform} post.`;
-                  if (err.message.includes("API key not valid")) {
-                     description = "AI service configuration error (API key). Please check your profile."
+                  if (err.status === 'UNAUTHENTICATED' || err.message.includes("API key not valid")) {
+                     description = "Invalid Gemini API Key. Please check your profile."
+                     setIsProfileDialogOpen(true);
                   } else if (err.message.includes("503") || err.message.toLowerCase().includes("overloaded")) {
                       description = `AI service is temporarily overloaded generating ${platform} post. Please try again later.`;
                   } else if (err.status === 'INVALID_ARGUMENT' && err.message.includes("API key is required")) {
                       description = "API Key was missing during generation.";
+                       setIsProfileDialogOpen(true);
                   }
                   toast({ title: "Post Generation Failed", description: description, variant: "destructive" });
                  return { platform, post: `Error generating post for ${platform}.` }; // Return error placeholder
@@ -384,16 +427,24 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
 
          if (refundAmount > 0) {
              console.log(`Refunding ${refundAmount} quota points due to errors.`);
-             await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -refundAmount });
-             // Refetch quota to reflect refund
-             const { data: refreshedQuota, error: refreshError } = await supabase
-                .from('quotas')
-                .select('*')
-                .eq('user_id', user.id)
-                .single();
-             if (!refreshError && refreshedQuota) {
-                setQuota(refreshedQuota);
-             }
+             // Don't check quota again for refund, just attempt decrement
+              try {
+                  await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -refundAmount });
+                  // Refetch quota locally after refund attempt
+                  const { data: refreshedQuota, error: refreshError } = await supabase
+                      .from('quotas')
+                      .select('*')
+                      .eq('user_id', user.id)
+                      .single();
+                  if (!refreshError && refreshedQuota) {
+                      setQuota(refreshedQuota);
+                  } else if (refreshError) {
+                       console.error("Error refreshing quota after refund:", refreshError.message);
+                  }
+              } catch (refundError: any) {
+                   console.error("Error during quota refund RPC:", refundError.message);
+                   toast({ title: "Quota Refund Issue", description: "Failed to process quota refund for failed generations.", variant: "destructive"});
+              }
          }
 
          setIsGeneratingPosts(false); // All post generation attempts finished
@@ -436,25 +487,34 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
       } catch (error: any) {
         console.error(`Tuning ${platform} post failed:`, error);
         // --- Rollback Quota on Failure ---
-        await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -1 });
-         // Refetch quota to reflect refund
-         const { data: refreshedQuota, error: refreshError } = await supabase
-            .from('quotas')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
-         if (!refreshError && refreshedQuota) {
-            setQuota(refreshedQuota);
+         try {
+             await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -1 });
+             // Refetch quota locally after refund attempt
+             const { data: refreshedQuota, error: refreshError } = await supabase
+                .from('quotas')
+                .select('*')
+                .eq('user_id', user.id)
+                .single();
+             if (!refreshError && refreshedQuota) {
+                setQuota(refreshedQuota);
+             } else if (refreshError) {
+                  console.error("Error refreshing quota after failed tuning refund:", refreshError.message);
+             }
+         } catch (refundError: any) {
+             console.error("Error during quota refund RPC for tuning:", refundError.message);
+             toast({ title: "Quota Refund Issue", description: "Failed to process quota refund for failed tuning.", variant: "destructive"});
          }
 
 
          let description = "An error occurred while tuning the post.";
-          if (error.message.includes("API key not valid")) {
-             description = "AI service configuration error (API key). Please check your profile."
+         if (error.status === 'UNAUTHENTICATED' || error.message.includes("API key not valid")) {
+             description = "Invalid Gemini API Key. Please check your profile."
+             setIsProfileDialogOpen(true);
           } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded")) {
               description = "AI service is temporarily overloaded. Please try tuning again later.";
           } else if (error.status === 'INVALID_ARGUMENT' && error.message.includes("API key is required")) {
               description = "API Key was missing during tuning.";
+              setIsProfileDialogOpen(true);
           }
         toast({ title: "Tuning Failed", description: description, variant: "destructive" });
       } finally {
@@ -505,16 +565,23 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
       } catch (error: any) {
          console.error(`Publishing to ${platform} failed:`, error);
         // --- Rollback Quota on Failure ---
-         await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -1 });
-         // Refetch quota to reflect refund
-         const { data: refreshedQuota, error: refreshError } = await supabase
-            .from('quotas')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
-         if (!refreshError && refreshedQuota) {
-            setQuota(refreshedQuota);
-         }
+        try {
+            await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -1 });
+            // Refetch quota locally after refund attempt
+            const { data: refreshedQuota, error: refreshError } = await supabase
+                .from('quotas')
+                .select('*')
+                .eq('user_id', user.id)
+                .single();
+            if (!refreshError && refreshedQuota) {
+                setQuota(refreshedQuota);
+            } else if (refreshError) {
+                console.error("Error refreshing quota after failed publish refund:", refreshError.message);
+            }
+        } catch (refundError: any) {
+            console.error("Error during quota refund RPC for publishing:", refundError.message);
+            toast({ title: "Quota Refund Issue", description: "Failed to process quota refund for failed publishing.", variant: "destructive"});
+        }
 
 
          let description = "An error occurred while publishing the post.";
@@ -558,12 +625,12 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
            {dbSetupError ? ( // Show DB Error state first
                 <Tooltip>
                    <TooltipTrigger asChild>
-                       <div className="flex items-center gap-1 text-sm text-destructive">
+                       <div className="flex items-center gap-1 text-sm text-destructive cursor-help" onClick={() => toast({ title: "Database Error", description: dbSetupError, variant: "destructive", duration: 10000 })}>
                            <Database className="h-4 w-4" />
                            <span>DB Error</span>
                        </div>
                    </TooltipTrigger>
-                   <TooltipContent><p>Database setup required. See alerts.</p></TooltipContent>
+                   <TooltipContent><p>Database setup required. Click for details.</p></TooltipContent>
                </Tooltip>
            ) : quota !== null ? ( // If no DB error and quota loaded
              <Tooltip>
@@ -573,7 +640,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                        <BarChart className="h-4 w-4" />
                        <span>{quotaUsed} / {quotaLimit} used</span>
                      </div>
-                      <Progress value={(quotaUsed / quotaLimit) * 100} className="w-20 h-1 mt-0.5" />
+                      <Progress value={quotaPercentage} className="w-20 h-1 mt-0.5" />
                   </div>
                </TooltipTrigger>
                <TooltipContent side="bottom" align="end">
@@ -591,7 +658,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
           {/* Profile Button/Dialog Trigger */}
           <Tooltip>
              <TooltipTrigger asChild>
-                 <Button variant="ghost" size="icon" onClick={() => setIsProfileDialogOpen(true)}>
+                 <Button variant="ghost" size="icon" onClick={() => setIsProfileDialogOpen(true)} disabled={!!dbSetupError}> {/* Disable if DB error */}
                    <UserIcon className="h-5 w-5" />
                  </Button>
              </TooltipTrigger>
@@ -614,9 +681,9 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
        {dbSetupError && (
           <Alert variant="destructive" className="mb-6">
              <Database className="h-4 w-4" /> {/* Changed icon */}
-            <AlertTitle>Database Setup Incomplete</AlertTitle>
+            <AlertTitle>Database Setup Required</AlertTitle>
             <AlertDescription>
-              {dbSetupError} Please ensure you have run the **entire updated** SQL script from `supabase/schema.sql` in your Supabase SQL Editor.
+              {dbSetupError} Please ensure you have run the **entire updated** SQL script from `supabase/schema.sql` in your Supabase SQL Editor (see README Step 3).
             </AlertDescription>
           </Alert>
         )}
@@ -661,7 +728,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
               loading={isGeneratingSummary || isGeneratingPosts} // Show loading only for generation
               className="w-full md:w-auto ml-auto"
             >
-              <Wand2 className="mr-2" /> Generate Posts
+              <Wand2 className="mr-2 h-4 w-4" /> Generate Posts
             </Button>
           </CardFooter>
         </Card>
@@ -717,18 +784,18 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                          )}
                         {/* Tuning Buttons (only show if post generated successfully) */}
                         {!postDrafts[platform]?.startsWith("Error generating") && (
-                             <div className="flex flex-wrap gap-2 shrink-0"> {/* Prevent tuning buttons from growing */}
+                             <div className="flex flex-wrap gap-2 shrink-0 pt-2"> {/* Prevent tuning buttons from growing */}
                               <span className="text-xs text-muted-foreground mr-2 mt-1.5">Tune:</span>
-                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Make wittier')} disabled={isDisabled || !postDrafts[platform]}>Witty</Button>
-                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More concise')} disabled={isDisabled || !postDrafts[platform]}>Concise</Button>
-                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More professional')} disabled={isDisabled || !postDrafts[platform]}>Professional</Button>
-                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Add emojis')} disabled={isDisabled || !postDrafts[platform]}>Add Emojis ✨</Button>
+                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Make wittier')} disabled={isDisabled || !postDrafts[platform] || isTuning[platform]}>Witty</Button>
+                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More concise')} disabled={isDisabled || !postDrafts[platform] || isTuning[platform]}>Concise</Button>
+                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More professional')} disabled={isDisabled || !postDrafts[platform] || isTuning[platform]}>Professional</Button>
+                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Add emojis')} disabled={isDisabled || !postDrafts[platform] || isTuning[platform]}>Add Emojis ✨</Button>
                              </div>
                         )}
                       </CardContent>
                        {/* Footer (only show if post generated successfully) */}
                        {!postDrafts[platform]?.startsWith("Error generating") && (
-                          <CardFooter className="flex justify-end gap-2 shrink-0"> {/* Prevent footer from growing */}
+                          <CardFooter className="flex justify-end gap-2 shrink-0 pt-0"> {/* Prevent footer from growing */}
                             <Tooltip>
                                <TooltipTrigger asChild>
                                   <Button variant="ghost" size="icon" onClick={() => copyToClipboard(postDrafts[platform])} disabled={!postDrafts[platform] || isPublishing[platform]}>
@@ -741,7 +808,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                               <TooltipTrigger asChild>
                                 <Button
                                   onClick={() => handlePublishPost(platform)}
-                                  disabled={isDisabled || !postDrafts[platform] || !profile?.composio_url} // Disable if no composio URL or other issues
+                                  disabled={isDisabled || !postDrafts[platform] || !profile?.composio_url || isPublishing[platform]} // Disable if no composio URL or other issues
                                   loading={isPublishing[platform]}
                                   size="sm"
                                 >
@@ -780,21 +847,9 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
           initialProfile={profile}
           initialQuota={quota} // Pass potentially null quota
           onProfileUpdate={handleProfileUpdate}
+          dbSetupError={dbSetupError} // Pass DB error status to dialog
         />
     </div>
     </TooltipProvider>
   );
 }
-
-// Placeholder API interaction functions (to be moved to API routes/server actions)
-
-// async function publishPost(data: { platform: SocialPlatform; content: string }): Promise<void> {
-//   // Replace with actual API call to POST /api/publish
-//   console.log(`Calling API to publish to ${data.platform}...`);
-//   await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API latency
-//   // Simulate potential API error (e.g., 10% chance of failure)
-//    if (Math.random() < 0.1) {
-//       throw new Error("Failed to publish post via API.");
-//    }
-//   console.log("Publish API call successful.");
-// }

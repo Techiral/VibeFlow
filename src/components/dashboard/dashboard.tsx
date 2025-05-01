@@ -64,45 +64,51 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
   const quotaUsed = quota?.request_count ?? 0;
   const quotaLimit = quota?.quota_limit ?? DEFAULT_QUOTA_LIMIT;
   const quotaRemaining = Math.max(0, quotaLimit - quotaUsed);
-  const quotaExceeded = quotaRemaining <= 0;
+  const quotaExceeded = quotaRemaining <= 0 && !!quota; // Only exceeded if quota is loaded
 
-  // Fetch or create profile/quota if they weren't passed initially (e.g., first login after creation)
+  // Fetch or confirm profile/quota data on client-side if needed
   useEffect(() => {
     const ensureData = async () => {
       let currentProfile = profile;
       let currentQuota = quota;
       let setupErrorMsg: string | null = null;
 
+      // --- Ensure Profile ---
       if (!currentProfile) {
          try {
+            // Use RPC function which also creates if not exists
             const { data, error } = await supabase
-              .rpc('get_user_profile', { p_user_id: user.id }); // Use RPC function
+              .rpc('get_user_profile', { p_user_id: user.id });
 
              if (error) {
-                  // console.error("Client Error fetching/creating profile:", error.message); // Removed console.error
                   if (error.message.includes("function public.get_user_profile") && error.message.includes("does not exist")) {
                       setupErrorMsg = "Database function 'get_user_profile' missing. Please run the setup script from `supabase/schema.sql`. See README.";
                   } else if (error.message.includes("relation") && error.message.includes("does not exist")) {
+                     // This might mean profiles table is missing, which get_user_profile also needs
                      setupErrorMsg = "Database table 'profiles' missing. Please run the setup script from `supabase/schema.sql`. See README.";
                   } else {
                      toast({ title: "Profile Error", description: `Could not load your profile data: ${error.message}`, variant: "destructive" });
                   }
-                  if (setupErrorMsg) setDbSetupError(setupErrorMsg); // Set state for UI
-                  // Don't throw here, let it proceed to quota check maybe
+                  if (setupErrorMsg) setDbSetupError(setupErrorMsg);
              } else if (data && Array.isArray(data) && data.length > 0) {
-                 // The RPC returns an array, even for single result
-                 currentProfile = data[0] as Profile; // Assuming the first element is the profile
+                 currentProfile = data[0] as Profile;
                  setProfile(currentProfile);
              } else {
-                console.warn("Profile still null/empty after calling get_user_profile");
-                 // This might happen if the function exists but returns no rows and doesn't insert
+                 // Should not happen if RPC works, but handle gracefully
+                 console.warn("Profile still null/empty after calling get_user_profile on client");
+                 toast({ title: "Profile Error", description: "Failed to load profile data. Please refresh.", variant: "destructive" });
              }
          } catch (error: any) { // Catch unexpected errors during RPC call itself
              console.error("Unexpected client error fetching/creating profile:", error.message);
              toast({ title: "Profile Error", description: `Unexpected error: ${error.message}`, variant: "destructive" });
+             setupErrorMsg = "Unexpected error loading profile data."; // Generic setup error
+             setDbSetupError(setupErrorMsg);
          }
       }
 
+      // --- Ensure Quota ---
+      // We assume the quota record is created by the trigger or the increment function.
+      // We just fetch it here. If it's missing initially, increment_quota will handle creation later.
       if (!currentQuota) {
         try {
           const { data, error } = await supabase
@@ -111,30 +117,15 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
             .eq('user_id', user.id)
             .single();
 
-          if (error && error.code === 'PGRST116') { // Not found, try to create it
-             const { data: newQuota, error: createError } = await supabase
-                .from('quotas')
-                .insert({ user_id: user.id }) // Rely on DB defaults
-                .select()
-                .single();
-             if (createError) {
-                  // console.error("Client Error creating quota:", createError.message); // Removed console.error
-                  if (createError.message.includes("relation \"public.quotas\" does not exist")) {
-                      setupErrorMsg = "Database table 'quotas' missing. Please run the setup script from `supabase/schema.sql`. See README.";
-                  } else {
-                      toast({ title: "Quota Error", description: `Failed to initialize usage data: ${createError.message}`, variant: "destructive" });
-                  }
-                  if (setupErrorMsg) setDbSetupError(setupErrorMsg);
-             } else {
-                currentQuota = newQuota;
-                setQuota(currentQuota);
-             }
+          if (error && error.code === 'PGRST116') { // Not found - This is expected on first load before any generation
+             // console.log("Quota record not found yet for user:", user.id); // Normal case initially
+             // Do nothing, `increment_quota` will create it on first action.
           } else if (error) { // Other error during select
-              // console.error("Client Error fetching quota:", error.message); // Removed console.error
               if (error.message.includes("relation \"public.quotas\" does not exist")) {
                   setupErrorMsg = "Database table 'quotas' missing. Please run the setup script from `supabase/schema.sql`. See README.";
               } else {
                   toast({ title: "Quota Error", description: `Could not load usage data: ${error.message}`, variant: "destructive" });
+                  if (!setupErrorMsg) setupErrorMsg = "Error loading quota data."; // Set general error if specific one not found
               }
               if (setupErrorMsg) setDbSetupError(setupErrorMsg);
           } else { // Select succeeded
@@ -142,20 +133,32 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
               setQuota(currentQuota);
           }
         } catch (error: any) { // Catch unexpected errors
-          console.error("Unexpected client error fetching/creating quota:", error.message);
+          console.error("Unexpected client error fetching quota:", error.message);
           toast({ title: "Quota Error", description: `Unexpected error: ${error.message}`, variant: "destructive" });
+           if (!setupErrorMsg) setupErrorMsg = "Unexpected error loading quota data.";
+           setDbSetupError(setupErrorMsg);
         }
       }
+
+      // If any setup error was detected, ensure it's reflected in the state
+       if (setupErrorMsg) {
+         setDbSetupError(setupErrorMsg);
+       }
+
     };
 
-    ensureData();
-  }, [user.id, supabase, toast, profile, quota]); // Rerun if profile/quota state changes
+    // Only run ensureData if initialProfile or initialQuota was null
+    if (!initialProfile || !initialQuota) {
+        ensureData();
+    }
+    // We still listen to user.id changes in case of user switch without full page reload
+  }, [user.id, supabase, toast, initialProfile, initialQuota, profile, quota]); // Rerun if needed
 
 
   // Function to handle profile updates from the dialog
   const handleProfileUpdate = (updatedProfile: Profile) => {
     setProfile(updatedProfile);
-    // Potentially update quota state as well if limit changes
+    // If quota limit can be updated via profile, update it here too
     // setQuota(prev => ({ ...prev, quota_limit: updatedProfile.some_new_limit_field ?? DEFAULT_QUOTA_LIMIT }));
     toast({ title: "Profile Updated", description: "Your profile information has been saved." });
   };
@@ -166,51 +169,77 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
          toast({ title: "Database Error", description: "Cannot process request due to database setup issue. Please run the SQL script from the README.", variant: "destructive" });
          return false;
      }
-     if (!quota) {
-         toast({ title: "Quota Error", description: "Usage data not loaded. Please refresh.", variant: "destructive" });
-         return false;
+     // It's possible quota is still null if user hasn't done anything yet.
+     // The increment_quota function handles the initial creation.
+
+     // Check if quota *is* loaded and *is* exceeded
+     if (quota && quotaExceeded) {
+       toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
+       return false;
      }
 
-    if (quotaExceeded) {
-      toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
-      return false;
-    }
-
      // Optimistic UI update (optional but improves UX)
-     const optimisticQuota = { ...quota, request_count: quota.request_count + incrementAmount };
-     setQuota(optimisticQuota);
+     // Only update optimistically if quota is already loaded
+     const optimisticQuota = quota ? { ...quota, request_count: quota.request_count + incrementAmount } : null;
+     if (optimisticQuota) setQuota(optimisticQuota);
 
     try {
+        // Call the RPC function which handles creation, reset, and increment
         const { data: newRemaining, error } = await supabase.rpc('increment_quota', {
            p_user_id: user.id,
            p_increment_amount: incrementAmount
         });
 
        if (error) {
-          // Revert optimistic update on error
-          setQuota(quota); // Revert to original quota
+          // Revert optimistic update on error if it was applied
+          if (optimisticQuota) setQuota(quota);
           console.error("Error incrementing quota:", error.message);
           if (error.message.includes("quota_exceeded")) {
              toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
+             // Ensure local state reflects exceeded quota if possible
+             if(quota) setQuota(prev => prev ? {...prev, request_count: prev.quota_limit} : null);
           } else if (error.message.includes("function public.increment_quota") && error.message.includes("does not exist")) {
              setDbSetupError("Database function 'increment_quota' missing. Please run the setup script. See README.");
              toast({ title: "Database Error", description: "Failed to update usage count due to missing function.", variant: "destructive" });
+          } else if (error.message.includes("Failed to create or find quota record")) {
+              // This might happen if the INSERT policy is missing or failed
+              setDbSetupError("Failed to initialize quota record. Check RLS policies for 'quotas' table.");
+              toast({ title: "Database Error", description: "Failed to initialize usage data. Check database setup.", variant: "destructive" });
           } else {
              toast({ title: "Quota Error", description: `Failed to update usage count: ${error.message}`, variant: "destructive" });
           }
           return false;
        }
 
-       // If RPC returns the new remaining count correctly
+       // --- Success ---
+       // The RPC returns the new *remaining* quota. Update local state accurately.
        if (typeof newRemaining === 'number') {
-           const actualQuota = { ...quota, request_count: quotaLimit - newRemaining };
-           setQuota(actualQuota);
+            // Fetch the potentially updated quota record (including last_reset_at and limit)
+            const { data: updatedQuotaData, error: fetchError } = await supabase
+               .from('quotas')
+               .select('*')
+               .eq('user_id', user.id)
+               .single();
+
+            if (fetchError){
+                console.error("Error fetching quota after increment:", fetchError.message);
+                toast({ title: "Quota Update Warning", description: "Usage updated, but failed to refresh full quota details.", variant: "default" });
+                // Fallback: update count based on remaining, keep old limit/reset time
+                 setQuota(prev => prev ?
+                    { ...prev, request_count: prev.quota_limit - newRemaining } :
+                    { user_id: user.id, request_count: DEFAULT_QUOTA_LIMIT - newRemaining, quota_limit: DEFAULT_QUOTA_LIMIT, last_reset_at: new Date().toISOString(), created_at: new Date().toISOString(), ip_address: null} // Basic fallback structure
+                 );
+
+            } else if (updatedQuotaData) {
+                setQuota(updatedQuotaData); // Set the full updated state
+            }
+
            if (newRemaining < 0) { // Should be caught by DB, but double-check
                toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
-               return false;
+               return false; // Treat as failure if somehow negative remaining
            }
        } else {
-            // Fallback: refetch quota state if RPC doesn't return remaining
+            // Fallback: refetch quota state if RPC doesn't return remaining (less ideal)
             console.warn("increment_quota RPC did not return a number. Refetching quota.");
             const { data: refreshedQuota, error: refreshError } = await supabase
                 .from('quotas')
@@ -224,11 +253,10 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
             }
        }
 
-
-      return true; // Increment successful (or at least attempted)
+      return true; // Increment successful
     } catch (rpcError: any) {
         // Revert optimistic update on RPC error
-        setQuota(quota);
+        if (optimisticQuota) setQuota(quota);
       console.error("RPC Error incrementing quota:", rpcError.message);
       toast({ title: "Quota Error", description: `An unexpected error occurred updating usage: ${rpcError.message}`, variant: "destructive" });
       return false;
@@ -264,20 +292,20 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
        return;
     }
 
-    // 2. Check Quota
-    if (!await checkAndIncrementQuota(3)) { // Check and increment by 3 (1 summary + 2 posts initially shown)
-       return;
-    }
-
+    // 2. Check Input
     if (!contentInput.trim()) {
       toast({ title: "Input Required", description: "Please enter content or a URL.", variant: "destructive" });
-       // No quota used yet, so no need to revert
-       // Rollback the quota increment since the operation didn't proceed
-       await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -3 });
-       setQuota(prev => prev ? { ...prev, request_count: prev.request_count - 3 } : null);
-      return;
+      return; // No quota check needed if input is empty
     }
 
+
+    // 3. Check and Increment Quota (BEFORE starting generation)
+     // Cost: 1 for summary + 3 for posts = 4 total
+    if (!await checkAndIncrementQuota(4)) {
+       return; // Stop if quota check/increment fails
+    }
+
+    // --- If quota check passed, proceed ---
     setIsGeneratingSummary(true);
     setIsGeneratingPosts(true);
     setSummary(null);
@@ -287,71 +315,88 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
     const apiKey = profile.gemini_api_key;
 
     startTransition(async () => {
-        try {
-        // --- Quota already checked and incremented ---
-
-        // 1. Summarize Content
-        const summaryResult = await summarizeContent({ content: contentInput }, { apiKey });
-        setSummary(summaryResult.summary);
-        setIsGeneratingSummary(false); // Summary done
-
-        // 2. Generate Posts for all platforms concurrently
+        let summarySuccess = false;
+        let postsSuccessCount = 0;
         const platforms: SocialPlatform[] = ['linkedin', 'twitter', 'youtube'];
-        const postPromises = platforms.map(platform =>
-          generateSocialPosts({ summary: summaryResult.summary, platform }, { apiKey })
-            .then(result => ({ platform, post: result.post }))
-            .catch(async (err) => { // Make catch async
-               console.error(`Error generating ${platform} post:`, err);
-               // Decrement quota if generation failed for this specific post
-               await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -1 });
-               setQuota(prev => prev ? { ...prev, request_count: prev.request_count - 1 } : null);
+        let summaryResult: SummarizeContentOutput | null = null;
 
-                let description = `Error generating ${platform} post.`;
-                if (err.message.includes("API key not valid")) {
-                   description = "AI service configuration error (API key). Please check your profile."
-                } else if (err.message.includes("503") || err.message.toLowerCase().includes("overloaded")) {
-                    description = `AI service is temporarily overloaded generating ${platform} post. Please try again later.`;
-                } else if (err.status === 'INVALID_ARGUMENT' && err.message.includes("API key is required")) {
-                    // This shouldn't happen if we check upfront, but good to handle
-                    description = "API Key was missing during generation.";
-                }
-                toast({ title: "Generation Failed", description: description, variant: "destructive" });
-               return { platform, post: `Error generating post for ${platform}.` };
-            })
-        );
-
-        const results = await Promise.all(postPromises);
-        const newDrafts = results.reduce((acc, { platform, post }) => {
-          acc[platform] = post;
-          return acc;
-        }, {} as PostDrafts);
-
-        setPostDrafts(newDrafts);
-
-      } catch (error: any) {
-        console.error("Generation failed:", error);
-        // Revert the initial quota increment if the whole process fails (e.g., summarization)
-        await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -3 });
-        setQuota(prev => prev ? { ...prev, request_count: prev.request_count - 3 } : null);
-
-        let description = "An error occurred during generation.";
-        // No longer check quota exceeded here, as checkAndIncrement handles it
-        if (error.message.includes("parsing")) {
-           description = "Could not parse content from the URL. Please check the URL or paste text directly.";
-        } else if (error.message.includes("API key not valid")) {
-           description = "AI service configuration error (API key). Please check your profile."
-        } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded")) {
-            description = "AI service is temporarily overloaded during summarization. Please try again later.";
-        } else if (error.status === 'INVALID_ARGUMENT' && error.message.includes("API key is required")) {
-             description = "API Key was missing during generation.";
+        try {
+          // 1. Summarize Content
+          summaryResult = await summarizeContent({ content: contentInput }, { apiKey });
+          setSummary(summaryResult.summary);
+          summarySuccess = true; // Mark summary as successful
+        } catch (summaryError: any) {
+           console.error("Summarization failed:", summaryError);
+           let description = "Error summarizing content.";
+            if (summaryError.message.includes("parsing")) {
+               description = "Could not parse content from the URL. Please check the URL or paste text directly.";
+            } else if (summaryError.message.includes("API key not valid")) {
+               description = "AI service configuration error (API key). Please check your profile.";
+            } else if (summaryError.message.includes("503") || summaryError.message.toLowerCase().includes("overloaded")) {
+                description = "AI service is temporarily overloaded during summarization. Please try again later.";
+            } else if (summaryError.status === 'INVALID_ARGUMENT' && summaryError.message.includes("API key is required")) {
+                 description = "API Key was missing during generation.";
+            }
+           toast({ title: "Summarization Failed", description: description, variant: "destructive" });
+           // Don't set summary, proceed to finally block for quota rollback
+        } finally {
+            setIsGeneratingSummary(false); // Summary attempt finished
         }
-        toast({ title: "Generation Failed", description: description, variant: "destructive" });
-         setSummary(null); // Clear summary on error
-         setPostDrafts({}); // Clear drafts on error
-      } finally {
-        setIsGeneratingSummary(false); // Ensure both are false at the end
-        setIsGeneratingPosts(false);
-      }
+
+        // 2. Generate Posts (only if summary succeeded)
+        if (summarySuccess && summaryResult) {
+          const postPromises = platforms.map(platform =>
+            generateSocialPosts({ summary: summaryResult!.summary, platform }, { apiKey })
+              .then(result => {
+                  postsSuccessCount++; // Increment success count
+                  return { platform, post: result.post };
+              })
+              .catch(async (err) => { // Make catch async for potential rollback
+                 console.error(`Error generating ${platform} post:`, err);
+                  let description = `Error generating ${platform} post.`;
+                  if (err.message.includes("API key not valid")) {
+                     description = "AI service configuration error (API key). Please check your profile."
+                  } else if (err.message.includes("503") || err.message.toLowerCase().includes("overloaded")) {
+                      description = `AI service is temporarily overloaded generating ${platform} post. Please try again later.`;
+                  } else if (err.status === 'INVALID_ARGUMENT' && err.message.includes("API key is required")) {
+                      description = "API Key was missing during generation.";
+                  }
+                  toast({ title: "Post Generation Failed", description: description, variant: "destructive" });
+                 return { platform, post: `Error generating post for ${platform}.` }; // Return error placeholder
+              })
+          );
+
+          const results = await Promise.all(postPromises);
+          const newDrafts = results.reduce((acc, { platform, post }) => {
+            acc[platform] = post;
+            return acc;
+          }, {} as PostDrafts);
+          setPostDrafts(newDrafts);
+        } else if (!summarySuccess) {
+            // If summary failed, clear drafts as well
+             setPostDrafts({});
+        }
+
+        // --- Final Quota Adjustment ---
+         const totalCostAttempted = 4;
+         const actualCost = (summarySuccess ? 1 : 0) + postsSuccessCount;
+         const refundAmount = totalCostAttempted - actualCost;
+
+         if (refundAmount > 0) {
+             console.log(`Refunding ${refundAmount} quota points due to errors.`);
+             await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -refundAmount });
+             // Refetch quota to reflect refund
+             const { data: refreshedQuota, error: refreshError } = await supabase
+                .from('quotas')
+                .select('*')
+                .eq('user_id', user.id)
+                .single();
+             if (!refreshError && refreshedQuota) {
+                setQuota(refreshedQuota);
+             }
+         }
+
+         setIsGeneratingPosts(false); // All post generation attempts finished
     });
   };
 
@@ -368,31 +413,42 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
        return;
     }
 
-    // 2. Check and Increment Quota
+     const originalPost = postDrafts[platform];
+    if (!originalPost || originalPost.startsWith("Error generating")) {
+        toast({ title: "Cannot Tune", description: "Cannot tune a post that failed generation.", variant: "destructive" });
+        return;
+    }
+
+    // 2. Check and Increment Quota (Cost: 1)
     if (!await checkAndIncrementQuota(1)) {
         return;
     }
 
-    const originalPost = postDrafts[platform];
-    if (!originalPost) return; // Should not happen if button is enabled
-
+    // --- If quota check passed, proceed ---
     setIsTuning(prev => ({ ...prev, [platform]: true }));
     const apiKey = profile.gemini_api_key;
 
     startTransition(async () => {
       try {
-        // --- Quota already checked ---
         const tunedResult = await tuneSocialPosts({ originalPost, feedback }, { apiKey });
         setPostDrafts(prev => ({ ...prev, [platform]: tunedResult.tunedPost }));
          toast({ title: "Post Tuned!", description: `Applied feedback: "${feedback}"`, variant: "default" });
       } catch (error: any) {
         console.error(`Tuning ${platform} post failed:`, error);
-        // Revert quota increment on failure
+        // --- Rollback Quota on Failure ---
         await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -1 });
-        setQuota(prev => prev ? { ...prev, request_count: prev.request_count - 1 } : null);
+         // Refetch quota to reflect refund
+         const { data: refreshedQuota, error: refreshError } = await supabase
+            .from('quotas')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+         if (!refreshError && refreshedQuota) {
+            setQuota(refreshedQuota);
+         }
+
 
          let description = "An error occurred while tuning the post.";
-          // No longer check quota exceeded here
           if (error.message.includes("API key not valid")) {
              description = "AI service configuration error (API key). Please check your profile."
           } else if (error.message.includes("503") || error.message.toLowerCase().includes("overloaded")) {
@@ -420,20 +476,23 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
         return;
     }
 
+    const postContent = postDrafts[platform];
+    if (!postContent || postContent.startsWith("Error generating")) {
+         toast({ title: "Cannot Publish", description: "Cannot publish a post that failed generation.", variant: "destructive" });
+        return;
+    }
+
+
      // 2. Check and Increment Quota (assuming publishing costs 1 credit)
      if (!await checkAndIncrementQuota(1)) {
          return;
      }
 
-    const postContent = postDrafts[platform];
-    if (!postContent) return;
-
+     // --- If quota check passed, proceed ---
     setIsPublishing(prev => ({ ...prev, [platform]: true }));
 
     startTransition(async () => {
       try {
-        // --- Quota already checked ---
-
         // Placeholder for actual Composio MCP publishing call using profile.composio_url
         console.log(`Publishing to ${platform} via ${profile.composio_url}:`, postContent);
         await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
@@ -445,12 +504,20 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
 
       } catch (error: any) {
          console.error(`Publishing to ${platform} failed:`, error);
-         // Revert quota increment on failure
+        // --- Rollback Quota on Failure ---
          await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -1 });
-         setQuota(prev => prev ? { ...prev, request_count: prev.request_count - 1 } : null);
+         // Refetch quota to reflect refund
+         const { data: refreshedQuota, error: refreshError } = await supabase
+            .from('quotas')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+         if (!refreshError && refreshedQuota) {
+            setQuota(refreshedQuota);
+         }
+
 
          let description = "An error occurred while publishing the post.";
-          // No longer check quota exceeded here
           if (error.message.includes("authentication") || error.message.includes("connect")) { // Example error check
               description = `Please connect your ${platform} account via Composio first.`
               // TODO: Add link/button to connect account via Composio OAuth flow (using profile.composio_url?)
@@ -473,18 +540,32 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
   };
 
 
+  // Determine if generation/tuning should be globally disabled
+  const isDisabled = isPending || quotaExceeded || !!dbSetupError;
+
+
   return (
     <TooltipProvider>
     <div className="flex flex-col min-h-screen bg-background text-foreground p-4 md:p-8">
       {/* Header */}
-      <header className="flex justify-between items-center mb-6 md:mb-8">
-         <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
-           <Zap className="h-6 w-6 text-primary" />
-           <h1 className="text-2xl font-bold text-gradient">VibeFlow</h1>
-         </Link>
+       <header className="flex justify-between items-center mb-6 md:mb-8">
+          <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
+            <Zap className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold text-gradient">VibeFlow</h1>
+          </Link>
         <div className="flex items-center gap-3 md:gap-4">
            {/* Quota Display */}
-           {quota !== null && !dbSetupError ? ( // Hide quota if DB error
+           {dbSetupError ? ( // Show DB Error state first
+                <Tooltip>
+                   <TooltipTrigger asChild>
+                       <div className="flex items-center gap-1 text-sm text-destructive">
+                           <Database className="h-4 w-4" />
+                           <span>DB Error</span>
+                       </div>
+                   </TooltipTrigger>
+                   <TooltipContent><p>Database setup required. See alerts.</p></TooltipContent>
+               </Tooltip>
+           ) : quota !== null ? ( // If no DB error and quota loaded
              <Tooltip>
                <TooltipTrigger asChild>
                   <div className="flex flex-col items-end cursor-help">
@@ -495,22 +576,12 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                       <Progress value={(quotaUsed / quotaLimit) * 100} className="w-20 h-1 mt-0.5" />
                   </div>
                </TooltipTrigger>
-               <TooltipContent>
-                 <p>Requests used this month.</p>
+               <TooltipContent side="bottom" align="end">
+                 <p>{quotaRemaining} requests remaining this month.</p>
                   {/* Add billing info/link here later */}
                </TooltipContent>
              </Tooltip>
-           ) : dbSetupError ? (
-                <Tooltip>
-                   <TooltipTrigger asChild>
-                       <div className="flex items-center gap-1 text-sm text-destructive">
-                           <Database className="h-4 w-4" />
-                           <span>DB Error</span>
-                       </div>
-                   </TooltipTrigger>
-                   <TooltipContent><p>Database setup required</p></TooltipContent>
-               </Tooltip>
-           ) : ( // Loading state
+           ) : ( // Loading state (only if no DB error)
                <div className="flex items-center gap-1 text-sm text-muted-foreground">
                    <Loader2 className="h-4 w-4 animate-spin"/>
                    <span>Loading quota...</span>
@@ -545,7 +616,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
              <Database className="h-4 w-4" /> {/* Changed icon */}
             <AlertTitle>Database Setup Incomplete</AlertTitle>
             <AlertDescription>
-              {dbSetupError}
+              {dbSetupError} Please ensure you have run the **entire updated** SQL script from `supabase/schema.sql` in your Supabase SQL Editor.
             </AlertDescription>
           </Alert>
         )}
@@ -560,7 +631,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
               You've used all your requests for this month. Please{' '}
                 {/* Add link to upgrade/billing page here */}
                 <Button variant="link" className="p-0 h-auto text-destructive-foreground underline" onClick={() => setIsProfileDialogOpen(true)}>upgrade your plan</Button>
-                {' '}or wait until next month.
+                {' '}or wait until next month for the quota to reset.
             </AlertDescription>
           </Alert>
         )}
@@ -580,13 +651,13 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
               value={contentInput}
               onChange={(e) => setContentInput(e.target.value)}
               className="min-h-[200px] md:min-h-[300px] lg:min-h-[400px] bg-input/50 border-border/50 text-base resize-none h-full" // Make textarea take available height
-              disabled={isPending || quotaExceeded || !!dbSetupError} // Disable during any transition or if DB error
+              disabled={isDisabled} // Use the combined disabled state
             />
           </CardContent>
           <CardFooter>
             <Button
               onClick={handleGenerate}
-              disabled={isPending || !contentInput.trim() || quotaExceeded || !profile?.gemini_api_key || !!dbSetupError} // Also disable if key is missing or DB error
+              disabled={isDisabled || !contentInput.trim() || !profile?.gemini_api_key} // Also disable if key is missing
               loading={isGeneratingSummary || isGeneratingPosts} // Show loading only for generation
               className="w-full md:w-auto ml-auto"
             >
@@ -615,7 +686,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                 </div>
              )}
 
-            {summary && Object.keys(postDrafts).length > 0 && !dbSetupError && ( // Only show tabs if no DB error
+            {summary && Object.keys(postDrafts).length > 0 && !dbSetupError && ( // Only show tabs if no DB error and we have content
               <Tabs defaultValue="linkedin" className="w-full flex flex-col h-full"> {/* Flex column for tabs */}
                 <TabsList className="grid w-full grid-cols-3 bg-muted/50 mb-4 shrink-0"> {/* Prevent list from growing */}
                   <TabsTrigger value="linkedin"><Linkedin className="h-4 w-4 mr-1 inline"/> LinkedIn</TabsTrigger>
@@ -633,49 +704,59 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                               <Loader2 className="h-6 w-6 animate-spin text-primary-foreground"/>
                            </div>
                          )}
-                        <Textarea
-                          value={postDrafts[platform] || ''}
-                          readOnly // Make textarea read-only, tuning happens via buttons
-                          className="min-h-[150px] bg-input/30 border-border/30 resize-none text-sm h-full" // Full height textarea
-                        />
-                        {/* Tuning Buttons */}
-                         <div className="flex flex-wrap gap-2 shrink-0"> {/* Prevent tuning buttons from growing */}
-                          <span className="text-xs text-muted-foreground mr-2 mt-1.5">Tune:</span>
-                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Make wittier')} disabled={isPending || quotaExceeded || !postDrafts[platform]}>Witty</Button>
-                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More concise')} disabled={isPending || quotaExceeded || !postDrafts[platform]}>Concise</Button>
-                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More professional')} disabled={isPending || quotaExceeded || !postDrafts[platform]}>Professional</Button>
-                           <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Add emojis')} disabled={isPending || quotaExceeded || !postDrafts[platform]}>Add Emojis ✨</Button>
-                         </div>
+                         {postDrafts[platform]?.startsWith("Error generating") ? (
+                            <div className="flex h-full items-center justify-center text-destructive p-4 border border-dashed border-destructive/50 rounded-md">
+                                {postDrafts[platform]}
+                            </div>
+                         ) : (
+                            <Textarea
+                              value={postDrafts[platform] || ''}
+                              readOnly // Make textarea read-only, tuning happens via buttons
+                              className="min-h-[150px] bg-input/30 border-border/30 resize-none text-sm h-full" // Full height textarea
+                            />
+                         )}
+                        {/* Tuning Buttons (only show if post generated successfully) */}
+                        {!postDrafts[platform]?.startsWith("Error generating") && (
+                             <div className="flex flex-wrap gap-2 shrink-0"> {/* Prevent tuning buttons from growing */}
+                              <span className="text-xs text-muted-foreground mr-2 mt-1.5">Tune:</span>
+                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Make wittier')} disabled={isDisabled || !postDrafts[platform]}>Witty</Button>
+                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More concise')} disabled={isDisabled || !postDrafts[platform]}>Concise</Button>
+                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More professional')} disabled={isDisabled || !postDrafts[platform]}>Professional</Button>
+                               <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Add emojis')} disabled={isDisabled || !postDrafts[platform]}>Add Emojis ✨</Button>
+                             </div>
+                        )}
                       </CardContent>
-                      <CardFooter className="flex justify-end gap-2 shrink-0"> {/* Prevent footer from growing */}
-                        <Tooltip>
-                           <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" onClick={() => copyToClipboard(postDrafts[platform])} disabled={!postDrafts[platform] || isPublishing[platform]}>
-                                 <Copy className="h-4 w-4" />
-                              </Button>
-                           </TooltipTrigger>
-                           <TooltipContent><p>Copy Post</p></TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              onClick={() => handlePublishPost(platform)}
-                              disabled={!postDrafts[platform] || isPending || quotaExceeded || !profile?.composio_url} // Disable if no composio URL
-                              loading={isPublishing[platform]}
-                              size="sm"
-                            >
-                              <Send className="mr-1.5 h-4 w-4" /> Publish to {platform.charAt(0).toUpperCase() + platform.slice(1)}
-                            </Button>
-                          </TooltipTrigger>
-                           <TooltipContent>
-                             {!profile?.composio_url
-                                ? <p>Add Composio URL in profile to publish</p>
-                                : <p>Publish this post (placeholder)</p>
-                             }
-                           </TooltipContent>
-                        </Tooltip>
-
-                      </CardFooter>
+                       {/* Footer (only show if post generated successfully) */}
+                       {!postDrafts[platform]?.startsWith("Error generating") && (
+                          <CardFooter className="flex justify-end gap-2 shrink-0"> {/* Prevent footer from growing */}
+                            <Tooltip>
+                               <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" onClick={() => copyToClipboard(postDrafts[platform])} disabled={!postDrafts[platform] || isPublishing[platform]}>
+                                     <Copy className="h-4 w-4" />
+                                  </Button>
+                               </TooltipTrigger>
+                               <TooltipContent><p>Copy Post</p></TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  onClick={() => handlePublishPost(platform)}
+                                  disabled={isDisabled || !postDrafts[platform] || !profile?.composio_url} // Disable if no composio URL or other issues
+                                  loading={isPublishing[platform]}
+                                  size="sm"
+                                >
+                                  <Send className="mr-1.5 h-4 w-4" /> Publish to {platform.charAt(0).toUpperCase() + platform.slice(1)}
+                                </Button>
+                              </TooltipTrigger>
+                               <TooltipContent>
+                                 {!profile?.composio_url
+                                    ? <p>Add Composio URL in profile to publish</p>
+                                    : <p>Publish this post (placeholder)</p>
+                                 }
+                               </TooltipContent>
+                            </Tooltip>
+                          </CardFooter>
+                       )}
                     </Card>
                   </TabsContent>
                 ))}
@@ -697,7 +778,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
           onOpenChange={setIsProfileDialogOpen}
           user={user}
           initialProfile={profile}
-          initialQuota={quota}
+          initialQuota={quota} // Pass potentially null quota
           onProfileUpdate={handleProfileUpdate}
         />
     </div>

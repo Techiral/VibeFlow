@@ -57,7 +57,12 @@ CREATE POLICY "Allow authenticated users to view own quota"
   ON public.quotas FOR SELECT
   USING (auth.uid() = user_id);
 
--- Note: Updates to quota should ideally be handled by secure functions
+-- Add INSERT policy for quotas
+CREATE POLICY "Allow authenticated users to insert own quota"
+  ON public.quotas FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Note: Updates to quota should ideally be handled by secure functions (increment_quota)
 
 
 -- 3. get_user_profile Function (Upsert Logic)
@@ -75,8 +80,14 @@ BEGIN
 
   -- If profile doesn't exist, insert a new one
   IF NOT FOUND THEN
-    INSERT INTO public.profiles (id) VALUES (p_user_id)
-    RETURNING * INTO profile_record;
+    -- Temporarily bypass RLS for the insert operation within the function
+    -- This requires the function owner (usually postgres) to have insert permissions.
+    SET LOCAL role postgres; -- Or the appropriate superuser/owner role
+    INSERT INTO public.profiles (id) VALUES (p_user_id);
+    RESET role; -- Reset role back to the caller
+
+    -- Re-fetch the newly inserted profile
+    SELECT * INTO profile_record FROM public.profiles WHERE id = p_user_id;
   END IF;
 
   -- Return the found or newly created profile
@@ -89,10 +100,12 @@ GRANT EXECUTE ON FUNCTION public.get_user_profile(uuid) TO authenticated;
 
 
 -- 4. increment_quota Function (Handles Reset and Increment)
+-- SECURITY DEFINER allows this function to bypass RLS if needed for updates
 CREATE OR REPLACE FUNCTION public.increment_quota(p_user_id uuid, p_increment_amount integer)
 RETURNS integer -- Returns the new REMAINING quota
 LANGUAGE plpgsql
-SECURITY DEFINER -- Allow function to modify table
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   current_count integer;
@@ -102,6 +115,8 @@ DECLARE
   remaining_quota integer;
 BEGIN
   -- Get current quota details or initialize if not exists
+  -- This select runs as the calling user due to SECURITY DEFINER context,
+  -- but the SELECT RLS policy allows them to see their own quota.
   SELECT
     COALESCE(q.request_count, 0),
     COALESCE(q.quota_limit, 100), -- Default limit
@@ -113,11 +128,14 @@ BEGIN
   FROM public.quotas q
   WHERE q.user_id = p_user_id;
 
-  -- If no record exists, create one (should ideally be handled on profile creation/first fetch)
+  -- If no record exists, create one using the INSERT policy
+  -- The calling user (authenticated) must have permission via the INSERT RLS policy
    IF NOT FOUND THEN
+     -- This INSERT runs as the calling user (authenticated)
+     -- The INSERT RLS policy 'Allow authenticated users to insert own quota' must exist.
      INSERT INTO public.quotas (user_id, request_count, quota_limit, last_reset_at)
      VALUES (p_user_id, 0, 100, now())
-     ON CONFLICT (user_id) DO NOTHING; -- Avoid race conditions
+     ON CONFLICT (user_id) DO NOTHING; -- Avoid race conditions if multiple calls happen
 
      -- Re-fetch after potential insert
       SELECT
@@ -130,6 +148,11 @@ BEGIN
         current_last_reset
       FROM public.quotas q
       WHERE q.user_id = p_user_id;
+
+      -- Check if re-fetch failed (should not happen if INSERT policy is correct)
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'Failed to create or find quota record for user % after initial insert attempt.', p_user_id;
+      END IF;
    END IF;
 
 
@@ -154,6 +177,9 @@ BEGIN
   END IF;
 
   -- Update the quota record
+  -- The SECURITY DEFINER context allows this UPDATE to bypass RLS,
+  -- as long as the function owner (postgres) has UPDATE permission.
+  -- This is generally safer than granting direct UPDATE RLS to users for quotas.
   INSERT INTO public.quotas (user_id, request_count, last_reset_at, quota_limit)
   VALUES (p_user_id, new_count, current_last_reset, current_limit)
   ON CONFLICT (user_id)
@@ -183,7 +209,8 @@ GRANT EXECUTE ON FUNCTION public.increment_quota(uuid, integer) TO authenticated
 CREATE OR REPLACE FUNCTION public.get_remaining_quota(p_user_id uuid)
 RETURNS integer
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY DEFINER -- Allows reading potentially reset counts even if RLS hides it briefly
+SET search_path = public
 AS $$
 DECLARE
   current_count integer;
@@ -192,6 +219,7 @@ DECLARE
   remaining_quota integer;
 BEGIN
   -- Get current quota details
+  -- SELECT runs as calling user, SELECT RLS policy must allow access
   SELECT
     COALESCE(q.request_count, 0),
     COALESCE(q.quota_limit, 100),
@@ -203,7 +231,7 @@ BEGIN
   FROM public.quotas q
   WHERE q.user_id = p_user_id;
 
-   -- If no record exists, assume full quota
+   -- If no record exists, assume full quota (should be rare after increment_quota logic)
    IF NOT FOUND THEN
      RETURN 100; -- Or default limit
    END IF;
@@ -213,7 +241,8 @@ BEGIN
     -- Quota should have been reset, return the full limit
     remaining_quota := current_limit;
 
-     -- Optional: Update the record here if found to be outdated (or rely on increment function)
+     -- Optional but recommended: Update the record here if found to be outdated
+     -- This runs under SECURITY DEFINER, allowing the reset even if user can't directly UPDATE.
      UPDATE public.quotas
      SET request_count = 0, last_reset_at = now()
      WHERE user_id = p_user_id;
@@ -230,12 +259,65 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_remaining_quota(uuid) TO authenticated;
 
--- 6. Seed initial profiles for existing users (Optional, run once after setup)
+
+-- 6. Handle New User (Create Profile and Quota)
+-- This trigger automatically creates a profile and quota entry when a new user signs up.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER -- Needs elevated privileges to insert into tables
+SET search_path = public
+AS $$
+BEGIN
+  -- Insert into profiles table
+  INSERT INTO public.profiles (id)
+  VALUES (new.id);
+
+  -- Insert into quotas table
+  INSERT INTO public.quotas (user_id) -- Let defaults handle count, limit, reset time
+  VALUES (new.id);
+
+  RETURN new;
+END;
+$$;
+
+-- Trigger after insert on auth.users table
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+
+-- 7. Seed initial profiles for existing users (Optional, run once after setup if needed)
+-- This might be useful if you set up the app before adding the handle_new_user trigger.
 -- INSERT INTO public.profiles (id, updated_at)
 -- SELECT id, NOW() FROM auth.users
 -- ON CONFLICT (id) DO NOTHING;
 
--- 7. Seed initial quotas for existing users (Optional, run once after setup)
+-- 8. Seed initial quotas for existing users (Optional, run once after setup if needed)
+-- Similar to seeding profiles, run if needed for users created before the trigger.
 -- INSERT INTO public.quotas (user_id, last_reset_at, quota_limit)
 -- SELECT id, NOW(), 100 FROM auth.users
 -- ON CONFLICT (user_id) DO NOTHING;
+
+
+-- 9. Add a Failed Requests Table (Optional but good practice)
+CREATE TABLE public.failed_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    request_type TEXT NOT NULL,
+    error_message TEXT NOT NULL,
+    request_payload JSONB -- Store input data that caused the failure
+);
+
+ALTER TABLE public.failed_requests ENABLE ROW LEVEL SECURITY;
+
+-- Allow admin/service role to view failed requests
+CREATE POLICY "Allow admin read access to failed requests"
+    ON public.failed_requests FOR SELECT
+    USING (true); -- Adjust role/condition as needed
+
+-- Allow service role (or function) to insert failed requests
+CREATE POLICY "Allow service role insert access to failed requests"
+    ON public.failed_requests FOR INSERT
+    WITH CHECK (true); -- Adjust role/condition as needed

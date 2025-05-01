@@ -162,11 +162,12 @@ async (input, flowOptions) => { // Receive flowOptions here
             }
 
             // Check for retriable errors (5xx, UNAVAILABLE, etc.) or empty summary
+            const message = error.message?.toLowerCase() || ''; // Get lowercase message for checks
             if (isRetriableError(error) && retries < MAX_RETRIES - 1) {
                 let reason = "AI service unavailable/overloaded";
                 if (error.message === "AI returned an empty summary.") {
                     reason = "Received empty summary";
-                } else if (error.status === 'RESOURCE_EXHAUSTED' || error.message?.includes('rate limit exceeded')) {
+                } else if (error.status === 'RESOURCE_EXHAUSTED' || message.includes('rate limit exceeded')) {
                      reason = "AI service rate limit potentially hit";
                 }
                 console.warn(`SummarizeContentFlow: ${reason}. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
@@ -183,11 +184,11 @@ async (input, flowOptions) => { // Receive flowOptions here
 
                   if (error instanceof GenkitError) {
                      finalStatus = error.status ?? finalStatus;
-                  } else if (isRetriableError(error)) {
+                 } else if (isRetriableError(error)) {
                       // Even if retriable, if retries are exhausted, report based on type
-                      if (error.status === 503 || error.message?.includes('503') || error.message?.includes('overloaded')) {
+                      if (error.status === 503 || message.includes('503') || message.includes('overloaded') || message.includes('service unavailable')) {
                           finalStatus = 'UNAVAILABLE';
-                      } else if (error.status === 'RESOURCE_EXHAUSTED' || error.message?.includes('rate limit exceeded')) {
+                      } else if (error.status === 'RESOURCE_EXHAUSTED' || message.includes('rate limit exceeded')) {
                            finalStatus = 'RESOURCE_EXHAUSTED';
                       } else {
                            finalStatus = 'INTERNAL'; // Default for other retriable errors after exhaustion

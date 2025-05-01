@@ -171,9 +171,10 @@ async (input, flowOptions) => { // Receive flowOptions
                      finalStatus = error.status ?? finalStatus;
                  } else if (isRetriableError(error)) {
                      // Even if retriable, if retries are exhausted, report based on type
-                      if (error.status === 503 || error.message?.includes('503') || error.message?.includes('overloaded')) {
+                      const message = error.message?.toLowerCase() || ''; // Get lowercase message for checks
+                      if (error.status === 503 || message.includes('503') || message.includes('overloaded') || message.includes('service unavailable')) {
                           finalStatus = 'UNAVAILABLE';
-                      } else if (error.status === 'RESOURCE_EXHAUSTED' || error.message?.includes('rate limit exceeded')) {
+                      } else if (error.status === 'RESOURCE_EXHAUSTED' || message.includes('rate limit exceeded')) {
                            finalStatus = 'RESOURCE_EXHAUSTED';
                       } else {
                            finalStatus = 'INTERNAL'; // Default for other retriable errors after exhaustion
@@ -205,4 +206,3 @@ async (input, flowOptions) => { // Receive flowOptions
     // Should be unreachable if MAX_RETRIES > 0
     throw new GenkitError({ status: 'DEADLINE_EXCEEDED', message: "TuneSocialPostsFlow: Max retries reached after encountering errors."});
 });
-

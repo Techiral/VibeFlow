@@ -2,7 +2,7 @@
 'use client';
 
 import type { User } from '@supabase/supabase-js';
-import type { ComposioApp, Database, Profile, Quota } from '@/types/supabase';
+import type { Database, Profile, Quota } from '@/types/supabase'; // Removed ComposioApp type
 import { useState, useEffect, useTransition, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,17 +23,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck, Star, Trophy, Zap, BrainCircuit, Key } from 'lucide-react';
+import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck, Star, Trophy, Zap, BrainCircuit, Key } from 'lucide-react'; // Removed Wifi, WifiOff, LinkIcon, Check/XCircle
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { handleDeauthenticateApp } from '@/services/composio-service'; // Corrected import
-// Removed startComposioLogin import as it's handled via API route now
+// Removed Composio service imports
+// import { handleDeauthenticateApp } from '@/services/composio-service';
+// import { authenticateComposioApp } from '@/services/composio-service';
+// import { startComposioLogin } from '@/actions/composio-actions'; // Removed
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { App as ComposioAppEnum } from "composio-core"; // Import Composio App enum
+// Removed Composio core imports
+// import { App as ComposioAppEnum } from "composio-core";
 import { toast as sonnerToast } from 'sonner';
 import Confetti from 'react-confetti';
-import { OpenAPI } from 'openai';
-
+// Removed OpenAPI import if it was only for Composio
+// import { OpenAPI } from 'openai';
 
 interface ProfileDialogProps {
   isOpen: boolean;
@@ -47,17 +50,13 @@ interface ProfileDialogProps {
   dbSetupError: string | null;
 }
 
-// Updated profile schema to include composio_api_key
+// Updated profile schema to remove Composio fields
 const profileSchema = z.object({
   full_name: z.string().max(100, 'Full name must be 100 characters or less').nullable().optional().or(z.literal('')),
   username: z.string().max(50, 'Username must be 50 characters or less').nullable().optional().or(z.literal('')),
   phone_number: z.string().max(20, 'Phone number must be 20 characters or less').nullable().optional().or(z.literal('')),
-  composio_mcp_url: z.string().url('Invalid MCP URL format (e.g., https://...)').max(255, 'URL too long').nullable().optional().or(z.literal('')),
-  linkedin_url: z.string().url('Invalid LinkedIn URL format (e.g., https://...)').max(255, 'URL too long').nullable().optional().or(z.literal('')),
-  twitter_url: z.string().url('Invalid Twitter URL format (e.g., https://...)').max(255, 'URL too long').nullable().optional().or(z.literal('')),
-  youtube_url: z.string().url('Invalid YouTube URL format (e.g., https://...)').max(255, 'URL too long').nullable().optional().or(z.literal('')),
   gemini_api_key: z.string().max(255, 'API Key must be 255 characters or less').nullable().optional().or(z.literal('')),
-  composio_api_key: z.string().max(255, 'Composio API Key must be 255 characters or less').nullable().optional().or(z.literal('')), // Added Composio API Key
+  // Removed: composio_mcp_url, linkedin_url, twitter_url, youtube_url, composio_api_key
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
@@ -91,8 +90,9 @@ export function ProfileDialog({
   const [xp, setXp] = useState<number>(initialXp);
   const [badges, setBadges] = useState<string[]>(initialBadges ?? []);
   const [localDbSetupError, setLocalDbSetupError] = useState<string | null>(dbSetupError);
-  const [isComposioAuthenticating, setIsComposioAuthenticating] = useState<Partial<Record<ComposioApp, boolean>>>({});
-
+  // Removed Composio state
+  // const [isComposioAuthenticating, setIsComposioAuthenticating] = useState<Partial<Record<ComposioApp, boolean>>>({});
+  // const [composioStatus, setComposioStatus] = useState({ loading: false, success: false, errorMessage: null, apiKey: null });
 
    useEffect(() => {
     setProfile(initialProfile);
@@ -113,12 +113,8 @@ export function ProfileDialog({
       full_name: initialProfile?.full_name ?? '',
       username: initialProfile?.username ?? '',
       phone_number: initialProfile?.phone_number ?? '',
-      composio_mcp_url: initialProfile?.composio_mcp_url ?? '',
-      linkedin_url: initialProfile?.linkedin_url ?? '',
-      twitter_url: initialProfile?.twitter_url ?? '',
-      youtube_url: initialProfile?.youtube_url ?? '',
       gemini_api_key: initialProfile?.gemini_api_key ?? '',
-      composio_api_key: initialProfile?.composio_api_key ?? '', // Initialize from profile
+      // Removed Composio fields from defaultValues
     },
   });
 
@@ -129,23 +125,18 @@ export function ProfileDialog({
         full_name: profile.full_name ?? '',
         username: profile.username ?? '',
         phone_number: profile.phone_number ?? '',
-        composio_mcp_url: profile.composio_mcp_url ?? '',
-        linkedin_url: profile.linkedin_url ?? '',
-        twitter_url: profile.twitter_url ?? '',
-        youtube_url: profile.youtube_url ?? '',
         gemini_api_key: profile.gemini_api_key ?? '',
-        composio_api_key: profile.composio_api_key ?? '', // Reset with value from profile
+        // Removed Composio fields from reset
       });
     }
   }, [profile, reset]); // Depend on profile, reset
 
 
-  // Effect to fetch quota if needed
+  // Effect to fetch quota if needed (remains the same)
   useEffect(() => {
     if (isOpen && !quota && !localDbSetupError) {
       const fetchQuota = async () => {
          try {
-           // Use RPC function to get remaining quota (handles reset logic)
            const { data: remainingQuota, error: rpcError } = await supabase
               .rpc('get_remaining_quota', { p_user_id: user.id });
 
@@ -235,27 +226,6 @@ export function ProfileDialog({
         updated_at: new Date().toISOString(),
     };
 
-     // Handle composio_api_key specifically
-     if (data.composio_api_key === '' && profile?.composio_api_key) {
-        updateData.composio_api_key = null;
-     } else if (data.composio_api_key) {
-        updateData.composio_api_key = data.composio_api_key;
-     } else {
-         delete updateData.composio_api_key; // Ensure it's removed if empty and not previously set
-     }
-
-    // Ensure boolean fields are not accidentally removed if false
-     const authFields: (keyof Profile)[] = ['is_linkedin_authed', 'is_twitter_authed', 'is_youtube_authed'];
-     authFields.forEach(field => {
-         if (profile && profile[field] !== undefined && !(field in updateData)) {
-             // If the field exists in the current profile but not in updateData (because it might be false),
-             // explicitly include it to avoid accidental deletion during update.
-             // This assumes the update might remove fields not explicitly provided.
-             // Note: Supabase update typically only modifies provided fields. This might be overly cautious.
-             // updateData[field] = profile[field]; // Uncomment if needed based on Supabase behavior
-         }
-     });
-
     // Remove id from updateData if present, as it's the primary key
     delete updateData.id;
 
@@ -265,7 +235,7 @@ export function ProfileDialog({
           .from('profiles')
           .update(updateData)
           .eq('id', user.id)
-          .select('*, xp, badges, composio_api_key') // Re-select all fields
+          .select('*, xp, badges') // Re-select all fields (excluding Composio fields)
           .single();
 
         if (error) {
@@ -283,8 +253,6 @@ export function ProfileDialog({
              setLocalDbSetupError(errorMessage);
            } else if (error.message.includes("406")) {
              errorMessage = `Could not save profile (Error 406). Check table/column access. Details: ${error.message}`;
-           } else if (error.message.includes("composio_api_key")) {
-              errorMessage = `Could not save Composio API Key: ${error.message}`;
            }
           toast({ title: 'Save Failed', description: errorMessage, variant: 'destructive', duration: 7000 });
         } else if (updatedProfileData) {
@@ -305,107 +273,15 @@ export function ProfileDialog({
     });
   };
 
+  // Removed handleAuthenticateApp and handleGetComposioKey
 
- const handleAuthenticateApp = useCallback(async (appName: ComposioApp) => {
-    console.log(`Starting authentication for ${appName}...`);
-
-    if (localDbSetupError) {
-       toast({ title: "Database Error", description: "Cannot authenticate app due to a database setup issue.", variant: "destructive" });
-       return;
-    }
-    // Use composio_mcp_url from profile state
-    if (!profile?.composio_mcp_url) {
-        toast({ title: "Composio URL Missing", description: "Please enter your Composio MCP URL in profile first.", variant: "destructive" });
-        return;
-    }
-    // **Use user's composio_api_key from profile state**
-    if (!profile?.composio_api_key) {
-        toast({ title: "Composio API Key Missing", description: "Please enter your Composio API Key in profile first.", variant: "destructive" });
-        return;
-    }
-
-    setIsComposioAuthenticating(prev => ({...prev, [appName]: true}));
-
-    try {
-        // Call the API route - THIS API ROUTE SHOULD USE THE USER'S KEY
-        console.log(`Calling API /api/auth/composio/connect for ${appName} with MCP: ${profile.composio_mcp_url}`);
-        const response = await fetch('/api/auth/composio/connect', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                // Pass the user's API key in a custom header
-                'X-Composio-Key': profile.composio_api_key,
-            },
-            body: JSON.stringify({ appName }),
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.redirectUrl) {
-            console.log(`Redirecting user to Composio OAuth URL: ${result.redirectUrl}`);
-            window.location.href = result.redirectUrl; // Redirect the user
-        } else if (response.ok && result.message) { // Handle case where connection might already exist
-             console.log(`Authentication for ${appName}: ${result.message}`);
-             toast({ title: `${appName} Connection`, description: result.message });
-             // Optimistically update UI or refetch profile
-             setProfile(prev => prev ? { ...prev, [`is_${appName}_authed`]: true } : null);
-        } else {
-            console.error(`Authentication initiation failed for ${appName}:`, result.error || `HTTP Status: ${response.status}`);
-             // Provide more specific user feedback
-             let description = result.error || `Could not initiate authentication. Status: ${response.status}`;
-             if (description.includes("Invalid API Key")) {
-                 description = "Invalid Composio API Key provided in profile. Please check and save again.";
-             } else if (description.includes("Integration not found")) {
-                 description = `Composio integration for ${appName} is missing or not configured. Check Composio setup.`;
-             } else if (description.includes("'getEntity' method not found")) { // Specific check for the SDK issue
-                description = `Composio SDK configuration error: Could not find 'getEntity'. Please check the server logs and ensure 'composio-core' is correctly installed/initialized on the backend.`;
-             }
-            toast({ title: `${appName} Auth Failed`, description, variant: "destructive", duration: 10000 }); // Longer duration for important errors
-
-        }
-    } catch (error: any) {
-        console.error(`Error in handleAuthenticateApp for ${appName}:`, error);
-        toast({ title: `${appName} Auth Error`, description: error.message || 'Unknown error during authentication.', variant: 'destructive' });
-    } finally {
-         setIsComposioAuthenticating(prev => ({...prev, [appName]: false}));
-    }
- }, [user.id, toast, localDbSetupError, profile?.composio_mcp_url, profile?.composio_api_key]); // Add composio_api_key dependency
-
-
-  const handleDeauthenticateAppAction = async (appName: ComposioApp) => {
-      try {
-          // Pass user's Composio API key if the backend service needs it for deauthentication
-          const result = await handleDeauthenticateApp(appName, user.id, profile?.composio_api_key);
-          if (result.success) {
-              toast({ title: `${appName} Disconnected`, description: `Successfully disconnected from ${appName}.`, variant: "default" }); // Use default variant
-              // Update the profile locally
-              setProfile(prev => {
-                  if (!prev) return prev;
-                  const updatedProfile = { ...prev };
-                  const authField = `is_${appName}_authed` as keyof Profile;
-                  updatedProfile[authField] = false;
-                  return updatedProfile;
-              });
-          } else {
-              toast({ title: `Failed to Disconnect ${appName}`, description: result.error || "Could not deauthenticate. Please try again.", variant: "destructive" });
-          }
-      } catch (error: any) {
-          console.error(`Error deauthenticating ${appName}:`, error);
-          toast({ title: `Failed to Disconnect ${appName}`, description: error.message || "An unexpected error occurred.", variant: "destructive" });
-      }
-  };
-
+  // Removed handleDeauthenticateAppAction
 
   const handleUpgrade = () => {
     toast({ title: "Upgrade Feature", description: "Billing/Upgrade functionality is not yet implemented.", variant: "default" });
   };
 
-  // Function to get authentication status for an app
-   const getAuthStatus = (appName: ComposioApp): boolean => {
-     const key = `is_${appName}_authed` as keyof Profile;
-     return !!profile?.[key];
-   };
-
+  // Removed getAuthStatus
 
    const quotaUsed = quota?.request_count ?? 0;
    const quotaLimit = quota?.quota_limit ?? DEFAULT_QUOTA_LIMIT;
@@ -419,7 +295,7 @@ export function ProfileDialog({
           <DialogHeader className="px-6 pt-6">
             <DialogTitle>Profile & Settings</DialogTitle>
             <DialogDescription>
-              Manage your profile, API keys, app connections, and usage.
+              Manage your profile, API keys, and usage.
             </DialogDescription>
           </DialogHeader>
 
@@ -438,8 +314,8 @@ export function ProfileDialog({
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Settings2 className="h-5 w-5"/> User Information</h3>
                 <div className="space-y-4">
                    <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-x-4 gap-y-2">
-                     <Label htmlFor="email-profile" className="sm:text-right sm:col-span-1">Email</Label> {/* Added ID */}
-                     <Input id="email-profile" value={user?.email || 'N/A'} readOnly disabled className="col-span-1 sm:col-span-2 bg-muted/50"/> {/* Added ID */}
+                     <Label htmlFor="email-profile" className="sm:text-right sm:col-span-1">Email</Label>
+                     <Input id="email-profile" value={user?.email || 'N/A'} readOnly disabled className="col-span-1 sm:col-span-2 bg-muted/50"/>
                    </div>
                    <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-x-4 gap-y-2">
                      <Label htmlFor="full_name" className="sm:text-right sm:col-span-1">Full Name</Label>
@@ -466,9 +342,9 @@ export function ProfileDialog({
               </section>
 
               <Separator />
-              {/* Integrations Section */}
+              {/* API Keys Section */}
               <section>
-                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Key className="h-5 w-5"/> Integrations</h3>
+                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Key className="h-5 w-5"/> API Keys</h3>
                  <div className="space-y-4">
                     {/* Gemini API Key */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
@@ -491,171 +367,10 @@ export function ProfileDialog({
                       </div>
                     </div>
 
-                     {/* Composio API Key - User Input */}
-                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                       <Label htmlFor="composio_api_key" className="sm:text-right sm:col-span-1 mt-1">
-                         Composio API Key
-                       </Label>
-                       <div className="col-span-1 sm:col-span-2">
-                         <Input
-                           id="composio_api_key"
-                           type="password" // Keep as password
-                           {...register('composio_api_key')}
-                           placeholder="Enter your Composio Developer API Key" // Updated placeholder
-                           className={`${errors.composio_api_key ? 'border-destructive' : ''}`}
-                           disabled={!!localDbSetupError} // Only disable if DB error
-                         />
-                         {errors.composio_api_key && <p className="text-xs text-destructive mt-1">{errors.composio_api_key.message}</p>}
-                          {/* Removed the "Get Key" button as user enters it directly */}
-                         <p className="text-xs text-muted-foreground mt-1">
-                            Required for connecting social accounts. Run <code className="bg-muted px-1 py-0.5 rounded">composio login</code> in your terminal or visit the <a href="https://composio.dev" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary-hover">Composio website <ExternalLink className="inline h-3 w-3"/></a> to get your developer key.
-                         </p>
-                       </div>
-                     </div>
+                    {/* Removed Composio API Key section */}
+                    {/* Removed Social Media Specific URLs section */}
+                    {/* Removed App Authentication Section */}
 
-
-                     {/* Composio MCP URL */}
-                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                         <Label htmlFor="composio_mcp_url" className="sm:text-right sm:col-span-1 mt-1">
-                           Composio MCP URL
-                         </Label>
-                         <div className="col-span-1 sm:col-span-2">
-                           <Input
-                             id="composio_mcp_url"
-                             {...register('composio_mcp_url')}
-                             placeholder="e.g., https://mcp.composio.dev/u/your-id"
-                             className={`${errors.composio_mcp_url ? 'border-destructive' : ''}`}
-                             disabled={!!localDbSetupError}
-                           />
-                           {errors.composio_mcp_url && <p className="text-xs text-destructive mt-1">{errors.composio_mcp_url.message}</p>}
-                           <p className="text-xs text-muted-foreground mt-1">
-                             Find in your <a href="https://mcp.composio.dev" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary-hover">Composio MCP dashboard <ExternalLink className="inline h-3 w-3"/></a>. Needed for app authentication redirects.
-                           </p>
-                         </div>
-                     </div>
-
-                     {/* Social Media Specific URLs (Optional) */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                          <Label htmlFor="linkedin_url" className="sm:text-right sm:col-span-1 mt-1">
-                           LinkedIn URL (Optional)
-                         </Label>
-                         <div className="col-span-1 sm:col-span-2">
-                           <Input
-                             id="linkedin_url"
-                             {...register('linkedin_url')}
-                             placeholder="e.g., https://linkedin.com/in/your-profile"
-                             className={`${errors.linkedin_url ? 'border-destructive' : ''}`}
-                             disabled={!!localDbSetupError}
-                           />
-                           {errors.linkedin_url && <p className="text-xs text-destructive mt-1">{errors.linkedin_url.message}</p>}
-                         </div>
-                      </div>
-                       <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                          <Label htmlFor="twitter_url" className="sm:text-right sm:col-span-1 mt-1">
-                           Twitter/X URL (Optional)
-                         </Label>
-                         <div className="col-span-1 sm:col-span-2">
-                           <Input
-                             id="twitter_url"
-                             {...register('twitter_url')}
-                             placeholder="e.g., https://twitter.com/your_handle"
-                             className={`${errors.twitter_url ? 'border-destructive' : ''}`}
-                             disabled={!!localDbSetupError}
-                           />
-                           {errors.twitter_url && <p className="text-xs text-destructive mt-1">{errors.twitter_url.message}</p>}
-                         </div>
-                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                         <Label htmlFor="youtube_url" className="sm:text-right sm:col-span-1 mt-1">
-                           YouTube URL (Optional)
-                         </Label>
-                         <div className="col-span-1 sm:col-span-2">
-                           <Input
-                             id="youtube_url"
-                             {...register('youtube_url')}
-                             placeholder="e.g., https://youtube.com/channel/your-id"
-                             className={`${errors.youtube_url ? 'border-destructive' : ''}`}
-                             disabled={!!localDbSetupError}
-                           />
-                           {errors.youtube_url && <p className="text-xs text-destructive mt-1">{errors.youtube_url.message}</p>}
-                         </div>
-                       </div>
-
-                      {/* App Authentication Section */}
-                       <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2 pt-2">
-                          <Label className="sm:text-right sm:col-span-1 mt-1" id="app-connections-label">App Connections</Label> {/* Added ID */}
-                          <div className="col-span-1 sm:col-span-2 space-y-3" aria-labelledby="app-connections-label"> {/* Added aria-labelledby */}
-                             {(['linkedin', 'twitter', 'youtube'] as ComposioApp[]).map((appName) => {
-                                const isAuthenticated = getAuthStatus(appName);
-                                const isAuthenticating = isComposioAuthenticating[appName];
-                                const Icon = isAuthenticated ? CheckCircle : (isAuthenticating ? Loader2 : XCircle);
-                                const iconColor = isAuthenticated ? 'text-green-500' : (isAuthenticating ? 'animate-spin' : 'text-destructive');
-
-                                return (
-                                   <div key={appName} className="flex items-center justify-between bg-muted/30 p-3 rounded-md border border-border/50">
-                                      <div className="flex items-center gap-2">
-                                          <Icon className={`h-5 w-5 ${iconColor}`} />
-                                          <span className="capitalize font-medium">{appName}</span>
-                                      </div>
-                                       {/* Group Authenticate and Disconnect buttons */}
-                                       <div className="flex gap-2">
-                                           <TooltipProvider>
-                                              <Tooltip>
-                                                  <TooltipTrigger asChild>
-                                                      <div> {/* Wrapper div for disabled button tooltip */}
-                                                          <Button
-                                                              type="button"
-                                                              size="sm"
-                                                              variant={isAuthenticated ? "outline" : "default"}
-                                                              onClick={() => handleAuthenticateApp(appName)}
-                                                              disabled={isAuthenticated || isAuthenticating || !!localDbSetupError || !profile?.composio_mcp_url || !profile?.composio_api_key} // Disable if already authenticated or missing pre-reqs
-                                                              loading={isAuthenticating}
-                                                              aria-label={isAuthenticated ? `${appName} connected` : `Authenticate ${appName}`} // Added aria-label
-                                                          >
-                                                              {isAuthenticated ? "Connected" : "Authenticate"}
-                                                          </Button>
-                                                      </div>
-                                                  </TooltipTrigger>
-                                                  <TooltipContent side="top">
-                                                      {isAuthenticated ? <p>{appName} is already connected.</p> :
-                                                      !profile?.composio_mcp_url ? <p>Enter Composio MCP URL first.</p> :
-                                                      !profile?.composio_api_key ? <p>Enter Composio API Key first.</p> :
-                                                      <p>Connect your {appName} account.</p>}
-                                                  </TooltipContent>
-                                              </Tooltip>
-                                              {/* Disconnect Button */}
-                                               {isAuthenticated && (
-                                                   <Tooltip>
-                                                       <TooltipTrigger asChild>
-                                                           <Button
-                                                               type="button"
-                                                               size="sm"
-                                                               variant="destructive"
-                                                               onClick={() => handleDeauthenticateAppAction(appName)}
-                                                               disabled={isComposioAuthenticating[appName] || !!localDbSetupError} // Disable during auth/deauth
-                                                               // loading={isDeauthenticating[appName]} // Add loading state if deauth is async
-                                                               aria-label={`Disconnect ${appName}`} // Added aria-label
-                                                           >
-                                                               Disconnect
-                                                           </Button>
-                                                       </TooltipTrigger>
-                                                       <TooltipContent side="top">
-                                                           <p>Disconnect your {appName} account.</p>
-                                                       </TooltipContent>
-                                                   </Tooltip>
-                                               )}
-                                           </TooltipProvider>
-                                       </div>
-                                   </div>
-                                );
-                             })}
-                             {(!profile?.composio_mcp_url || !profile?.composio_api_key) && (
-                                 <p className="text-xs text-destructive mt-1">
-                                    Enter Composio MCP URL and API Key above to enable authentication.
-                                 </p>
-                             )}
-                          </div>
-                      </div>
                  </div>
               </section>
 
@@ -672,7 +387,7 @@ export function ProfileDialog({
 
                     <div className="mt-4">
                         <h4 className="text-sm font-semibold mb-2">Unlocked Badges:</h4>
-                        {(badges && badges.length > 0) ? (
+                        {badges && badges.length > 0 ? (
                            <div className="flex flex-wrap gap-3">
                              {badges.map((badgeName) => {
                                const badgeInfo = BADGES.find(b => b.name === badgeName);

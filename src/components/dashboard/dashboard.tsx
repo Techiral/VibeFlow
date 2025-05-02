@@ -24,7 +24,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import Link from 'next/link';
 import { ProfileDialog } from './profile-dialog'; // Import the profile dialog
 import { Progress } from "@/components/ui/progress"; // Import Progress component
-import AiAdvisorPanel from '@/components/dashboard/ai-advisor-panel';
+import AiAdvisorPanel from './ai-advisor-panel';
 import { toast as sonnerToast } from 'sonner'; // Import sonner toast for confetti effect
 import Confetti from 'react-confetti';
 import Joyride, { Step, CallBackProps } from 'react-joyride'; // Import react-joyride
@@ -160,32 +160,8 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
     setIsClient(true);
   }, []);
 
-  // Effect to show toast messages from Composio callback
-  useEffect(() => {
-    const successParam = searchParams.get('success');
-    const errorParam = searchParams.get('error');
-    const messageParam = searchParams.get('message');
-    const appParam = searchParams.get('app');
-
-    if (successParam === 'composio_auth' && appParam) {
-      toast({
-        title: `${appParam.charAt(0).toUpperCase() + appParam.slice(1)} Authenticated`,
-        description: `Successfully connected your ${appParam} account via Composio.`,
-        variant: 'default',
-      });
-      // Optional: Force refresh profile data here if needed
-      // Optionally: Clear the query params from the URL
-      router.replace('/dashboard', { scroll: false });
-    } else if (errorParam === 'composio_auth_failed' || errorParam === 'composio_db_update_failed') {
-      toast({
-        title: "Composio Authentication Failed",
-        description: messageParam || `Could not authenticate with Composio. Please try again.`,
-        variant: "destructive",
-      });
-      // Optionally: Clear the query params from the URL
-      router.replace('/dashboard', { scroll: false });
-    }
-  }, [searchParams, toast, router]);
+  // Effect to show toast messages from Composio callback (Removed as Composio is removed)
+  // useEffect(() => { ... }, [searchParams, toast, router]);
 
 
   // Fetch or confirm profile/quota data on client-side if needed
@@ -198,7 +174,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
       // --- Ensure Profile ---
       if (!currentProfile) {
          try {
-            // Use RPC function which handles upsert logic
             const { data, error } = await supabase
               .rpc('get_user_profile', { p_user_id: user.id });
 
@@ -221,12 +196,8 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              } else if (data && Array.isArray(data) && data.length > 0) {
                  currentProfile = data[0] as Profile;
                  setProfile(currentProfile);
-                 // Also update local XP/Badges state from fetched profile
                  setXp(currentProfile.xp ?? initialXp);
                  setBadges(currentProfile.badges ?? initialBadges);
-
-                  // Check if onboarding needs to run for this profile
-                  // Moved onboarding check to the client-only effect
              } else {
                  console.warn("Profile still null/empty after calling get_user_profile on client");
                  toast({ title: "Profile Error", description: "Failed to load profile data. Please refresh.", variant: "destructive" });
@@ -238,9 +209,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              setDbSetupError(setupErrorMsg);
          }
       } else {
-         // Profile was loaded initially, check onboarding status
-         // Moved onboarding check to the client-only effect
-         // Ensure local XP/Badge state matches initial profile if profile exists
          setXp(profile.xp ?? initialXp);
          setBadges(profile.badges ?? initialBadges);
       }
@@ -249,7 +217,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
       // --- Ensure Quota ---
       if (!currentQuota) {
         try {
-          // Use RPC function to get remaining quota (handles reset logic)
           const { data: remainingQuota, error: rpcError } = await supabase
              .rpc('get_remaining_quota', { p_user_id: user.id });
 
@@ -258,24 +225,23 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              let errorMsg = `Failed to load usage data: ${rpcError.message}`;
              if (rpcError.message.includes("function public.get_remaining_quota") && rpcError.message.includes("does not exist")) {
                  errorMsg = "Database setup incomplete: Missing 'get_remaining_quota' function. Run setup script.";
-             } else if (rpcError.message.includes("relation \"public.quotas\" does not exist")) { // Check if function itself reports missing table
+             } else if (rpcError.message.includes("relation \"public.quotas\" does not exist")) {
                  errorMsg = "Database setup incomplete: Missing 'quotas' table. Run setup script.";
              } else if (rpcError.message.includes("permission denied")) {
                  errorMsg = "Database access error: Permission denied for 'get_remaining_quota'. Check RLS/function security.";
              } else if (rpcError.message.includes("406 Not Acceptable")) {
                  errorMsg = "Database access error: Could not fetch quota (406 Not Acceptable). Check RLS policies and function return type.";
              }
-             setupErrorMsg = errorMsg; // Overwrite previous profile error if quota fails more specifically
+             setupErrorMsg = errorMsg;
              toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
            } else {
-              // RPC succeeded, now fetch the full quota details for display
                const { data: quotaDetails, error: selectError } = await supabase
                  .from('quotas')
                  .select('user_id, request_count, quota_limit, last_reset_at')
                  .eq('user_id', user.id)
                  .maybeSingle(); // Handle no row found gracefully
 
-               if (selectError && selectError.code !== 'PGRST116') { // Handle errors other than "No rows found"
+               if (selectError && selectError.code !== 'PGRST116') {
                    console.error('Error fetching quota details after RPC:', selectError.message);
                    let errorMsg = `Failed to load full usage details: ${selectError.message}`;
                    if (selectError.message.includes("relation \"public.quotas\" does not exist")) {
@@ -291,20 +257,19 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                } else if (quotaDetails) {
                    currentQuota = quotaDetails as Quota;
                    setQuota(currentQuota);
-                   if (currentProfile && !setupErrorMsg) setDbSetupError(null); // Clear setup error if profile loaded and quota now loaded
+                   if (currentProfile && !setupErrorMsg) setDbSetupError(null);
                } else if (typeof remainingQuota === 'number') {
-                  // If select found no row but RPC worked, initialize local state
                   console.log("Quota record not found yet for user:", user.id);
-                  const limit = DEFAULT_QUOTA_LIMIT; // Assume default limit
+                  const limit = DEFAULT_QUOTA_LIMIT;
                   const used = Math.max(0, limit - remainingQuota);
                   const nowISO = new Date().toISOString();
                   currentQuota = {
                       user_id: user.id,
                       request_count: used,
                       quota_limit: limit,
-                      last_reset_at: nowISO, // Use current time as placeholder reset
-                      created_at: nowISO, // Placeholder
-                      ip_address: null // Placeholder
+                      last_reset_at: nowISO,
+                      created_at: nowISO,
+                      ip_address: null
                   };
                   setQuota(currentQuota);
                   if (currentProfile && !setupErrorMsg) setDbSetupError(null);
@@ -319,13 +284,11 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
           toast({ title: 'Quota Error', description: setupErrorMsg, variant: 'destructive' });
         }
       } else {
-         // Quota was loaded initially, ensure no latent DB error remains displayed
          if (currentProfile && !setupErrorMsg) {
              setDbSetupError(null);
          }
       }
 
-      // Finally, set the derived DB setup error state
        if (setupErrorMsg) {
          setDbSetupError(setupErrorMsg);
        }
@@ -365,56 +328,54 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
 
 
    // Function to check and award badges
-   const checkAndAwardBadges = useCallback((currentXp: number, currentBadges: string[]) => {
+   const checkAndAwardBadges = useCallback(async (currentXp: number, currentBadges: string[]) => {
         let newlyAwardedBadge: string | null = null;
+        let updatedBadges = [...currentBadges]; // Start with current badges
 
-        BADGES.forEach(badge => {
+        for (const badge of BADGES) {
             // Check if XP threshold is met AND the badge hasn't been awarded yet
-            if (currentXp >= badge.xp && !currentBadges.includes(badge.name)) {
+            if (currentXp >= badge.xp && !updatedBadges.includes(badge.name)) {
                  console.log(`Badge condition met: ${badge.name}`);
                  newlyAwardedBadge = badge.name; // Store the latest badge to award
-
-                 // Update badge state immediately (optimistic UI)
-                 const updatedBadges = [...currentBadges, badge.name];
-                 setBadges(updatedBadges);
-
-
-                 // Update badge in the database (fire and forget for now, error handled below)
-                 supabase
-                   .from('profiles')
-                   .update({ badges: updatedBadges }) // Use the updated badges array
-                   .eq('id', user.id)
-                   .then(({ error }) => {
-                       if (error) {
-                           console.error(`Failed to save badge "${badge.name}" to database:`, error);
-                           toast({ title: "Badge Save Error", description: `Could not save badge: ${badge.name}`, variant: "destructive"});
-                           // Revert optimistic UI update if needed
-                           setBadges(currentBadges); // Revert to previous state
-                       } else {
-                          console.log(`Badge "${badge.name}" saved to DB.`);
-                          // Update the main profile state as well after DB success
-                           setProfile(prev => prev ? { ...prev, badges: updatedBadges } : null);
-                       }
-                   });
+                 updatedBadges.push(badge.name); // Add to the array we will update with
             }
-        });
+        }
 
-        // Notify about the *last* newly awarded badge in this check
-        if (newlyAwardedBadge && newlyAwardedBadge !== lastAwardedBadge) {
-            const badgeInfo = BADGES.find(b => b.name === newlyAwardedBadge);
-             if (badgeInfo) {
-                 setShowConfetti(true);
-                 sonnerToast.success(`Badge Unlocked: ${badgeInfo.name}!`, {
-                   description: badgeInfo.description,
-                   duration: 5000,
-                   icon: <badgeInfo.icon className="text-green-500" />,
-                 });
-                 setLastAwardedBadge(newlyAwardedBadge); // Avoid re-notifying for the same badge immediately
-                 setTimeout(() => setShowConfetti(false), 5000);
+        // If new badges were found, update state and DB
+        if (newlyAwardedBadge) {
+             setBadges(updatedBadges); // Optimistic UI update
+
+             const { error } = await supabase
+               .from('profiles')
+               .update({ badges: updatedBadges }) // Use the updated badges array
+               .eq('id', user.id);
+
+             if (error) {
+                   console.error(`Failed to save badges to database:`, error);
+                   toast({ title: "Badge Save Error", description: `Could not save newly earned badges.`, variant: "destructive"});
+                   // Revert optimistic UI update
+                   setBadges(currentBadges);
+             } else {
+                  console.log(`Badges saved to DB: ${updatedBadges.join(', ')}`);
+                  // Update the main profile state as well after DB success
+                   setProfile(prev => prev ? { ...prev, badges: updatedBadges } : null);
+
+                   // Notify about the *last* newly awarded badge
+                   const badgeInfo = BADGES.find(b => b.name === newlyAwardedBadge);
+                    if (badgeInfo && newlyAwardedBadge !== lastAwardedBadge) {
+                       setShowConfetti(true);
+                       sonnerToast.success(`Badge Unlocked: ${badgeInfo.name}!`, {
+                         description: badgeInfo.description,
+                         duration: 5000,
+                         icon: <badgeInfo.icon className="text-green-500" />,
+                       });
+                       setLastAwardedBadge(newlyAwardedBadge);
+                       setTimeout(() => setShowConfetti(false), 5000);
+                    }
              }
         }
 
-   }, [supabase, user.id, toast, lastAwardedBadge]); // Removed profile?.badges dependency
+   }, [supabase, user.id, toast, lastAwardedBadge]);
 
 
    // Function to check quota and increment if allowed
@@ -425,7 +386,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
      }
 
      let currentRemaining = quotaRemaining;
-     // If quota is not loaded, attempt to fetch remaining via RPC
      if (quota === null) {
          console.log("Quota is null, attempting to fetch remaining via RPC...");
          try {
@@ -463,15 +423,11 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
        return false;
      }
 
-     // Optimistic UI update for quota count
      const optimisticQuotaUsed = quotaUsed + incrementAmount;
-     const optimisticQuotaRemaining = quotaLimit - optimisticQuotaUsed;
-     const optimisticQuotaPercentage = quotaLimit > 0 ? (optimisticQuotaUsed / quotaLimit) * 100 : 0;
      const optimisticQuota = quota ? { ...quota, request_count: optimisticQuotaUsed } : null;
      if (optimisticQuota) setQuota(optimisticQuota);
-     // Optimistic UI update for XP
      const optimisticXp = xp + (incrementAmount * XP_PER_REQUEST);
-     setXp(optimisticXp); // Update XP state
+     setXp(optimisticXp);
 
 
     try {
@@ -482,14 +438,12 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         });
 
        if (error) {
-          // Revert optimistic updates
           setQuota(quota);
-          setXp(xp); // Revert XP state
+          setXp(xp);
 
           console.error("Error incrementing quota RPC:", error.message);
           if (error.message.includes("quota_exceeded")) {
              toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
-             // Ensure UI reflects the limit being hit
              if(quota) setQuota(prev => prev ? {...prev, request_count: prev.quota_limit ?? DEFAULT_QUOTA_LIMIT} : null);
           } else if (error.message.includes("function public.increment_quota") && error.message.includes("does not exist")) {
              setDbSetupError("Database function 'increment_quota' missing. Run setup script.");
@@ -503,7 +457,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
           return false;
        }
 
-       // --- Success: Refetch BOTH quota and profile (including XP/badges) ---
         console.log("Quota increment RPC successful, refetching data...");
        const [{ data: updatedQuotaData, error: fetchQuotaError }, { data: updatedProfileData, error: fetchProfileError }] = await Promise.all([
             supabase
@@ -511,9 +464,9 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                 .select('user_id, request_count, quota_limit, last_reset_at')
                 .eq('user_id', user.id)
                 .single(),
-            supabase // Fetch profile again to get updated XP and badges
+            supabase
                 .from('profiles')
-                .select('*, xp, badges') // Explicitly select xp and badges
+                .select('*, xp, badges')
                 .eq('id', user.id)
                 .single()
         ]);
@@ -522,7 +475,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         if (fetchQuotaError){
            console.error("Error fetching quota after increment:", fetchQuotaError.message);
            toast({ title: "Quota Update Warning", description: "Usage updated, but failed to refresh details.", variant: "default" });
-            // Keep optimistic update if refetch fails
         } else if (updatedQuotaData) {
             console.log("Refetched quota data:", updatedQuotaData);
             setQuota(updatedQuotaData as Quota);
@@ -531,17 +483,14 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         if (fetchProfileError) {
             console.error("Error fetching profile after increment:", fetchProfileError.message);
              toast({ title: "Profile Update Warning", description: "Usage updated, but failed to refresh profile data (XP/badges).", variant: "default" });
-            // Keep optimistic update if refetch fails
         } else if (updatedProfileData) {
             console.log("Refetched profile data:", updatedProfileData);
             const completeProfile = updatedProfileData as Profile;
-            setProfile(completeProfile); // Update profile state with new XP/badges
-            // Update local state for XP and badges
+            setProfile(completeProfile);
             const newXp = completeProfile.xp ?? initialXp;
             const newBadges = completeProfile.badges ?? initialBadges;
             setXp(newXp);
             setBadges(newBadges);
-             // Explicitly trigger badge check after profile update from DB
             checkAndAwardBadges(newXp, newBadges);
         }
 
@@ -551,11 +500,10 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
            return false;
        }
 
-      return true; // Increment successful
+      return true;
     } catch (rpcError: any) {
-        // Revert optimistic updates on unexpected error
         setQuota(quota);
-        setXp(xp); // Revert XP state
+        setXp(xp);
         console.error("Unexpected Error calling increment_quota RPC:", rpcError.message);
         toast({ title: "Quota Error", description: `An unexpected error occurred updating usage: ${rpcError.message}`, variant: "destructive" });
         return false;
@@ -570,8 +518,8 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
     } else {
       setProfile(null);
       setQuota(null);
-      setXp(0); // Reset XP
-      setBadges([]); // Reset badges
+      setXp(0);
+      setBadges([]);
       setContentInput('');
       setSummary(null);
       setPostDrafts({});
@@ -596,7 +544,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         return;
     }
 
-    // Calculate cost: 1 summary + 3 posts = 4
     const COST = 4;
     if (!await checkAndIncrementQuota(COST)) return;
 
@@ -604,17 +551,18 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
     setIsGeneratingPosts(true);
     setSummary(null);
     setPostDrafts({});
-    setAnalysisResults({}); // Clear previous analysis
-    setShowAiAdvisor({}); // Hide advisor panels
+    setAnalysisResults({});
+    setShowAiAdvisor({});
 
     const apiKey = profile.gemini_api_key;
     let summarySuccess = false;
     let postsSuccessCount = 0;
+    let summaryErrorOccurred = false; // Flag to track if summary failed
 
     startTransition(async () => {
         let summaryResult: SummarizeContentOutput | null = null;
         try {
-            // 1. Summarize Content (includes retry logic)
+            console.log("Starting summarization...");
             summaryResult = await summarizeContent({ content: contentInput }, { apiKey });
             if (summaryResult?.summary) {
                 setSummary(summaryResult.summary);
@@ -624,19 +572,20 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                 throw new Error("AI returned an empty summary.");
             }
         } catch (summaryError: any) {
+            summaryErrorOccurred = true; // Mark summary as failed
             console.error("Summarization failed:", summaryError);
-            // Error handling with user-friendly messages (as before)
             let description = `Summarization failed: ${summaryError.message || 'Unknown AI error'}`;
-            if (summaryError.message.includes("parsing")) {
+            // More specific error messages based on status or content
+            if (summaryError.message?.includes("parsing")) {
                 description = "Could not parse content from URL. Check URL or paste text.";
-            } else if (summaryError.status === 'UNAUTHENTICATED' || summaryError.message.includes("API key not valid")) {
+            } else if (summaryError.status === 'UNAUTHENTICATED' || summaryError.message?.includes("API key not valid")) {
                 description = "Invalid Gemini API Key. Check profile.";
                 setIsProfileDialogOpen(true);
             } else if (summaryError.status === 'UNAVAILABLE') {
-                description = "AI service unavailable during summarization after retries. Try again later.";
+                description = "AI service for summarization was unavailable after retries. Try again later.";
             } else if (summaryError.status === 'RESOURCE_EXHAUSTED') {
-                description = "AI rate limit exceeded during summarization after retries. Check Google API quota or try later.";
-            } else if (summaryError.message.includes("empty summary")) {
+                description = "AI rate limit hit during summarization after retries. Check quota or try later.";
+            } else if (summaryError.message?.includes("empty summary")) {
                 description = "Summarization failed: AI returned an empty result after retries.";
             }
             toast({ title: "Summarization Failed", description, variant: "destructive" });
@@ -644,14 +593,15 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
             setIsGeneratingSummary(false);
         }
 
-        // 2. Generate Posts if summary succeeded (includes retry logic)
         if (summarySuccess && summaryResult) {
+            console.log("Starting post generation...");
             const platforms: SocialPlatform[] = ['linkedin', 'twitter', 'youtube'];
             const postPromises = platforms.map(platform =>
                 generateSocialPosts({ summary: summaryResult!.summary, platform }, { apiKey })
                 .then(result => {
                     if (result?.post) {
                         postsSuccessCount++;
+                        console.log(`Post generation for ${platform} successful.`);
                         return { platform, post: result.post };
                     } else {
                         throw new Error(`AI returned an empty post for ${platform}.`);
@@ -659,16 +609,15 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                 })
                 .catch(async (err) => {
                     console.error(`Error generating ${platform} post:`, err);
-                    // User-friendly error handling (as before)
                     let description = `Post generation for ${platform} failed: ${err.message || 'Unknown AI error'}`;
-                     if (err.status === 'UNAUTHENTICATED' || err.message.includes("API key not valid")) {
-                       description = "Invalid Gemini API Key. Check profile."
+                     if (err.status === 'UNAUTHENTICATED' || err.message?.includes("API key not valid")) {
+                       description = "Invalid Gemini API Key. Check profile.";
                        setIsProfileDialogOpen(true);
                     } else if (err.status === 'UNAVAILABLE') {
-                        description = `AI service unavailable generating ${platform} post after retries. Try later.`;
+                        description = `AI service for ${platform} post generation was unavailable after retries. Try later.`;
                     } else if (err.status === 'RESOURCE_EXHAUSTED') {
-                        description = `AI rate limit exceeded generating ${platform} post after retries. Check quota or try later.`;
-                    } else if (err.message.includes("empty post")) {
+                        description = `AI rate limit hit generating ${platform} post after retries. Check quota or try later.`;
+                    } else if (err.message?.includes("empty post")) {
                        description = `Generation for ${platform} failed: AI returned empty result after retries.`;
                     }
                     toast({ title: `Post Gen Failed (${platform})`, description, variant: "destructive" });
@@ -685,38 +634,34 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
             setPostDrafts({});
         }
 
-        // --- Final Quota Adjustment ---
         const actualCost = (summarySuccess ? 1 : 0) + postsSuccessCount;
         const refundAmount = COST - actualCost;
         if (refundAmount > 0) {
             console.log(`Refunding ${refundAmount} quota points due to errors.`);
+            // No UI feedback for refund attempt, just log errors
             try {
-                // Use negative increment amount for refund
                 const { error: refundRpcError } = await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -refundAmount });
                  if (refundRpcError) {
                      console.error("Error during quota refund RPC:", refundRpcError.message);
-                     toast({ title: "Quota Refund Issue", description: `Failed to process quota refund: ${refundRpcError.message}`, variant: "destructive"});
                  } else {
-                     // Refetch quota and profile locally after successful refund attempt
-                    const [{ data: refreshedQuota, error: refreshQuotaError }, { data: refreshedProfile, error: refreshProfileError }] = await Promise.all([
+                     // Refetch locally without toast
+                    const [{ data: refreshedQuota }, { data: refreshedProfile }] = await Promise.all([
                          supabase.from('quotas').select('*').eq('user_id', user.id).single(),
                          supabase.from('profiles').select('*, xp, badges').eq('id', user.id).single()
                     ]);
-                    if (!refreshQuotaError && refreshedQuota) setQuota(refreshedQuota as Quota);
-                     if (!refreshProfileError && refreshedProfile) {
+                    if (refreshedQuota) setQuota(refreshedQuota as Quota);
+                     if (refreshedProfile) {
                          const completeProfile = refreshedProfile as Profile;
                          setProfile(completeProfile);
-                          // Update local state for XP and badges
                           const newXp = completeProfile.xp ?? initialXp;
                           const newBadges = completeProfile.badges ?? initialBadges;
                           setXp(newXp);
                           setBadges(newBadges);
-                         checkAndAwardBadges(newXp, newBadges); // Recheck badges after profile refresh
+                         checkAndAwardBadges(newXp, newBadges);
                      }
                  }
             } catch (refundCatchError: any) {
                  console.error("Unexpected Error during quota refund attempt:", refundCatchError.message);
-                 toast({ title: "Quota Refund Issue", description: "Unexpected error trying to refund quota.", variant: "destructive"});
             }
         }
         setIsGeneratingPosts(false);
@@ -740,43 +685,43 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         return;
     }
 
-    // Cost: 1
     const COST = 1;
     if (!await checkAndIncrementQuota(COST)) return;
 
     setIsTuning(prev => ({ ...prev, [platform]: true }));
-    setAnalysisResults(prev => ({ ...prev, [platform]: null })); // Clear analysis on tune
+    setAnalysisResults(prev => ({ ...prev, [platform]: null }));
     const apiKey = profile.gemini_api_key;
     let tuneSuccess = false;
+    let tuneErrorOccurred = false; // Flag to track if tuning failed
 
     startTransition(async () => {
         try {
-            // Pass platform context to the tuning function (includes retry logic)
+            console.log(`Starting tuning for ${platform} with feedback: "${feedback}"`);
             const tunedResult = await tuneSocialPosts({ originalPost, feedback, platform }, { apiKey });
             if (tunedResult?.tunedPost) {
                 setPostDrafts(prev => ({ ...prev, [platform]: tunedResult.tunedPost }));
                 toast({ title: "Post Tuned!", description: `Applied feedback: "${feedback}"`, variant: "default" });
                 tuneSuccess = true;
+                console.log(`Tuning for ${platform} successful.`);
             } else {
                 throw new Error(`AI returned an empty tuned post for ${platform}.`);
             }
         } catch (error: any) {
+            tuneErrorOccurred = true; // Mark tuning as failed
             console.error(`Tuning ${platform} post failed:`, error);
-            // User-friendly error handling (as before)
              let description = `Post tuning failed: ${error.message || 'Unknown AI error'}`;
-             if (error.status === 'UNAUTHENTICATED' || error.message.includes("API key not valid")) {
-               description = "Invalid Gemini API Key. Check profile."
+             if (error.status === 'UNAUTHENTICATED' || error.message?.includes("API key not valid")) {
+               description = "Invalid Gemini API Key. Check profile.";
                setIsProfileDialogOpen(true);
             } else if (error.status === 'UNAVAILABLE') {
-                description = "AI service unavailable for tuning after retries. Try again later.";
+                description = `AI service for tuning (${platform}) was unavailable after retries. Try later.`;
             } else if (error.status === 'RESOURCE_EXHAUSTED') {
-                description = "AI rate limit exceeded during tuning after retries. Check quota or try later.";
-            } else if (error.message.includes("empty tuned post")) {
+                description = `AI rate limit hit during tuning (${platform}) after retries. Check quota or try later.`;
+            } else if (error.message?.includes("empty tuned post")) {
                 description = `Tuning for ${platform} failed: AI returned empty result after retries.`;
             }
             toast({ title: "Tuning Failed", description, variant: "destructive" });
         } finally {
-            // --- Quota Adjustment for Tuning ---
             const actualCost = tuneSuccess ? 1 : 0;
             const refundAmount = COST - actualCost;
             if (refundAmount > 0) {
@@ -785,18 +730,16 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                      const { error: refundRpcError } = await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -refundAmount });
                      if (refundRpcError) {
                          console.error("Error during quota refund RPC for tuning:", refundRpcError.message);
-                         toast({ title: "Quota Refund Issue", description: `Failed refund for tuning: ${refundRpcError.message}`, variant: "destructive"});
                      } else {
-                         // Refetch quota and profile locally after successful refund
-                        const [{ data: refreshedQuota, error: refreshQuotaError }, { data: refreshedProfile, error: refreshProfileError }] = await Promise.all([
+                         // Refetch locally without toast
+                        const [{ data: refreshedQuota }, { data: refreshedProfile }] = await Promise.all([
                            supabase.from('quotas').select('*').eq('user_id', user.id).single(),
                            supabase.from('profiles').select('*, xp, badges').eq('id', user.id).single()
                        ]);
-                       if (!refreshQuotaError && refreshedQuota) setQuota(refreshedQuota as Quota);
-                       if (!refreshProfileError && refreshedProfile) {
+                       if (refreshedQuota) setQuota(refreshedQuota as Quota);
+                       if (refreshedProfile) {
                            const completeProfile = refreshedProfile as Profile;
                            setProfile(completeProfile);
-                           // Update local state for XP and badges
                             const newXp = completeProfile.xp ?? initialXp;
                             const newBadges = completeProfile.badges ?? initialBadges;
                             setXp(newXp);
@@ -806,7 +749,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                      }
                  } catch (refundCatchError: any) {
                      console.error("Unexpected Error during tuning quota refund attempt:", refundCatchError.message);
-                     toast({ title: "Quota Refund Issue", description: "Unexpected error refunding quota.", variant: "destructive"});
                  }
             }
             setIsTuning(prev => ({ ...prev, [platform]: false }));
@@ -831,44 +773,48 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
       return;
     }
 
-     // Cost: 1
      const COST = 1;
      if (!await checkAndIncrementQuota(COST)) return;
 
     setAnalysisStates(prev => ({ ...prev, [platform]: true }));
-    setAnalysisResults(prev => ({ ...prev, [platform]: null })); // Clear previous results
-    setShowAiAdvisor(prev => ({ ...prev, [platform]: true })); // Show panel
+    setAnalysisResults(prev => ({ ...prev, [platform]: null }));
+    setShowAiAdvisor(prev => ({ ...prev, [platform]: true }));
     const apiKey = profile.gemini_api_key;
     let analysisSuccess = false;
+    let analysisErrorOccurred = false; // Flag to track if analysis failed
 
     startTransition(async () => {
       try {
+        console.log(`Starting analysis for ${platform} post...`);
         const result = await analyzePost({ postContent: currentPost, platform }, { apiKey });
-         if (result && result.analysis) { // Check if analysis exists
+         if (result && result.analysis !== undefined && result.flags !== undefined) { // More robust check
              setAnalysisResults(prev => ({ ...prev, [platform]: result }));
              analysisSuccess = true;
+             console.log(`Analysis for ${platform} successful.`);
+             if (result.flags.length === 0) {
+                toast({title: "AI Advisor", description: "Post looks good! No major issues found.", variant: "default"});
+             }
          } else {
-             // Handle case where analysis is unexpectedly empty
-             throw new Error("AI returned empty analysis results.");
+             throw new Error("AI returned invalid or empty analysis results.");
          }
 
       } catch (error: any) {
+        analysisErrorOccurred = true; // Mark analysis as failed
         console.error(`Analyzing ${platform} post failed:`, error);
         let description = `Post analysis failed: ${error.message || 'Unknown AI error'}`;
-         if (error.status === 'UNAUTHENTICATED' || error.message.includes("API key not valid")) {
-           description = "Invalid Gemini API Key. Check profile."
+         if (error.status === 'UNAUTHENTICATED' || error.message?.includes("API key not valid")) {
+           description = "Invalid Gemini API Key. Check profile.";
            setIsProfileDialogOpen(true);
         } else if (error.status === 'UNAVAILABLE') {
-            description = "AI service unavailable for analysis after retries. Try again later.";
+            description = `AI service for analysis (${platform}) was unavailable after retries. Try later.`;
         } else if (error.status === 'RESOURCE_EXHAUSTED') {
-            description = "AI rate limit exceeded during analysis after retries. Check quota or try later.";
-        } else if (error.message.includes("empty analysis")) {
-             description = `Analysis for ${platform} failed: AI returned empty result after retries.`;
+            description = `AI rate limit hit during analysis (${platform}) after retries. Check quota or try later.`;
+        } else if (error.message?.includes("empty analysis") || error.message?.includes("invalid analysis")) {
+             description = `Analysis for ${platform} failed: AI returned empty/invalid result after retries.`;
          }
         toast({ title: "Analysis Failed", description, variant: "destructive" });
-        setShowAiAdvisor(prev => ({ ...prev, [platform]: false })); // Hide panel on error
+        setShowAiAdvisor(prev => ({ ...prev, [platform]: false }));
       } finally {
-         // --- Quota Adjustment for Analysis ---
          const actualCost = analysisSuccess ? 1 : 0;
          const refundAmount = COST - actualCost;
           if (refundAmount > 0) {
@@ -877,18 +823,16 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                 const { error: refundRpcError } = await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -refundAmount });
                 if (refundRpcError) {
                     console.error("Error during quota refund RPC for analysis:", refundRpcError.message);
-                    toast({ title: "Quota Refund Issue", description: `Failed refund for analysis: ${refundRpcError.message}`, variant: "destructive"});
                 } else {
-                    // Refetch quota and profile locally after successful refund
-                    const [{ data: refreshedQuota, error: refreshQuotaError }, { data: refreshedProfile, error: refreshProfileError }] = await Promise.all([
+                     // Refetch locally without toast
+                    const [{ data: refreshedQuota }, { data: refreshedProfile }] = await Promise.all([
                        supabase.from('quotas').select('*').eq('user_id', user.id).single(),
                        supabase.from('profiles').select('*, xp, badges').eq('id', user.id).single()
                    ]);
-                   if (!refreshQuotaError && refreshedQuota) setQuota(refreshedQuota as Quota);
-                   if (!refreshProfileError && refreshedProfile) {
+                   if (refreshedQuota) setQuota(refreshedQuota as Quota);
+                   if (refreshedProfile) {
                        const completeProfile = refreshedProfile as Profile;
                        setProfile(completeProfile);
-                       // Update local state for XP and badges
                         const newXp = completeProfile.xp ?? initialXp;
                         const newBadges = completeProfile.badges ?? initialBadges;
                         setXp(newXp);
@@ -898,7 +842,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                 }
             } catch (refundCatchError: any) {
                 console.error("Unexpected Error during analysis quota refund attempt:", refundCatchError.message);
-                toast({ title: "Quota Refund Issue", description: "Unexpected error refunding quota.", variant: "destructive"});
             }
         }
         setAnalysisStates(prev => ({ ...prev, [platform]: false }));
@@ -914,11 +857,8 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
      const updatedPost = currentPost.substring(0, start) + suggestion + currentPost.substring(end);
      setPostDrafts(prev => ({ ...prev, [platform]: updatedPost }));
 
-     // Re-analyze after applying suggestion (optional, could be costly)
-     // handleAnalyzePost(platform);
-
-      // For now, just clear the current analysis results for that platform
       setAnalysisResults(prev => ({ ...prev, [platform]: null }));
+      setShowAiAdvisor(prev => ({ ...prev, [platform]: false })); // Close advisor after applying
       toast({ title: "Suggestion Applied", description: "Post updated with AI suggestion."});
   };
 
@@ -928,6 +868,10 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         toast({ title: "Database Setup Error", description: dbSetupError, variant: "destructive" });
         return;
      }
+    // Publishing logic removed as Composio auth is removed
+    toast({ title: "Publishing Unavailable", description: "Social media publishing feature is currently disabled.", variant: "default" });
+
+    /* OLD LOGIC - Keeping commented for potential future reference if Composio is re-added
      let targetUrl: string | null | undefined = null;
       switch (platform) {
           case 'linkedin': targetUrl = profile?.linkedin_url; break;
@@ -935,7 +879,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
           case 'youtube': targetUrl = profile?.youtube_url; break;
       }
 
-     // Use is_authed flag to check connection status before attempting to publish
      const isAuthenticatedKey = `is_${platform}_authed` as keyof Profile;
      if (!profile?.composio_mcp_url || !profile?.[isAuthenticatedKey]) {
          toast({ title: `${platform.charAt(0).toUpperCase() + platform.slice(1)} Not Authenticated`, description: `Please authenticate with ${platform} via Composio in your profile first.`, variant: "destructive" });
@@ -949,45 +892,31 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         return;
     }
 
-     // Cost: 1 (example)
      const COST = 1;
      if (!await checkAndIncrementQuota(COST)) return;
 
     setIsPublishing(prev => ({ ...prev, [platform]: true }));
     let publishSuccess = false;
+    let publishErrorOccurred = false; // Flag
 
     startTransition(async () => {
       try {
         console.log(`Publishing to ${platform} via Composio (MCP: ${profile.composio_mcp_url}):`, postContent);
-        // Placeholder: Replace with actual API call to Composio/Platform via your backend or a Server Action
-        // This would likely involve sending the postContent and target platform/account info
-        // to an endpoint that uses Composio's tooling (like the Python example).
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
-        // Example check:
-        // const response = await fetch('/api/publish', {
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify({ platform, content: postContent, userId: user.id })
-        // });
-        // if (!response.ok) {
-        //    const errorData = await response.json();
-        //    throw new Error(errorData.message || `Failed to publish to ${platform}`);
-        // }
+        await new Promise(resolve => setTimeout(resolve, 1500));
         toast({ title: "Post Published!", description: `Successfully published to ${platform}.`, variant: "default" });
         publishSuccess = true;
       } catch (error: any) {
+         publishErrorOccurred = true; // Mark as failed
          console.error(`Publishing to ${platform} failed:`, error);
          let description = `Publishing to ${platform} failed: ${error.message || 'Unknown error'}`;
           if (error.message.includes("authentication") || error.message.includes("connect")) {
               description = `Authentication issue with ${platform}. Please try re-authenticating via Composio in your profile.`
-              // Consider updating the DB auth status to false here
           } else if (error.message.includes("invalid Composio URL")) {
                description = `Invalid Composio MCP URL in profile. Please check and update.`;
                setIsProfileDialogOpen(true);
           }
         toast({ title: "Publishing Failed", description, variant: "destructive" });
       } finally {
-         // --- Quota Adjustment for Publishing ---
          const actualCost = publishSuccess ? 1 : 0;
          const refundAmount = COST - actualCost;
           if (refundAmount > 0) {
@@ -996,18 +925,16 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                  const { error: refundRpcError } = await supabase.rpc('increment_quota', { p_user_id: user.id, p_increment_amount: -refundAmount });
                  if(refundRpcError) {
                      console.error("Error during quota refund RPC for publishing:", refundRpcError.message);
-                     toast({ title: "Quota Refund Issue", description: `Failed refund for publishing: ${refundRpcError.message}`, variant: "destructive"});
                  } else {
-                     // Refetch quota and profile locally after successful refund
-                     const [{ data: refreshedQuota, error: refreshQuotaError }, { data: refreshedProfile, error: refreshProfileError }] = await Promise.all([
+                     // Refetch locally without toast
+                     const [{ data: refreshedQuota }, { data: refreshedProfile }] = await Promise.all([
                          supabase.from('quotas').select('*').eq('user_id', user.id).single(),
                          supabase.from('profiles').select('*, xp, badges').eq('id', user.id).single()
                      ]);
-                     if (!refreshQuotaError && refreshedQuota) setQuota(refreshedQuota as Quota);
-                     if (!refreshProfileError && refreshedProfile) {
+                     if (refreshedQuota) setQuota(refreshedQuota as Quota);
+                     if (refreshedProfile) {
                           const completeProfile = refreshedProfile as Profile;
                          setProfile(completeProfile);
-                           // Update local state for XP and badges
                            const newXp = completeProfile.xp ?? initialXp;
                            const newBadges = completeProfile.badges ?? initialBadges;
                            setXp(newXp);
@@ -1017,12 +944,12 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                  }
              } catch (refundCatchError: any) {
                  console.error("Unexpected Error during publishing quota refund attempt:", refundCatchError.message);
-                 toast({ title: "Quota Refund Issue", description: "Unexpected error refunding quota.", variant: "destructive"});
              }
          }
         setIsPublishing(prev => ({ ...prev, [platform]: false }));
       }
    });
+   */
   };
 
   const copyToClipboard = (text: string | undefined) => {
@@ -1038,7 +965,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
 
      if (FINISHED_STATUSES.includes(status)) {
          setRunOnboarding(false);
-         // Mark onboarding as completed in the database
          if (profile && !profile.badges?.includes('onboarded')) {
              const updatedBadges = [...(profile.badges ?? []), 'onboarded'];
              supabase
@@ -1048,17 +974,16 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                  .then(({ error }) => {
                      if (error) console.error("Failed to mark onboarding complete:", error);
                      else {
-                         // Update local profile state as well
                           const completeProfile = {...profile, badges: updatedBadges};
                           setProfile(completeProfile);
-                          setBadges(updatedBadges); // Update local badge state
-                          checkAndAwardBadges(completeProfile.xp ?? 0, updatedBadges); // Recheck badges immediately
+                          setBadges(updatedBadges);
+                          checkAndAwardBadges(completeProfile.xp ?? 0, updatedBadges);
                      }
                  });
          }
      } else if (type === 'error') {
          console.error("Onboarding tour error:", data);
-         setRunOnboarding(false); // Stop tour on error
+         setRunOnboarding(false);
      }
   };
 
@@ -1069,7 +994,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
 
   return (
     <TooltipProvider>
-     {/* Onboarding Tour - Render only on the client */}
      {isClient && (
         <Joyride
           steps={ONBOARDING_STEPS}
@@ -1080,12 +1004,12 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
           callback={handleJoyrideCallback}
           styles={{
             options: {
-              zIndex: 10000, // Ensure it's above other elements like dialogs
-              primaryColor: '#6D28D9', // Use primary color from theme
+              zIndex: 10000,
+              primaryColor: '#6D28D9',
             },
             tooltip: {
-              backgroundColor: 'hsl(var(--card))', // Use card background
-              color: 'hsl(var(--card-foreground))', // Use card foreground
+              backgroundColor: 'hsl(var(--card))',
+              color: 'hsl(var(--card-foreground))',
               borderRadius: 'var(--radius)',
             },
             buttonNext: {
@@ -1098,18 +1022,15 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         />
      )}
 
-      {/* Confetti Effect */}
       {showConfetti && <Confetti recycle={false} numberOfPieces={300} />}
 
     <div className="flex flex-col min-h-screen bg-background text-foreground p-4 md:p-8">
-      {/* Header */}
-       <header className="flex justify-between items-center mb-6 md:mb-8">
+      <header className="flex justify-between items-center mb-6 md:mb-8">
           <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
             <Zap className="h-6 w-6 text-primary" />
             <h1 className="text-2xl font-bold text-gradient">VibeFlow</h1>
           </Link>
         <div className="flex items-center gap-3 md:gap-4">
-           {/* Quota/XP Display */}
            {dbSetupError ? (
                 <Tooltip>
                    <TooltipTrigger asChild>
@@ -1120,18 +1041,16 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                    </TooltipTrigger>
                    <TooltipContent><p>Database setup required. Click for details.</p></TooltipContent>
                </Tooltip>
-           ) : quota !== null || profile !== null ? ( // Show if either quota or profile (for XP) is loaded
+           ) : quota !== null || profile !== null ? (
              <Tooltip>
                <TooltipTrigger asChild>
                   <div id="quota-display-tooltip-trigger" className="flex flex-col items-end cursor-help">
-                      {/* XP Display */}
                       <div className="flex items-center gap-1 text-xs text-muted-foreground font-medium">
                          <BrainCircuit className="h-3 w-3 text-purple-400"/>
                          <span>{xp.toLocaleString()} XP</span>
                       </div>
-                      {/* Quota Progress Bar */}
                       {quota !== null && (
-                        <Progress value={quotaPercentage} className="w-20 h-1 mt-0.5" title={`${quotaUsed}/${quotaLimit} requests used`} />
+                        <Progress value={quotaPercentage} className="w-20 h-1 mt-0.5" title={`${quotaUsed}/${quotaLimit} requests used`} aria-label={`Quota usage: ${quotaUsed} of ${quotaLimit} requests used (${quotaPercentage.toFixed(0)}%)`} />
                       )}
                   </div>
                </TooltipTrigger>
@@ -1151,7 +1070,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                </div>
            )}
 
-          {/* Profile Button/Dialog Trigger */}
           <Tooltip>
              <TooltipTrigger asChild>
                   <Button id="profile-button-tooltip-trigger" variant="ghost" size="icon" onClick={() => setIsProfileDialogOpen(true)} disabled={!!dbSetupError} aria-label="Open Profile Settings">
@@ -1161,7 +1079,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              <TooltipContent><p>Profile & Settings</p></TooltipContent>
            </Tooltip>
 
-           {/* Sign Out Button */}
           <Tooltip>
              <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" onClick={handleSignOut} aria-label="Sign Out">
@@ -1173,7 +1090,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         </div>
       </header>
 
-       {/* DB Setup Error Alert */}
        {dbSetupError && (
           <Alert variant="destructive" className="mb-6">
              <Database className="h-4 w-4" />
@@ -1184,7 +1100,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
           </Alert>
         )}
 
-       {/* Quota Exceeded Alert */}
        {quotaExceeded && !dbSetupError && (
           <Alert variant="destructive" className="mb-6">
              <Info className="h-4 w-4" />
@@ -1197,18 +1112,15 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
           </Alert>
         )}
 
-      {/* Main Content Area */}
       <main className="flex-grow grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
 
-        {/* Input Section */}
         <Card className="bg-card/80 border-border/30 shadow-lg flex flex-col">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Bot className="text-primary" /> Content Input</CardTitle>
             <CardDescription>Enter URL or text, choose a persona, and generate posts.</CardDescription>
           </CardHeader>
-          <CardContent className="flex-grow flex flex-col gap-4"> {/* Added gap */}
-             {/* Persona Selector */}
-             <div className="w-full sm:w-1/2 md:w-1/3"> {/* Limit width */}
+          <CardContent className="flex-grow flex flex-col gap-4">
+             <div className="w-full sm:w-1/2 md:w-1/3">
                 <Label htmlFor="persona-select">AI Persona</Label>
                  <Select value={persona} onValueChange={(value) => setPersona(value as Persona)}>
                    <SelectTrigger id="persona-select-trigger" className="w-full" disabled={isDisabled} aria-label="Select AI Persona">
@@ -1228,10 +1140,10 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
               placeholder="Paste your content or URL here..."
               value={contentInput}
               onChange={(e) => setContentInput(e.target.value)}
-              className="min-h-[200px] md:min-h-[300px] lg:min-h-[350px] bg-input/50 border-border/50 text-base resize-none flex-grow" // Use flex-grow
+              className="min-h-[200px] md:min-h-[300px] lg:min-h-[350px] bg-input/50 border-border/50 text-base resize-none flex-grow"
               disabled={isDisabled}
               suppressHydrationWarning
-              spellCheck={false} // Prevent hydration mismatch from spellcheck attribute
+              spellCheck={false}
             />
           </CardContent>
           <CardFooter>
@@ -1247,7 +1159,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
           </CardFooter>
         </Card>
 
-       {/* Output Section */}
         <Card className="bg-card/80 border-border/30 shadow-lg flex flex-col">
           <CardHeader>
             <CardTitle>Generated Drafts</CardTitle>
@@ -1277,8 +1188,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
 
                 {(['linkedin', 'twitter', 'youtube'] as SocialPlatform[]).map((platform) => (
                   <TabsContent key={platform} value={platform} className="flex-grow mt-0">
-                    <div className="flex gap-4 h-full"> {/* Flex container for post and advisor */}
-                         {/* Post Card */}
+                    <div className="flex gap-4 h-full">
                         <Card className="bg-background border-border/50 h-full flex flex-col flex-grow">
                           <CardContent className="p-4 space-y-4 relative flex-grow">
                             {isTuning[platform] && (
@@ -1293,15 +1203,14 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                              ) : (
                                 <Textarea
                                   value={postDrafts[platform] || ''}
-                                  onChange={(e) => setPostDrafts(prev => ({...prev, [platform]: e.target.value}))} // Allow editing
+                                  onChange={(e) => setPostDrafts(prev => ({...prev, [platform]: e.target.value}))}
                                   className="min-h-[150px] bg-input/30 border-border/30 resize-none text-sm h-full"
                                   suppressHydrationWarning
-                                  spellCheck={false} // Prevent hydration mismatch from spellcheck attribute
+                                  spellCheck={false}
                                 />
                              )}
-                            {/* Tuning Buttons */}
                             {!postDrafts[platform]?.startsWith("Error generating") && (
-                                 <div className="flex flex-wrap gap-2 shrink-0 pt-2 tune-buttons-group"> {/* Added class */}
+                                 <div className="flex flex-wrap gap-2 shrink-0 pt-2 tune-buttons-group">
                                   <span className="text-xs text-muted-foreground mr-2 mt-1.5">Tune:</span>
                                    <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Make wittier')} disabled={isDisabled || !postDrafts[platform] || isTuning[platform]}>Witty</Button>
                                    <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More concise')} disabled={isDisabled || !postDrafts[platform] || isTuning[platform]}>Concise</Button>
@@ -1310,19 +1219,17 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                                  </div>
                             )}
                           </CardContent>
-                          {/* Footer */}
                           {!postDrafts[platform]?.startsWith("Error generating") && (
                               <CardFooter className="flex justify-end gap-2 shrink-0 pt-0">
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                         {/* AI Advisor Button */}
                                          <Button
                                            variant="ghost"
                                            size="icon"
                                            onClick={() => handleAnalyzePost(platform)}
                                            disabled={isDisabled || !postDrafts[platform] || analysisStates[platform]}
                                            loading={analysisStates[platform]}
-                                           className="ai-advisor-button" // Added class
+                                           className="ai-advisor-button"
                                            aria-label="Get AI feedback"
                                          >
                                             <Sparkles className="h-4 w-4 text-purple-400" />
@@ -1341,30 +1248,22 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                                 </Tooltip>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                      {/* Conditional rendering for publish button */}
                                        <Button
                                          onClick={() => handlePublishPost(platform)}
-                                         disabled={isDisabled || !postDrafts[platform] || !profile?.composio_mcp_url || !profile?.[`is_${platform}_authed` as keyof Profile] || isPublishing[platform]}
+                                         disabled={isDisabled || !postDrafts[platform] || isPublishing[platform]} // Simplified disabled logic
                                          loading={isPublishing[platform]}
                                          size="sm"
                                        >
                                          <Send className="mr-1.5 h-4 w-4" /> Publish
                                        </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>
-                                    {!profile?.composio_mcp_url
-                                      ? <p>Add Composio MCP URL in profile</p>
-                                      : !profile?.[`is_${platform}_authed` as keyof Profile]
-                                        ? <p>Authenticate {platform} in profile</p>
-                                        : <p>Publish this post (placeholder)</p>
-                                    }
-                                  </TooltipContent>
+                                  {/* Simplified tooltip, as auth is removed */}
+                                  <TooltipContent><p>Publish this post (placeholder)</p></TooltipContent>
                                 </Tooltip>
                               </CardFooter>
                            )}
                         </Card>
 
-                         {/* AI Advisor Panel */}
                         <AiAdvisorPanel
                            isOpen={!!showAiAdvisor[platform]}
                            isLoading={!!analysisStates[platform]}
@@ -1383,12 +1282,10 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
 
       </main>
 
-      {/* Footer */}
       <footer className="text-center mt-8 text-xs text-muted-foreground">
-        Powered by Gemini & Composio | Built for the Hackathon
+        Powered by Gemini | Built for the Hackathon
       </footer>
 
-       {/* Profile Dialog */}
        <ProfileDialog
           isOpen={isProfileDialogOpen}
           onOpenChange={setIsProfileDialogOpen}
@@ -1396,7 +1293,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
           initialProfile={profile}
           initialQuota={quota}
           onProfileUpdate={handleProfileUpdate}
-          // Pass current XP and badges to dialog for display consistency
           initialXp={xp}
           initialBadges={badges}
           dbSetupError={dbSetupError}

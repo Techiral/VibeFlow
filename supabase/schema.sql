@@ -1,4 +1,4 @@
--- Content of supabase/schema.sql (V3.2 - Idempotent & Update-Friendly with composio_api_key):
+-- Content of supabase/schema.sql (V3.2 - Idempotent & Update-Friendly with Composio Fields Removed):
 -- Supabase Schema Setup V3.2
 -- This script can be run multiple times safely.
 
@@ -17,43 +17,33 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   username text UNIQUE,
   full_name text,
   phone_number text,
-  composio_mcp_url text, -- For general Composio MCP link
-  linkedin_url text, -- Specific URL if needed
-  twitter_url text, -- Specific URL if needed
-  youtube_url text, -- Specific URL if needed
   gemini_api_key text, -- Consider encrypting this column in a real application
-  is_linkedin_authed boolean DEFAULT false,
-  is_twitter_authed boolean DEFAULT false,
-  is_youtube_authed boolean DEFAULT false,
   xp integer DEFAULT 0, -- Added XP column
   badges text[] DEFAULT ARRAY[]::text[], -- Added badges column (array of text)
-  composio_api_key text, -- Added field for Composio API Key
+  -- Removed: composio_mcp_url, linkedin_url, twitter_url, youtube_url
+  -- Removed: is_linkedin_authed, is_twitter_authed, is_youtube_authed
+  -- Removed: composio_api_key
   -- Add length constraints if they don't exist
   CONSTRAINT username_length CHECK (char_length(username) <= 50),
   CONSTRAINT full_name_length CHECK (char_length(full_name) <= 100),
   CONSTRAINT phone_number_length CHECK (char_length(phone_number) <= 20),
-  CONSTRAINT composio_mcp_url_length CHECK (char_length(composio_mcp_url) <= 255),
-  CONSTRAINT linkedin_url_length CHECK (char_length(linkedin_url) <= 255),
-  CONSTRAINT twitter_url_length CHECK (char_length(twitter_url) <= 255),
-  CONSTRAINT youtube_url_length CHECK (char_length(youtube_url) <= 255),
-  CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255),
-  CONSTRAINT composio_api_key_length CHECK (char_length(composio_api_key) <= 255) -- Constraint for new column
+  CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255)
 );
 
--- Add columns if they don't exist (Safer than dropping/recreating)
--- Using ALTER TABLE ... ADD COLUMN IF NOT EXISTS
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS composio_mcp_url text;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS linkedin_url text;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS twitter_url text;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS youtube_url text;
+-- Columns to potentially remove (Optional, data loss risk) - NOT AUTOMATICALLY REMOVING
+-- ALTER TABLE public.profiles DROP COLUMN IF EXISTS composio_mcp_url;
+-- ALTER TABLE public.profiles DROP COLUMN IF EXISTS linkedin_url;
+-- ALTER TABLE public.profiles DROP COLUMN IF EXISTS twitter_url;
+-- ALTER TABLE public.profiles DROP COLUMN IF EXISTS youtube_url;
+-- ALTER TABLE public.profiles DROP COLUMN IF EXISTS is_linkedin_authed;
+-- ALTER TABLE public.profiles DROP COLUMN IF EXISTS is_twitter_authed;
+-- ALTER TABLE public.profiles DROP COLUMN IF EXISTS is_youtube_authed;
+-- ALTER TABLE public.profiles DROP COLUMN IF EXISTS composio_api_key;
+
+-- Add required columns if they don't exist
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS gemini_api_key text;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_linkedin_authed boolean DEFAULT false;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_twitter_authed boolean DEFAULT false;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_youtube_authed boolean DEFAULT false;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS xp integer DEFAULT 0;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS badges text[] DEFAULT ARRAY[]::text[];
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS composio_api_key text; -- Ensure new column is added
-
 
 -- Add constraints if they don't exist (more complex to check existence, ensure they match above)
 -- Using DO block to check for constraint existence before adding
@@ -79,39 +69,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
-    WHERE conname = 'composio_mcp_url_length' AND conrelid = 'public.profiles'::regclass
-  ) THEN
-     ALTER TABLE public.profiles ADD CONSTRAINT composio_mcp_url_length CHECK (char_length(composio_mcp_url) <= 255);
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'linkedin_url_length' AND conrelid = 'public.profiles'::regclass
-  ) THEN
-     ALTER TABLE public.profiles ADD CONSTRAINT linkedin_url_length CHECK (char_length(linkedin_url) <= 255);
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'twitter_url_length' AND conrelid = 'public.profiles'::regclass
-  ) THEN
-     ALTER TABLE public.profiles ADD CONSTRAINT twitter_url_length CHECK (char_length(twitter_url) <= 255);
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'youtube_url_length' AND conrelid = 'public.profiles'::regclass
-  ) THEN
-     ALTER TABLE public.profiles ADD CONSTRAINT youtube_url_length CHECK (char_length(youtube_url) <= 255);
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
     WHERE conname = 'gemini_api_key_length' AND conrelid = 'public.profiles'::regclass
   ) THEN
      ALTER TABLE public.profiles ADD CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255);
-  END IF;
-  IF NOT EXISTS ( -- Add constraint check for new column
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'composio_api_key_length' AND conrelid = 'public.profiles'::regclass
-  ) THEN
-     ALTER TABLE public.profiles ADD CONSTRAINT composio_api_key_length CHECK (char_length(composio_api_key) <= 255);
   END IF;
 END $$;
 
@@ -156,7 +116,7 @@ CREATE TRIGGER on_profile_update
   FOR EACH ROW EXECUTE PROCEDURE public.handle_profile_update();
 
 
--- 2. Quotas Table
+-- 2. Quotas Table (Unchanged)
 CREATE TABLE IF NOT EXISTS public.quotas (
   user_id uuid NOT NULL PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   request_count integer NOT NULL DEFAULT 0,
@@ -196,7 +156,7 @@ DROP POLICY IF EXISTS "Allow insert for own quota" ON public.quotas;
 DROP POLICY IF EXISTS "Allow update for own quota" ON public.quotas;
 
 
--- 3. get_user_profile Function (Upsert Logic, returns SETOF)
+-- 3. get_user_profile Function (Upsert Logic, returns SETOF) - Updated for removed columns
 -- CREATE OR REPLACE is idempotent
 CREATE OR REPLACE FUNCTION public.get_user_profile(p_user_id uuid)
 RETURNS SETOF public.profiles -- Return type matches the table structure
@@ -214,9 +174,9 @@ BEGIN
   IF NOT FOUND THEN
     RAISE NOTICE '[get_user_profile] Profile not found for user %, attempting to insert.', p_user_id;
     BEGIN
-        -- Ensure all default values are included, especially for new boolean/array/XP/composio_api_key columns
-        INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed, xp, badges, composio_api_key)
-        VALUES (p_user_id, now(), false, false, false, 0, ARRAY[]::text[], null) -- Added composio_api_key default
+        -- Ensure all remaining default values are included (xp, badges)
+        INSERT INTO public.profiles (id, updated_at, xp, badges)
+        VALUES (p_user_id, now(), 0, ARRAY[]::text[])
         ON CONFLICT (id) DO NOTHING; -- Handle potential race conditions
 
         -- After attempting insert (even if conflict occurred), try selecting again
@@ -250,7 +210,7 @@ REVOKE EXECUTE ON FUNCTION public.get_user_profile(uuid) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.get_user_profile(uuid) TO authenticated;
 
 
--- 4. increment_quota Function (Handles Reset and Increment, updates XP)
+-- 4. increment_quota Function (Handles Reset and Increment, updates XP) - Unchanged logic
 -- CREATE OR REPLACE is idempotent
 CREATE OR REPLACE FUNCTION public.increment_quota(p_user_id uuid, p_increment_amount integer)
 RETURNS integer -- Returns the new REMAINING quota
@@ -345,7 +305,7 @@ REVOKE EXECUTE ON FUNCTION public.increment_quota(uuid, integer) FROM authentica
 GRANT EXECUTE ON FUNCTION public.increment_quota(uuid, integer) TO authenticated;
 
 
--- 5. get_remaining_quota Function (Handles Reset Check)
+-- 5. get_remaining_quota Function (Handles Reset Check) - Unchanged logic
 -- CREATE OR REPLACE is idempotent
 CREATE OR REPLACE FUNCTION public.get_remaining_quota(p_user_id uuid)
 RETURNS integer
@@ -408,9 +368,9 @@ GRANT EXECUTE ON FUNCTION public.get_remaining_quota(uuid) TO authenticated;
 
 -- 6. Optional Seed Steps (Commented out - Run manually if needed after initial setup)
 /*
--- Seed initial profiles for existing users (run once after table creation)
-INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed, xp, badges, composio_api_key)
-SELECT id, NOW(), false, false, false, 0, ARRAY[]::text[], null FROM auth.users
+-- Seed initial profiles for existing users (run once after table creation) - Updated for removed columns
+INSERT INTO public.profiles (id, updated_at, xp, badges)
+SELECT id, NOW(), 0, ARRAY[]::text[] FROM auth.users
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed initial quotas for existing users (run once after table creation)
@@ -419,4 +379,4 @@ SELECT id, 0, NOW(), 100, NOW() FROM auth.users
 ON CONFLICT (user_id) DO NOTHING;
 */
 
-RAISE NOTICE 'VibeFlow schema setup/update script completed (V3.2).';
+RAISE NOTICE 'VibeFlow schema setup/update script completed (V3.2 - Composio Removed).';

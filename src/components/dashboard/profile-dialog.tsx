@@ -29,6 +29,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { authenticateComposioApp } from '@/services/composio-service'; // Import the new service
 import { toast as sonnerToast } from 'sonner'; // Import sonner toast for confetti effect
 import Confetti from 'react-confetti';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Added Select for Persona
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Added Tooltip
 
 interface ProfileDialogProps {
   isOpen: boolean;
@@ -87,7 +89,7 @@ export function ProfileDialog({
   const [profile, setProfile] = useState<Profile | null>(initialProfile);
   const [quota, setQuota] = useState<Quota | null>(initialQuota);
   const [xp, setXp] = useState(initialXp); // State for XP
-  const [badges, setBadges] = useState<string[]>(initialBadges); // State for badges
+  const [badges, setBadges] = useState<string[]>(initialBadges ?? []); // Initialize with empty array if initialBadges is null/undefined
   const [showConfetti, setShowConfetti] = useState(false);
   const [localDbSetupError, setLocalDbSetupError] = useState<string | null>(dbSetupError);
 
@@ -96,7 +98,7 @@ export function ProfileDialog({
     setProfile(initialProfile);
     setQuota(initialQuota);
     setXp(initialXp);
-    setBadges(initialBadges);
+    setBadges(initialBadges ?? []); // Ensure badges is always an array
     setLocalDbSetupError(dbSetupError);
   }, [initialProfile, initialQuota, initialXp, initialBadges, dbSetupError]);
 
@@ -379,13 +381,13 @@ export function ProfileDialog({
     const newlyAwardedBadges: string[] = [];
     BADGES.forEach(badge => {
       // Check against currentXp and if the badge isn't already in the local badges state
-      if (currentXp >= badge.xp && !badges.includes(badge.name)) {
+      if (currentXp >= badge.xp && !(badges ?? []).includes(badge.name)) { // Check if badges array exists before calling includes
         newlyAwardedBadges.push(badge.name);
       }
     });
 
     if (newlyAwardedBadges.length > 0) {
-      const newBadges = [...badges, ...newlyAwardedBadges];
+      const newBadges = [...(badges ?? []), ...newlyAwardedBadges]; // Ensure badges is an array before spreading
       setBadges(newBadges); // Update local badges state
 
       // Show confetti and toast for the *first* new badge awarded in this update
@@ -427,11 +429,11 @@ export function ProfileDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
        {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
-      <DialogContent className="sm:max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90vh]">
-        <DialogHeader>
+       <DialogContent className="sm:max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90vh]">
+        <DialogHeader className="px-6 pt-6">
           <DialogTitle>Profile & Settings</DialogTitle>
           <DialogDescription>
-            Manage your profile details, API keys, app authentications, and usage quota.
+            Manage your profile, API keys, app connections, and usage.
           </DialogDescription>
         </DialogHeader>
 
@@ -449,28 +451,28 @@ export function ProfileDialog({
             {/* Profile Form */}
             <form id="profile-form" onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Settings2 className="h-5 w-5"/> User Information</h3>
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Settings2 className="h-5 w-5"/> User Information</h3>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-x-4 gap-y-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-x-4 gap-y-2">
                     <Label htmlFor="email" className="sm:text-right sm:col-span-1">Email</Label>
                     <Input id="email" value={user.email ?? 'N/A'} readOnly disabled className="col-span-1 sm:col-span-2 bg-muted/50" />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
-                    <Label htmlFor="full_name" className="sm:text-right sm:col-span-1 mt-2">Full Name</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                    <Label htmlFor="full_name" className="sm:text-right sm:col-span-1 mt-1">Full Name</Label>
                     <div className="col-span-1 sm:col-span-2">
                       <Input id="full_name" {...register('full_name')} className={`${errors.full_name ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} />
                       {errors.full_name && <p className="text-xs text-destructive mt-1">{errors.full_name.message}</p>}
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
-                    <Label htmlFor="username" className="sm:text-right sm:col-span-1 mt-2">Username</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                    <Label htmlFor="username" className="sm:text-right sm:col-span-1 mt-1">Username</Label>
                     <div className="col-span-1 sm:col-span-2">
                       <Input id="username" {...register('username')} className={`${errors.username ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} />
                       {errors.username && <p className="text-xs text-destructive mt-1">{errors.username.message}</p>}
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
-                    <Label htmlFor="phone_number" className="sm:text-right sm:col-span-1 mt-2">Phone</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                    <Label htmlFor="phone_number" className="sm:text-right sm:col-span-1 mt-1">Phone</Label>
                     <div className="col-span-1 sm:col-span-2">
                       <Input id="phone_number" {...register('phone_number')} className={`${errors.phone_number ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} />
                       {errors.phone_number && <p className="text-xs text-destructive mt-1">{errors.phone_number.message}</p>}
@@ -479,15 +481,15 @@ export function ProfileDialog({
                 </div>
               </div>
 
-              <Separator className="my-2" />
+              <Separator />
 
               {/* Integrations Section */}
               <div>
-                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><LinkIcon className="h-5 w-5"/> Integrations</h3>
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><LinkIcon className="h-5 w-5"/> Integrations</h3>
                 <div className="space-y-4">
                    {/* Gemini API Key */}
-                   <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
-                     <Label htmlFor="gemini_api_key" className="sm:text-right sm:col-span-1 mt-2">
+                   <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                     <Label htmlFor="gemini_api_key" className="sm:text-right sm:col-span-1 mt-1">
                        Gemini Key
                      </Label>
                      <div className="col-span-1 sm:col-span-2">
@@ -501,33 +503,32 @@ export function ProfileDialog({
                        />
                        {errors.gemini_api_key && <p className="text-xs text-destructive mt-1">{errors.gemini_api_key.message}</p>}
                        <p className="text-xs text-muted-foreground mt-1">
-                         Get your key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Google AI Studio <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>.
+                         Get key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Google AI Studio <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>.
                        </p>
                      </div>
                    </div>
 
                    {/* Composio MCP URL */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
-                    {/* Use composio_mcp_url for htmlFor and register */}
-                    <Label htmlFor="composio_mcp_url" className="sm:text-right sm:col-span-1 mt-2">Composio MCP URL</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                    <Label htmlFor="composio_mcp_url" className="sm:text-right sm:col-span-1 mt-1">Composio MCP URL</Label>
                     <div className="col-span-1 sm:col-span-2">
                       <Input
                         id="composio_mcp_url"
                         {...register('composio_mcp_url')}
-                        placeholder="e.g., https://mcp.composio.dev/u/your-unique-id"
+                        placeholder="e.g., https://mcp.composio.dev/u/your-id"
                         className={`${errors.composio_mcp_url ? 'border-destructive' : ''}`}
                         disabled={!!localDbSetupError}
                       />
                       {errors.composio_mcp_url && <p className="text-xs text-destructive mt-1">{errors.composio_mcp_url.message}</p>}
                       <p className="text-xs text-muted-foreground mt-1">
-                        Find this URL in your <a href="https://mcp.composio.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Composio MCP dashboard <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>. Needed for app authentication.
+                        Find in your <a href="https://mcp.composio.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Composio MCP dashboard <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>.
                       </p>
                     </div>
                   </div>
 
                    {/* App Specific URLs */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
-                       <Label htmlFor="linkedin_url" className="sm:text-right sm:col-span-1 mt-2">LinkedIn URL</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                       <Label htmlFor="linkedin_url" className="sm:text-right sm:col-span-1 mt-1">LinkedIn URL</Label>
                        <div className="col-span-1 sm:col-span-2">
                           <Input
                              id="linkedin_url"
@@ -537,11 +538,11 @@ export function ProfileDialog({
                              disabled={!!localDbSetupError}
                           />
                           {errors.linkedin_url && <p className="text-xs text-destructive mt-1">{errors.linkedin_url.message}</p>}
-                          <p className="text-xs text-muted-foreground mt-1">Enter the specific Composio URL for LinkedIn.</p>
+                          <p className="text-xs text-muted-foreground mt-1">Composio app URL for LinkedIn.</p>
                        </div>
                     </div>
-                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
-                       <Label htmlFor="twitter_url" className="sm:text-right sm:col-span-1 mt-2">Twitter URL</Label>
+                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                       <Label htmlFor="twitter_url" className="sm:text-right sm:col-span-1 mt-1">Twitter URL</Label>
                        <div className="col-span-1 sm:col-span-2">
                           <Input
                              id="twitter_url"
@@ -551,11 +552,11 @@ export function ProfileDialog({
                              disabled={!!localDbSetupError}
                           />
                           {errors.twitter_url && <p className="text-xs text-destructive mt-1">{errors.twitter_url.message}</p>}
-                           <p className="text-xs text-muted-foreground mt-1">Enter the specific Composio URL for Twitter.</p>
+                           <p className="text-xs text-muted-foreground mt-1">Composio app URL for Twitter.</p>
                        </div>
                     </div>
-                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
-                       <Label htmlFor="youtube_url" className="sm:text-right sm:col-span-1 mt-2">YouTube URL</Label>
+                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                       <Label htmlFor="youtube_url" className="sm:text-right sm:col-span-1 mt-1">YouTube URL</Label>
                        <div className="col-span-1 sm:col-span-2">
                           <Input
                              id="youtube_url"
@@ -565,12 +566,12 @@ export function ProfileDialog({
                              disabled={!!localDbSetupError}
                           />
                           {errors.youtube_url && <p className="text-xs text-destructive mt-1">{errors.youtube_url.message}</p>}
-                           <p className="text-xs text-muted-foreground mt-1">Enter the specific Composio URL for YouTube.</p>
+                           <p className="text-xs text-muted-foreground mt-1">Composio app URL for YouTube.</p>
                        </div>
                     </div>
 
                    {/* App Authentication Buttons */}
-                   <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
+                   <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
                        <Label className="sm:text-right sm:col-span-1 mt-2">App Authentication</Label>
                        <div className="col-span-1 sm:col-span-2 space-y-3">
                           {(['linkedin', 'twitter', 'youtube'] as ComposioApp[]).map((app) => {
@@ -583,6 +584,10 @@ export function ProfileDialog({
                                 case 'youtube': targetUrl = profile?.youtube_url; break;
                               }
                              const isDisabled = isLoading || !profile?.composio_mcp_url || !targetUrl || !!localDbSetupError;
+                             const tooltipText = !profile?.composio_mcp_url ? "Enter MCP URL first" :
+                                                !targetUrl ? `Enter ${app} URL first` :
+                                                localDbSetupError ? "Cannot authenticate due to DB error" :
+                                                isAuthenticated ? `Re-authenticate ${app}` : `Authenticate ${app}`;
 
                              return (
                                <div key={app} className="flex items-center justify-between p-3 bg-muted/30 rounded-md border border-border/50">
@@ -591,28 +596,31 @@ export function ProfileDialog({
                                     <span className="capitalize font-medium">{app}</span>
                                     <span className="text-xs text-muted-foreground">({isAuthenticated ? 'Authenticated' : 'Not Authenticated'})</span>
                                  </div>
-                                 <Button
-                                    type="button"
-                                    variant={isAuthenticated ? "outline" : "default"}
-                                    size="sm"
-                                    onClick={() => handleAuthenticateApp(app)}
-                                    disabled={isDisabled}
-                                    loading={isLoading}
-                                    title={
-                                        !profile?.composio_mcp_url ? "Enter MCP URL first" :
-                                        !targetUrl ? `Enter ${app} URL first` :
-                                        localDbSetupError ? "Cannot authenticate due to DB error" :
-                                        isAuthenticated ? `Re-authenticate ${app}` : `Authenticate ${app}`
-                                    }
-                                  >
-                                    {isAuthenticated ? <WifiOff className="mr-2 h-4 w-4" /> : <Wifi className="mr-2 h-4 w-4" />}
-                                    {isAuthenticated ? 'Re-authenticate' : 'Authenticate'}
-                                  </Button>
+                                 <TooltipProvider>
+                                   <Tooltip>
+                                     <TooltipTrigger asChild>
+                                        <Button
+                                          type="button"
+                                          variant={isAuthenticated ? "outline" : "default"}
+                                          size="sm"
+                                          onClick={() => handleAuthenticateApp(app)}
+                                          disabled={isDisabled}
+                                          loading={isLoading}
+                                        >
+                                          {isAuthenticated ? <WifiOff className="mr-2 h-4 w-4" /> : <Wifi className="mr-2 h-4 w-4" />}
+                                          {isAuthenticated ? 'Re-authenticate' : 'Authenticate'}
+                                        </Button>
+                                     </TooltipTrigger>
+                                     <TooltipContent side="top">
+                                       <p>{tooltipText}</p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 </TooltipProvider>
                                </div>
                              );
                           })}
                           <p className="text-xs text-muted-foreground mt-1">
-                             Connect your social accounts via Composio to enable direct publishing. Requires MCP and App URLs to be set.
+                             Connect accounts via Composio to enable direct publishing.
                           </p>
                        </div>
                     </div>
@@ -621,7 +629,7 @@ export function ProfileDialog({
               </div>
             </form>
 
-            <Separator className="my-2" />
+            <Separator />
 
             {/* Gamification Section */}
             <div>
@@ -632,7 +640,7 @@ export function ProfileDialog({
                       {/* Add null check before calling toLocaleString */}
                      <span className="font-medium">{typeof xp === 'number' ? xp.toLocaleString() : 0} XP</span>
                   </div>
-                   {/* Replace Progress with a stylized Fuel Tank */}
+                   {/* Stylized Fuel Tank */}
                    <div className="w-full h-4 bg-muted rounded-full overflow-hidden border border-border/50 relative">
                      <div
                        className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 ease-out"
@@ -643,9 +651,9 @@ export function ProfileDialog({
 
                   <div className="mt-4">
                       <h4 className="text-sm font-semibold mb-2">Unlocked Badges:</h4>
-                      {badges.length > 0 ? (
+                      {(badges ?? []).length > 0 ? ( // Add null check before accessing length
                          <div className="flex flex-wrap gap-3">
-                           {badges.map((badgeName) => {
+                           {(badges ?? []).map((badgeName) => { // Add null check before mapping
                              const badgeInfo = BADGES.find(b => b.name === badgeName);
                              return (
                                <div key={badgeName} className="flex items-center gap-2 p-2 border border-green-500/30 bg-green-500/10 rounded-md text-xs">
@@ -666,7 +674,7 @@ export function ProfileDialog({
                </div>
             </div>
 
-            <Separator className="my-2" />
+            <Separator />
 
             {/* Billing/Quota Section */}
             <div>
@@ -693,7 +701,7 @@ export function ProfileDialog({
                   )}
                   <div className="flex justify-end pt-2">
                     <Button onClick={handleUpgrade} size="sm">
-                      <CreditCard className="mr-2 h-4 w-4" /> Upgrade Plan (Coming Soon)
+                      <CreditCard className="mr-2 h-4 w-4" /> Upgrade Plan (Soon)
                     </Button>
                   </div>
                   {quota.last_reset_at && (

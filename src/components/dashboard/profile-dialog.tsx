@@ -240,11 +240,12 @@ export function ProfileDialog({
         if (error) {
           console.error('Error updating profile:', error.message);
           let errorMessage = `Could not save profile: ${error.message}`;
-          // Check for specific schema cache error
+           // Check for specific schema cache error related to columns
           if (error.message.includes("Could not find the") && error.message.includes("column") && error.message.includes("in the schema cache")) {
-             const missingColumn = error.message.match(/'(.*?)'/)?.[1];
-             errorMessage = `Database schema mismatch: Column '${missingColumn || 'unknown'}' not found. Please ensure the database schema is up-to-date by running the full 'supabase/schema.sql' script again.`;
-             setLocalDbSetupError(errorMessage); // Set the DB error state
+              const missingColumnMatch = error.message.match(/'(.*?)'/);
+              const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
+              errorMessage = `Database schema mismatch: Column '${missingColumn}' not found in 'profiles' table schema cache. Please run the full 'supabase/schema.sql' script again. See README Step 3.`;
+              setLocalDbSetupError(errorMessage); // Set the DB error state
           } else if (error.message.includes("violates row-level security policy")) {
             errorMessage = 'Could not save profile due to database security policy.';
           } else if (error.message.includes("relation \"public.profiles\" does not exist")) {
@@ -260,6 +261,7 @@ export function ProfileDialog({
           onProfileUpdate(completeProfile);
           toast({ title: 'Profile Saved', description: 'Your changes have been saved.' });
           reset(data); // Reset form to make isDirty false
+          setLocalDbSetupError(null); // Clear DB error on successful save
         }
       } catch (error: any) {
         console.error('Unexpected error updating profile:', error);
@@ -295,7 +297,15 @@ export function ProfileDialog({
              .single();
 
            if (updateError) {
-              throw updateError; // Throw to be caught by the outer catch block
+              // Check for schema cache error related to auth columns
+              if (updateError.message.includes("Could not find the") && updateError.message.includes("column") && updateError.message.includes("in the schema cache")) {
+                 const missingColumnMatch = updateError.message.match(/'(.*?)'/);
+                 const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
+                 const authErrorMsg = `Database schema mismatch: Authentication column '${missingColumn}' not found for '${appName}'. Please run the full 'supabase/schema.sql' script again. See README Step 3.`;
+                 setLocalDbSetupError(authErrorMsg);
+                 throw new Error(authErrorMsg); // Throw to be caught below
+              }
+              throw updateError; // Throw other update errors
            }
 
            if(updatedProfileData){
@@ -303,6 +313,7 @@ export function ProfileDialog({
               setProfile(completeProfile); // Update local state
               onProfileUpdate(completeProfile); // Notify parent
               toast({ title: `${appName.charAt(0).toUpperCase() + appName.slice(1)} Authenticated`, description: `Successfully authenticated ${appName}.`, variant: "default" });
+              setLocalDbSetupError(null); // Clear DB error on success
            }
 
         } else {
@@ -312,9 +323,9 @@ export function ProfileDialog({
      } catch (error: any) {
         console.error(`Error authenticating ${appName}:`, error);
          let errorMsg = `Failed to authenticate ${appName}: ${error.message}`;
-         if (error.message.includes("column") && error.message.includes("does not exist")) {
-             errorMsg = `Database schema error: Authentication status column for ${appName} might be missing. Please run 'supabase/schema.sql'.`;
-             setLocalDbSetupError(errorMsg);
+         // Check if it's the specific DB setup error we set above
+         if (localDbSetupError && error.message.includes('Authentication column')) {
+             errorMsg = localDbSetupError; // Use the specific error message
          }
         toast({ title: "Authentication Error", description: errorMsg, variant: "destructive" });
         // Optionally update DB state to false if needed, though it should already be false

@@ -6,40 +6,63 @@ import type { ComposioApp } from '@/types/supabase';
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code'); // Composio might return a code
-  const state = searchParams.get('state'); // Check for state parameter if Composio uses it
-  const userId = searchParams.get('user_id'); // Retrieve user_id if passed in state or query
-  const app = searchParams.get('app') as ComposioApp | null; // Determine which app was authenticated (might be in state or inferred)
+  const stateParam = searchParams.get('state'); // Retrieve the state parameter
 
-  console.log('Composio Callback Received:', { code, state, userId, app });
+  console.log('Composio Callback Received:', { code, state: stateParam });
+
+  let userId: string | null = null;
+  let app: ComposioApp | null = null;
+  let parsedState: any = null;
+
+  // Parse the state parameter
+  if (stateParam) {
+      try {
+          parsedState = JSON.parse(decodeURIComponent(stateParam));
+          userId = parsedState?.userId;
+          app = parsedState?.app;
+      } catch (e) {
+          console.error("Composio callback: Failed to parse state parameter:", e);
+          return NextResponse.redirect(`${origin}/dashboard?error=composio_auth_failed&message=Invalid+state+parameter+received.`);
+      }
+  }
 
   if (!userId) {
-      console.error("Composio callback missing user_id.");
-      return NextResponse.redirect(`${origin}/dashboard?error=composio_auth_failed&message=User+identification+missing+during+authentication.`);
+      console.error("Composio callback missing user_id in state.");
+      return NextResponse.redirect(`${origin}/dashboard?error=composio_auth_failed&message=User+identification+missing+in+authentication+state.`);
   }
 
   if (!app || !['linkedin', 'twitter', 'youtube'].includes(app)) {
-       console.error("Composio callback missing or invalid app identifier.");
-      return NextResponse.redirect(`${origin}/dashboard?error=composio_auth_failed&message=Application+identifier+missing+or+invalid.`);
+       console.error("Composio callback missing or invalid app identifier in state.");
+      return NextResponse.redirect(`${origin}/dashboard?error=composio_auth_failed&message=Application+identifier+missing+or+invalid+in+state.`);
   }
 
   // Placeholder: Verify the 'code' or 'state' with Composio if necessary
-  // This step depends heavily on Composio's specific OAuth flow.
-  // You might need to exchange the 'code' for an access token or validate the 'state'.
-  // For this example, we'll assume the callback indicates success if it reaches here.
+  // This step depends heavily on Composio's specific OAuth flow and security requirements.
+  // You might need to exchange the 'code' for an access token using a server-side call to Composio's API.
+  // For simplicity, we'll assume the presence of 'code' (or just reaching the callback) indicates potential success.
+
+  if (!code) {
+      const error = searchParams.get('error');
+      const errorDescription = searchParams.get('error_description');
+      console.error(`Composio callback error: ${error || 'No code received.'} Description: ${errorDescription || 'N/A'}`);
+      return NextResponse.redirect(`${origin}/dashboard?error=composio_auth_failed&message=${encodeURIComponent(errorDescription || 'Authentication denied or failed.')}`);
+  }
+
 
   try {
     const supabase = await createClient();
 
-    // Check if the user making the callback matches the userId passed
-    // This is a crucial security step if state validation isn't sufficient
+    // Check if the user making the callback matches the userId from the state
+    // This adds a layer of security, though Supabase RLS should also handle this.
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (!currentUser || currentUser.id !== userId) {
-        console.error(`Composio callback user mismatch: Callback for ${userId}, current user is ${currentUser?.id}`);
+        console.error(`Composio callback user mismatch: State for ${userId}, current user is ${currentUser?.id}`);
          return NextResponse.redirect(`${origin}/dashboard?error=composio_auth_failed&message=Authentication+session+mismatch.`);
     }
 
 
     const updateField = `is_${app}_authed` as const; // e.g., 'is_linkedin_authed'
+    console.log(`Updating profile for user ${userId}, setting ${updateField} to true.`);
     const { error: updateError } = await supabase
       .from('profiles')
       .update({ [updateField]: true, updated_at: new Date().toISOString() })
@@ -51,7 +74,7 @@ export async function GET(request: Request) {
     }
 
     console.log(`Successfully marked ${app} as authenticated for user ${userId}`);
-    // Redirect back to the dashboard, possibly with a success message
+    // Redirect back to the dashboard with success parameters
     return NextResponse.redirect(`${origin}/dashboard?success=composio_auth&app=${app}`);
 
   } catch (error: any) {

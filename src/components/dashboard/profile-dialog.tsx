@@ -1,4 +1,3 @@
-// src/components/dashboard/profile-dialog.tsx
 'use client';
 
 import type { User } from '@supabase/supabase-js';
@@ -26,13 +25,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck, Star, Trophy, Zap, BrainCircuit, Key } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { authenticateComposioApp } from '@/services/composio-service'; // Import the new service
+import { handleDeauthenticateApp } from '@/services/composio-service';
 import { startComposioLogin } from '@/actions/composio-actions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { OpenAIToolSet, App as ComposioAppEnum } from "composio-core";
 import { OpenAI } from "openai";
 import { toast as sonnerToast } from 'sonner';
 import Confetti from 'react-confetti';
+
 
 interface ProfileDialogProps {
   isOpen: boolean;
@@ -322,15 +322,21 @@ export function ProfileDialog({
     try {
         // Call the API route
         console.log(`Calling API /api/auth/composio/connect for ${appName} with MCP: ${profile.composio_mcp_url}`);
-        const result = await authenticateComposioApp(appName, user.id); // Pass user.id here
-        console.log(`authenticateComposioApp API for ${appName} returned:`, result.success);
+        // Call the API route to get the redirect URL
+        const response = await fetch('/api/auth/composio/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appName }), // Pass appName in the body
+        });
 
-        if (result.success && result.authUrl) {
-            console.log(`Redirecting user to Composio OAuth URL: ${result.authUrl}`);
-            window.location.href = result.authUrl; // Redirect the user
+        const result = await response.json();
+
+        if (response.ok && result.redirectUrl) {
+            console.log(`Redirecting user to Composio OAuth URL: ${result.redirectUrl}`);
+            window.location.href = result.redirectUrl; // Redirect the user
         } else {
-            console.error(`Authentication initiation failed for ${appName}:`, result.error);
-            toast({ title: `${appName} Auth Failed`, description: result.error || `Could not initiate authentication for ${appName}.`, variant: "destructive" });
+            console.error(`Authentication initiation failed for ${appName}:`, result.error || `HTTP Status: ${response.status}`);
+            toast({ title: `${appName} Auth Failed`, description: result.error || `Could not initiate authentication for ${appName}. Status: ${response.status}`, variant: "destructive" });
             setIsComposioAuthenticating(prev => ({...prev, [appName]: false}));
         }
     } catch (error: any) {
@@ -339,6 +345,29 @@ export function ProfileDialog({
         setIsComposioAuthenticating(prev => ({...prev, [appName]: false}));
     }
  }, [user.id, toast, localDbSetupError, profile?.composio_mcp_url]);
+
+
+  const handleDeauthenticateAppAction = async (appName: ComposioApp) => {
+      try {
+          const result = await handleDeauthenticateApp(appName, user.id);
+          if (result.success) {
+              toast({ title: `${appName} Disconnected`, description: `Successfully disconnected from ${appName}.`, variant: "success" });
+              // Update the profile locally
+              setProfile(prev => {
+                  if (!prev) return prev;
+                  const updatedProfile = { ...prev };
+                  const authField = `is_${appName}_authed` as keyof Profile;
+                  updatedProfile[authField] = false;
+                  return updatedProfile;
+              });
+          } else {
+              toast({ title: `Failed to Disconnect ${appName}`, description: result.error || "Could not deauthenticate. Please try again.", variant: "destructive" });
+          }
+      } catch (error: any) {
+          console.error(`Error deauthenticating ${appName}:`, error);
+          toast({ title: `Failed to Disconnect ${appName}`, description: error.message || "An unexpected error occurred.", variant: "destructive" });
+      }
+  };
 
 
   const handleUpgrade = () => {
@@ -385,9 +414,9 @@ export function ProfileDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90vh]">
+       <DialogContent className="sm:max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90vh]">
         <DialogHeader className="px-6 pt-6">
-          <DialogTitle>Profile &amp;amp; Settings</DialogTitle>
+          <DialogTitle>Profile &amp; Settings</DialogTitle>
           <DialogDescription>
             Manage your profile, API keys, app connections, and usage.
           </DialogDescription>
@@ -402,7 +431,7 @@ export function ProfileDialog({
         )}
 
         <ScrollArea className="px-6 overflow-y-auto">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 py-4">
+          <form id="profile-form" onSubmit={handleSubmit(onSubmit)} className="space-y-8 py-4">
             {/* Profile Form */}
             <section>
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Settings2 className="h-5 w-5"/> User Information</h3>
@@ -484,7 +513,7 @@ export function ProfileDialog({
                             type="button" // Prevent form submission
                             variant="outline"
                             onClick={handleGetComposioKey} // Use the new handler
-                            disabled={composioStatus.loading}
+                            disabled={composioStatus.loading || !!localDbSetupError}
                             loading={composioStatus.loading}
                             className="mt-2"
                         >
@@ -518,6 +547,53 @@ export function ProfileDialog({
                        </div>
                    </div>
 
+                   {/* Social Media Specific URLs (Used for Authentication Redirect) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                        <Label htmlFor="linkedin_url" className="sm:text-right sm:col-span-1 mt-1">
+                         LinkedIn URL (Optional)
+                       </Label>
+                       <div className="col-span-1 sm:col-span-2">
+                         <Input
+                           id="linkedin_url"
+                           {...register('linkedin_url')}
+                           placeholder="e.g., https://linkedin.com/in/your-profile"
+                           className={`${errors.linkedin_url ? 'border-destructive' : ''}`}
+                           disabled={!!localDbSetupError}
+                         />
+                         {errors.linkedin_url && <p className="text-xs text-destructive mt-1">{errors.linkedin_url.message}</p>}
+                       </div>
+                    </div>
+                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                        <Label htmlFor="twitter_url" className="sm:text-right sm:col-span-1 mt-1">
+                         Twitter/X URL (Optional)
+                       </Label>
+                       <div className="col-span-1 sm:col-span-2">
+                         <Input
+                           id="twitter_url"
+                           {...register('twitter_url')}
+                           placeholder="e.g., https://twitter.com/your_handle"
+                           className={`${errors.twitter_url ? 'border-destructive' : ''}`}
+                           disabled={!!localDbSetupError}
+                         />
+                         {errors.twitter_url && <p className="text-xs text-destructive mt-1">{errors.twitter_url.message}</p>}
+                       </div>
+                     </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                       <Label htmlFor="youtube_url" className="sm:text-right sm:col-span-1 mt-1">
+                         YouTube URL (Optional)
+                       </Label>
+                       <div className="col-span-1 sm:col-span-2">
+                         <Input
+                           id="youtube_url"
+                           {...register('youtube_url')}
+                           placeholder="e.g., https://youtube.com/channel/your-id"
+                           className={`${errors.youtube_url ? 'border-destructive' : ''}`}
+                           disabled={!!localDbSetupError}
+                         />
+                         {errors.youtube_url && <p className="text-xs text-destructive mt-1">{errors.youtube_url.message}</p>}
+                       </div>
+                     </div>
+
                     {/* App Authentication Section */}
                      <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2 pt-2">
                         <Label className="sm:text-right sm:col-span-1 mt-1">App Connections</Label>
@@ -545,6 +621,16 @@ export function ProfileDialog({
                                      >
                                        {isAuthenticated ? "Connected" : "Authenticate"}
                                     </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => handleDeauthenticateAppAction(appName)}
+                                        disabled={!isAuthenticated || isComposioAuthenticating[appName] || !!localDbSetupError}
+                                        loading={isComposioAuthenticating[appName]}
+                                      >
+                                        Disconnect
+                                      </Button>
                                  </div>
                               );
                            })}

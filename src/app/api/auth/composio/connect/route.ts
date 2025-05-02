@@ -52,8 +52,10 @@ export async function POST(request: Request) {
 
     const connectionRequest = await entity.initiateConnection({
         appName: composioAppEnumValue,
-        // You might need to configure redirectUri explicitly if not default
-        // redirectUri: `${process.env.NEXT_PUBLIC_BASE_URL}/auth/composio-callback` // Example
+        // Pass user ID in state to identify user during callback
+        state: JSON.stringify({ userId: user.id, app: appName }),
+        // redirectUri is crucial for OAuth callback
+        redirectUri: `${process.env.NEXT_PUBLIC_BASE_URL || request.headers.get('origin')}/auth/composio-callback` // Construct callback URL
     });
 
     // 5. Return redirectUrl if available

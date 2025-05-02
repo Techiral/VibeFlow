@@ -18,7 +18,7 @@ import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, In
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
-import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post';
+import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post'; // Added analyzePost
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
@@ -262,6 +262,8 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                  errorMsg = "Database setup incomplete: Missing 'quotas' table. Run setup script.";
              } else if (rpcError.message.includes("permission denied")) {
                  errorMsg = "Database access error: Permission denied for 'get_remaining_quota'. Check RLS/function security.";
+             } else if (rpcError.message.includes("406 Not Acceptable")) {
+                 errorMsg = "Database access error: Could not fetch quota (406 Not Acceptable). Check RLS policies and function return type.";
              }
              setupErrorMsg = errorMsg; // Overwrite previous profile error if quota fails more specifically
              toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
@@ -1152,7 +1154,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
           {/* Profile Button/Dialog Trigger */}
           <Tooltip>
              <TooltipTrigger asChild>
-                  <Button id="profile-button-tooltip-trigger" variant="ghost" size="icon" onClick={() => setIsProfileDialogOpen(true)} disabled={!!dbSetupError}>
+                  <Button id="profile-button-tooltip-trigger" variant="ghost" size="icon" onClick={() => setIsProfileDialogOpen(true)} disabled={!!dbSetupError} aria-label="Open Profile Settings">
                      <UserIcon className="h-5 w-5" />
                   </Button>
              </TooltipTrigger>
@@ -1162,7 +1164,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
            {/* Sign Out Button */}
           <Tooltip>
              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={handleSignOut}>
+                <Button variant="ghost" size="icon" onClick={handleSignOut} aria-label="Sign Out">
                   <LogOut className="h-5 w-5" />
                 </Button>
              </TooltipTrigger>
@@ -1209,15 +1211,15 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              <div className="w-full sm:w-1/2 md:w-1/3"> {/* Limit width */}
                 <Label htmlFor="persona-select">AI Persona</Label>
                  <Select value={persona} onValueChange={(value) => setPersona(value as Persona)}>
-                   <SelectTrigger id="persona-select-trigger" className="w-full" disabled={isDisabled}>
+                   <SelectTrigger id="persona-select-trigger" className="w-full" disabled={isDisabled} aria-label="Select AI Persona">
                      <SelectValue placeholder="Select Persona" />
                    </SelectTrigger>
                    <SelectContent>
-                     <SelectItem value="default">Default</SelectItem>
-                     <SelectItem value="tech_ceo">Tech CEO</SelectItem>
-                     <SelectItem value="casual_gen_z">Casual Gen Z</SelectItem>
-                     <SelectItem value="thought_leader">Thought Leader</SelectItem>
-                     <SelectItem value="meme_lord">Meme Lord</SelectItem>
+                     <SelectItem value="default" textValue="Default">Default</SelectItem>
+                     <SelectItem value="tech_ceo" textValue="Tech CEO">Tech CEO</SelectItem>
+                     <SelectItem value="casual_gen_z" textValue="Casual Gen Z">Casual Gen Z</SelectItem>
+                     <SelectItem value="thought_leader" textValue="Thought Leader">Thought Leader</SelectItem>
+                     <SelectItem value="meme_lord" textValue="Meme Lord">Meme Lord</SelectItem>
                    </SelectContent>
                  </Select>
               </div>
@@ -1321,6 +1323,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                                            disabled={isDisabled || !postDrafts[platform] || analysisStates[platform]}
                                            loading={analysisStates[platform]}
                                            className="ai-advisor-button" // Added class
+                                           aria-label="Get AI feedback"
                                          >
                                             <Sparkles className="h-4 w-4 text-purple-400" />
                                          </Button>
@@ -1330,7 +1333,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
 
                                 <Tooltip>
                                    <TooltipTrigger asChild>
-                                      <Button variant="ghost" size="icon" onClick={() => copyToClipboard(postDrafts[platform])} disabled={!postDrafts[platform] || isPublishing[platform]}>
+                                      <Button variant="ghost" size="icon" onClick={() => copyToClipboard(postDrafts[platform])} disabled={!postDrafts[platform] || isPublishing[platform]} aria-label="Copy Post">
                                          <Copy className="h-4 w-4" />
                                       </Button>
                                    </TooltipTrigger>

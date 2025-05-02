@@ -10,15 +10,18 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      profiles: { // Added profiles table
+      profiles: { // Updated profiles table definition
         Row: {
           id: string // UUID, references auth.users.id
           updated_at: string | null
           username: string | null
           full_name: string | null
           phone_number: string | null
-          composio_url: string | null
-          gemini_api_key: string | null // Storing API keys directly is insecure for production! Consider encryption or Vault.
+          composio_mcp_url: string | null // Renamed from composio_url
+          gemini_api_key: string | null
+          is_linkedin_authed: boolean | null // Added boolean flag
+          is_twitter_authed: boolean | null // Added boolean flag
+          is_youtube_authed: boolean | null // Added boolean flag
         }
         Insert: {
           id: string // UUID, references auth.users.id
@@ -26,8 +29,11 @@ export type Database = {
           username?: string | null
           full_name?: string | null
           phone_number?: string | null
-          composio_url?: string | null
+          composio_mcp_url?: string | null // Renamed
           gemini_api_key?: string | null
+          is_linkedin_authed?: boolean | null // Added
+          is_twitter_authed?: boolean | null // Added
+          is_youtube_authed?: boolean | null // Added
         }
         Update: {
           id?: string // UUID, references auth.users.id
@@ -35,8 +41,11 @@ export type Database = {
           username?: string | null
           full_name?: string | null
           phone_number?: string | null
-          composio_url?: string | null
+          composio_mcp_url?: string | null // Renamed
           gemini_api_key?: string | null
+          is_linkedin_authed?: boolean | null // Added
+          is_twitter_authed?: boolean | null // Added
+          is_youtube_authed?: boolean | null // Added
         }
         Relationships: [
           {
@@ -50,19 +59,19 @@ export type Database = {
       }
       quotas: {
         Row: {
-          user_id: string // Changed from id to user_id for clarity
+          user_id: string
           request_count: number
-          last_reset_at: string // Added last_reset_at
-          quota_limit: number // Added quota_limit
-          created_at: string // Keep created_at if needed
-          ip_address: string | null // Keep ip_address if needed for specific logic
+          last_reset_at: string
+          quota_limit: number
+          created_at: string
+          ip_address: string | null
         }
         Insert: {
           user_id: string
           request_count?: number
-          last_reset_at?: string // Default to now() in DB
-          quota_limit?: number // Default to 100 in DB
-          created_at?: string // Default to now() in DB
+          last_reset_at?: string
+          quota_limit?: number
+          created_at?: string
           ip_address?: string | null
         }
         Update: {
@@ -75,15 +84,16 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "quotas_user_id_fkey" // Ensure FK name matches DB
+            foreignKeyName: "quotas_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: true // Assuming one quota record per user
+            isOneToOne: true
             referencedRelation: "users"
             referencedColumns: ["id"]
           }
         ]
       }
-      tokens: { // Keep existing tokens table
+      // Keep existing tokens table definition if needed
+      tokens?: {
         Row: {
           access_token: string
           created_at: string
@@ -121,10 +131,11 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
-      failed_requests: { // Keep existing failed_requests table
+      // Keep existing failed_requests table definition if needed
+      failed_requests?: {
         Row: {
           id: string;
           user_id: string | null;
@@ -156,7 +167,7 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "users";
             referencedColumns: ["id"];
-          }
+          },
         ];
       }
     }
@@ -164,34 +175,35 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      increment_quota: { // Updated function definition
+      increment_quota: {
         Args: {
           p_user_id: string
           p_increment_amount: number
-          // p_ip_address removed, handle IP elsewhere if needed
         }
-        Returns: number // Returns the new *remaining* quota
+        Returns: number
       }
-      get_remaining_quota: { // Updated function definition
+      get_remaining_quota: {
         Args: {
           p_user_id: string
         }
-        Returns: number // Returns remaining requests
+        Returns: number
       }
-       // Add function to get profile, creating if not exists
       get_user_profile: {
         Args: {
           p_user_id: string
         }
-        Returns: { // Define the return type matching profiles.Row
+        Returns: { // Update return type to match updated profiles.Row
           id: string
           updated_at: string | null
           username: string | null
           full_name: string | null
           phone_number: string | null
-          composio_url: string | null
+          composio_mcp_url: string | null // Renamed
           gemini_api_key: string | null
-        } // Returns a single profile row
+          is_linkedin_authed: boolean | null // Added
+          is_twitter_authed: boolean | null // Added
+          is_youtube_authed: boolean | null // Added
+        }
       }
     }
     Enums: {
@@ -211,7 +223,7 @@ export type Tables<
   TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
     ? keyof (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
         Database[PublicTableNameOrOptions["schema"]]["Views"])
-    : never = never
+    : never = never,
 > = PublicTableNameOrOptions extends { schema: keyof Database }
   ? (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
       Database[PublicTableNameOrOptions["schema"]]["Views"])[TableName] extends {
@@ -221,13 +233,13 @@ export type Tables<
     : never
   : PublicTableNameOrOptions extends keyof (Database["public"]["Tables"] &
       Database["public"]["Views"])
-  ? (Database["public"]["Tables"] &
-      Database["public"]["Views"])[PublicTableNameOrOptions] extends {
-      Row: infer R
-    }
-    ? R
+    ? (Database["public"]["Tables"] &
+        Database["public"]["Views"])[PublicTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
     : never
-  : never
 
 export type TablesInsert<
   PublicTableNameOrOptions extends
@@ -235,7 +247,7 @@ export type TablesInsert<
     | { schema: keyof Database },
   TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
     ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
-    : never = never
+    : never = never,
 > = PublicTableNameOrOptions extends { schema: keyof Database }
   ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I
@@ -243,12 +255,12 @@ export type TablesInsert<
     ? I
     : never
   : PublicTableNameOrOptions extends keyof Database["public"]["Tables"]
-  ? Database["public"]["Tables"][PublicTableNameOrOptions] extends {
-      Insert: infer I
-    }
-    ? I
+    ? Database["public"]["Tables"][PublicTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
     : never
-  : never
 
 export type TablesUpdate<
   PublicTableNameOrOptions extends
@@ -256,7 +268,7 @@ export type TablesUpdate<
     | { schema: keyof Database },
   TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
     ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
-    : never = never
+    : never = never,
 > = PublicTableNameOrOptions extends { schema: keyof Database }
   ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U
@@ -264,12 +276,12 @@ export type TablesUpdate<
     ? U
     : never
   : PublicTableNameOrOptions extends keyof Database["public"]["Tables"]
-  ? Database["public"]["Tables"][PublicTableNameOrOptions] extends {
-      Update: infer U
-    }
-    ? U
+    ? Database["public"]["Tables"][PublicTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
     : never
-  : never
 
 export type Enums<
   PublicEnumNameOrOptions extends
@@ -277,13 +289,19 @@ export type Enums<
     | { schema: keyof Database },
   EnumName extends PublicEnumNameOrOptions extends { schema: keyof Database }
     ? keyof Database[PublicEnumNameOrOptions["schema"]]["Enums"]
-    : never = never
+    : never = never,
 > = PublicEnumNameOrOptions extends { schema: keyof Database }
   ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : PublicEnumNameOrOptions extends keyof Database["public"]["Enums"]
-  ? Database["public"]["Enums"][PublicEnumNameOrOptions]
-  : never
+    ? Database["public"]["Enums"][PublicEnumNameOrOptions]
+    : never
 
 // Define specific table row types for easier usage
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type Quota = Database['public']['Tables']['quotas']['Row'];
+
+// Define specific type for the return of get_user_profile function
+export type UserProfileFunctionReturn = Database['public']['Functions']['get_user_profile']['Returns'];
+
+// Define types for Composio app authentication status
+export type ComposioApp = 'linkedin' | 'twitter' | 'youtube';

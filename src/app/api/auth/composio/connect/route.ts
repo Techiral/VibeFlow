@@ -27,16 +27,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  // 3. Get Developer COMPOSIO_API_KEY from environment
-  const composioApiKey = process.env.COMPOSIO_API_KEY;
-  if (!composioApiKey) {
-    console.error('API Composio Connect: Missing COMPOSIO_API_KEY environment variable on the server.');
-    return NextResponse.json({ error: 'Server configuration error: Missing Composio API Key.' }, { status: 500 });
+  // 3. Get User's Composio API Key from Request Header
+  const userComposioApiKey = request.headers.get('X-Composio-Key');
+  if (!userComposioApiKey) {
+    console.error('API Composio Connect: Missing X-Composio-Key header in request.');
+    // Return a specific error indicating the user needs to provide their key
+    return NextResponse.json({ error: 'Composio API Key missing in request. Please ensure it is set in your profile and included in the request.' }, { status: 401 }); // Use 401 or 400
   }
 
-  // 4. Initialize Composio ToolSet and Initiate Connection
+  // 4. Initialize Composio ToolSet using the User's Key and Initiate Connection
   try {
-    const toolset = new OpenAIToolSet({ apiKey: composioApiKey }); // Use developer key
+    // **Use the user's API key from the header**
+    const toolset = new OpenAIToolSet({ apiKey: userComposioApiKey });
     const entity = await toolset.getEntity(user.id); // Use VibeFlow user ID as entity ID
 
     console.log(`API Composio Connect: Initiating ${appName} connection for entity: ${entity.id}`);
@@ -63,10 +65,7 @@ export async function POST(request: Request) {
       console.log(`API Composio Connect: Redirect URL generated: ${connectionRequest.redirectUrl}`);
       return NextResponse.json({ redirectUrl: connectionRequest.redirectUrl });
     } else {
-      // Handle cases where redirectUrl isn't needed (e.g., API key auth, though less common for these apps)
-      // Or if connection failed without throwing an error but didn't provide a URL
        console.warn(`API Composio Connect: No redirect URL received for ${appName}. Connection ID: ${connectionRequest.connectedAccountId}`);
-       // If it's instantly active (rare for OAuth), you might update DB here, but callback is safer
       return NextResponse.json({ error: 'Connection initiated, but no redirect URL provided. Check Composio setup or app type.' }, { status: 500 });
     }
 
@@ -74,7 +73,10 @@ export async function POST(request: Request) {
     console.error(`API Composio Connect: Error initiating ${appName} connection for user ${user.id}:`, error);
     // Provide more specific feedback if possible
     let errorMessage = `Failed to initiate ${appName} connection.`;
-    if (error.message?.includes('entity')) {
+    if (error.message?.includes('API key') || error.status === 401) {
+         errorMessage = `Invalid Composio API Key provided. Please check the key in your profile.`;
+         return NextResponse.json({ error: errorMessage }, { status: 401 });
+    } else if (error.message?.includes('entity')) {
         errorMessage = `Could not find or create Composio entity for user: ${error.message}`;
     } else if (error.message?.includes('integration')) {
          errorMessage = `Composio integration for ${appName} not found or configured incorrectly.`;

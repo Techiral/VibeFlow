@@ -86,11 +86,12 @@ export default async function DashboardPage() {
 
       // --- Fetch quota (Only if profile fetch was somewhat successful or no error yet) ---
       if (!errorMessage && user) {
+         // Use .maybeSingle() to return null instead of throwing error if no record exists
          const { data: quotaData, error: quotaError } = await supabase
            .from('quotas')
            .select('*')
            .eq('user_id', user.id)
-           .single();
+           .maybeSingle(); // Changed from .single()
 
          if (quotaError) {
              console.error("Error fetching quota:", quotaError.message); // Log the specific quota error
@@ -103,7 +104,7 @@ export default async function DashboardPage() {
              } else if (quotaError.message.includes("violates row-level security policy")) {
                 errorMessage = `Database security error: Could not access 'quotas' table due to security policy. Ensure 'increment_quota'/'get_remaining_quota' have correct SECURITY settings and check RLS. Details: ${quotaError.message}`;
                 isDbSetupError = true;
-             } else if (quotaError.code !== 'PGRST116') { // Ignore 'PGRST116' (no rows found) - handled below
+             } else { // Other errors, excluding PGRST116 which is handled by maybeSingle()
                errorMessage = `Error loading usage quota: ${quotaError.message}. Check database schema and policies (README Step 3).`;
              }
               // If it's a DB setup error or another error we want to display, throw to outer catch
@@ -111,10 +112,10 @@ export default async function DashboardPage() {
                  throw quotaError;
               }
          }
-          // If no error or just PGRST116, set quota (will be null if no record yet)
+          // If no error, set quota (will be null if maybeSingle() found no record)
          quota = quotaData;
 
-          // If quota record doesn't exist (PGRST116 or initial null), and profile exists, use default XP/badges
+          // If quota record doesn't exist (quotaData is null), and profile exists, use default XP/badges
          if (!quota && profile) {
              xp = profile.xp ?? DEFAULT_XP;
              badges = profile.badges ?? DEFAULT_BADGES;
@@ -159,7 +160,10 @@ export default async function DashboardPage() {
              const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
             errorMessage = `Database schema mismatch: Column '${missingColumn}' not found or incorrect in table/function. Run the latest 'supabase/schema.sql' script. See README Step 3.`;
             isDbSetupError = true;
-        } else if (error.message.includes("Failed to load or initialize user profile data")) {
+         } else if (error.message.includes("JSON object requested, multiple (or no) rows returned")) {
+             // This specific error should be less likely now with maybeSingle(), but handle just in case
+             errorMessage = `Database query error: Expected one quota record, found multiple or none unexpectedly. Details: ${error.message}`;
+         } else if (error.message.includes("Failed to load or initialize user profile data")) {
             // Use the specific error message already set in the try block
             errorMessage = error.message;
         } else {
@@ -217,4 +221,3 @@ export default async function DashboardPage() {
   // Pass gamification data along with user, profile, and quota
   return <Dashboard user={user} initialProfile={profile} initialQuota={quota} initialXp={xp} initialBadges={badges} />;
 }
-

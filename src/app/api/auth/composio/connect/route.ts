@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     console.log("API Composio Connect: Initializing OpenAIToolSet...");
     // **Use the user's API key from the header**
     toolset = new OpenAIToolSet({ apiKey: userComposioApiKey });
-    if (!toolset || typeof toolset !== 'object') {
+    if (!toolset || typeof toolset !== 'object') { // Add check if toolset creation failed
         console.error("API Composio Connect: Failed to initialize OpenAIToolSet. Result:", toolset);
         throw new Error("Failed to initialize Composio ToolSet instance.");
     }
@@ -57,12 +57,13 @@ export async function POST(request: Request) {
     }
     console.log("API Composio Connect: toolset.getEntity IS a function.");
 
+
     console.log(`API Composio Connect: Calling getEntity for user ID: ${user.id}`);
     // Explicitly await getEntity and log the result or error
     let entity;
     try {
       entity = await toolset.getEntity(user.id); // Use VibeFlow user ID as entity ID
-       if (!entity || typeof entity !== 'object' || !entity.id) {
+       if (!entity || typeof entity !== 'object' || !entity.id) { // Add check for valid entity object
          console.error(`API Composio Connect: toolset.getEntity(${user.id}) returned invalid entity object:`, entity);
          throw new Error("Failed to retrieve a valid Composio entity for the user.");
        }
@@ -113,7 +114,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ redirectUrl: connectionRequest.redirectUrl });
     } else {
        console.warn(`API Composio Connect: No redirect URL received for ${appName}. Connection ID: ${connectionRequest?.connectedAccountId || 'N/A'}`);
-      return NextResponse.json({ error: 'Connection initiated, but no redirect URL provided. Check Composio setup or app type.' }, { status: 500 });
+      // Even if no redirect URL, it might mean connection is already active or uses a different flow.
+      // Let's try to update Supabase assuming success if no redirect URL but also no error.
+      // Check if the profile needs updating based on the potentially pre-existing connection
+      const updateField = `is_${appName}_authed` as const;
+       const { data: existingProfile, error: profileError } = await supabase
+         .from('profiles')
+         .select(updateField)
+         .eq('id', user.id)
+         .maybeSingle();
+
+        if (!profileError && existingProfile && !existingProfile[updateField]) {
+             // If profile exists and isn't marked as authed, update it
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({ [updateField]: true, updated_at: new Date().toISOString() })
+              .eq('id', user.id);
+            if (updateError) {
+                 console.error(`API Composio Connect: Failed to update profile for existing connection (${appName}):`, updateError.message);
+                 // Still return success to client, but log error
+            } else {
+                 console.log(`API Composio Connect: Updated profile for potentially existing connection (${appName}).`);
+            }
+        } else if (profileError) {
+            console.error(`API Composio Connect: Error checking profile before update (${appName}):`, profileError.message);
+        }
+
+      return NextResponse.json({ message: 'Connection may already be active or uses a non-redirect flow.' });
+      // Previous return:
+      // return NextResponse.json({ error: 'Connection initiated, but no redirect URL provided. Check Composio setup or app type.' }, { status: 500 });
     }
 
   } catch (error: any) {
@@ -123,25 +152,28 @@ export async function POST(request: Request) {
     let errorStatus = 500;
     const errorMsgLower = error.message?.toLowerCase() || '';
 
+    // Check for specific error messages related to SDK issues
     if (errorMsgLower.includes("'getentity' not found") || errorMsgLower.includes("toolset.getentity is not a function")) {
          errorMessage = `Composio SDK issue: 'getEntity' method not found. Please check the 'composio-core' library version or initialization.`;
          errorStatus = 500; // Internal server error due to SDK issue
     } else if (errorMsgLower.includes("api key") || errorMsgLower.includes("unauthorized") || error.status === 401) {
          errorMessage = `Invalid Composio API Key provided. Please check the key in your profile.`;
          errorStatus = 401;
-    } else if (errorMsgLower.includes('failed to retrieve a valid composio entity') || errorMsgLower.includes('failed to get composio entity')) {
+    } else if (errorMsgLower.includes('failed to retrieve a valid composio entity') || errorMsgLower.includes('failed to get composio entity')) { // Handle specific error from entity retrieval
         errorMessage = `Could not find or create Composio entity for user: ${error.message}`;
         errorStatus = 500;
-    } else if (errorMsgLower.includes("'initiateconnection' not found")) {
+    } else if (errorMsgLower.includes("'initiateconnection' not found")) { // Check for initiateConnection error
          errorMessage = `Composio SDK issue: 'initiateConnection' method not found on entity. Please check the 'composio-core' library version or initialization.`;
          errorStatus = 500; // Internal server error due to SDK issue
-    } else if (errorMsgLower.includes('integration')) {
+    } else if (errorMsgLower.includes('integration')) { // Check for integration issues
          errorMessage = `Composio integration for ${appName} not found or configured incorrectly.`;
          errorStatus = 400; // Bad request likely due to config
     } else {
-        errorMessage = error.message || errorMessage;
+        errorMessage = error.message || errorMessage; // Default to the error message
     }
     console.error(`API Composio Connect: Final error response: Status=${errorStatus}, Message='${errorMessage}'`);
     return NextResponse.json({ error: errorMessage }, { status: errorStatus });
   }
 }
+
+    

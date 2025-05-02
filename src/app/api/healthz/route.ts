@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'; // Ensure fresh check every time
 
 export async function GET() {
   let supabaseStatus: 'ok' | 'error' = 'error';
-  let mcpStatus: 'ok' | 'error' | 'not_configured' = 'not_configured'; // Placeholder
+  let mcpStatus: 'ok' | 'error' | 'not_configured' = 'not_configured'; // Placeholder, as we don't have a direct health endpoint
   let overallStatus: 'ok' | 'error' = 'error';
   let errorMessage: string | null = null;
 
@@ -29,33 +29,16 @@ export async function GET() {
      errorMessage = `Supabase connection error: ${err.message}`;
   }
 
-  // Placeholder Check for MCP (Composio) - Replace with actual check if possible
-  // This might involve checking if env vars are set or making a test API call
-  if (process.env.NEXT_PUBLIC_COMPOSIO_API_URL && process.env.COMPOSIO_CLIENT_ID) {
-     // Simulate a check - replace with actual check if an MCP health endpoint exists
-     // For now, just checking config presence
-     mcpStatus = 'ok'; // Assume ok if configured
-     // try {
-     //   const response = await fetch(`${process.env.NEXT_PUBLIC_COMPOSIO_API_URL}/health`); // Fictional endpoint
-     //   if (response.ok) {
-     //      mcpStatus = 'ok';
-     //   } else {
-     //      mcpStatus = 'error';
-     //      errorMessage = errorMessage ? `${errorMessage}; MCP connection error: Status ${response.status}` : `MCP connection error: Status ${response.status}`;
-     //   }
-     // } catch (err: any) {
-     //    mcpStatus = 'error';
-     //    errorMessage = errorMessage ? `${errorMessage}; MCP connection error: ${err.message}` : `MCP connection error: ${err.message}`;
-     // }
-  } else {
-     mcpStatus = 'not_configured';
-     // Consider if this should make the overall status 'error' or just be informational
-     // For now, let's allow 'ok' if Supabase is ok and MCP isn't configured.
-  }
-
+  // Placeholder Check for MCP (Composio)
+  // Since authentication is done via redirect, we don't have a direct
+  // API key or endpoint to ping for health here. We can only infer
+  // configuration presence if the MCP URL concept is relevant elsewhere,
+  // but for basic health, we'll mark it as 'not_configured' or 'ok' based on principle.
+  // For now, assume 'ok' if Supabase is ok, as MCP relies on user action.
+  mcpStatus = 'ok'; // Assume ok as it's user-driven OAuth
 
   // Determine Overall Status
-  if (supabaseStatus === 'ok' && (mcpStatus === 'ok' || mcpStatus === 'not_configured')) {
+  if (supabaseStatus === 'ok' && mcpStatus === 'ok') {
     overallStatus = 'ok';
   } else {
     overallStatus = 'error';
@@ -66,7 +49,7 @@ export async function GET() {
     timestamp: new Date().toISOString(),
     dependencies: {
       supabase: supabaseStatus,
-      mcp: mcpStatus,
+      mcp: mcpStatus, // Reflecting assumption
     },
     error: errorMessage,
   };
@@ -75,5 +58,3 @@ export async function GET() {
     status: overallStatus === 'ok' ? 200 : 503, // 503 Service Unavailable if error
   });
 }
-
-```

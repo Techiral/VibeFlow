@@ -23,14 +23,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck, Star, Trophy, Zap, BrainCircuit } from 'lucide-react'; // Updated icons
+import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck, Star, Trophy, Zap, BrainCircuit } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-// Removed: import { authenticateComposioApp } from '@/services/composio-service';
+// Removed: import { authenticateComposioApp } from '@/services/composio-service'; // Service not used for OAuth flow
 import { toast as sonnerToast } from 'sonner';
 import Confetti from 'react-confetti';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Added Select for Persona
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Added Tooltip
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ProfileDialogProps {
   isOpen: boolean;
@@ -38,13 +38,13 @@ interface ProfileDialogProps {
   user: User;
   initialProfile: Profile | null;
   initialQuota: Quota | null;
-  onProfileUpdate: (profile: Profile) => void; // Callback to update parent state
-  initialXp: number; // Receive initial XP
-  initialBadges: string[]; // Receive initial badges
+  onProfileUpdate: (profile: Profile) => void;
+  initialXp: number;
+  initialBadges: string[];
   dbSetupError: string | null;
 }
 
-// Updated schema to include new URL fields and constraints
+// Schema remains the same
 const profileSchema = z.object({
   full_name: z.string().max(100, 'Full name must be 100 characters or less').nullable().optional().or(z.literal('')),
   username: z.string().max(50, 'Username must be 50 characters or less').nullable().optional().or(z.literal('')),
@@ -60,9 +60,8 @@ const profileSchema = z.object({
 type ProfileFormData = z.infer<typeof profileSchema>;
 
 const DEFAULT_QUOTA_LIMIT = 100;
-const XP_PER_REQUEST = 10; // Moved definition here
+const XP_PER_REQUEST = 10;
 
-// Badge definitions - keep for display logic in dialog
 const BADGES = [
   { xp: 50, name: 'Vibe Starter ✨', description: 'Generated 5 posts!', icon: Star },
   { xp: 100, name: 'Content Ninja 🥷', description: 'Generated 10 posts!', icon: Trophy },
@@ -77,36 +76,30 @@ export function ProfileDialog({
   initialProfile,
   initialQuota,
   onProfileUpdate,
-  initialXp, // Use initial props
-  initialBadges, // Use initial props
+  initialXp,
+  initialBadges,
   dbSetupError,
 }: ProfileDialogProps) {
   const supabase = createClient();
   const { toast } = useToast();
   const [isSaving, startSavingTransition] = useTransition();
-  // Removed: const [isAuthenticating, setIsAuthenticating] = useState<Partial<Record<ComposioApp, boolean>>>({});
   const [profile, setProfile] = useState<Profile | null>(initialProfile);
   const [quota, setQuota] = useState<Quota | null>(initialQuota);
-  // Use initial props directly for display
   const xp = initialXp ?? 0;
   const badges = initialBadges ?? [];
   const [localDbSetupError, setLocalDbSetupError] = useState<string | null>(dbSetupError);
 
-  // Ensure local state updates if initial props change
   useEffect(() => {
     setProfile(initialProfile);
     setQuota(initialQuota);
-    // No need to update local xp/badges state here, just use props directly
     setLocalDbSetupError(dbSetupError);
   }, [initialProfile, initialQuota, dbSetupError]);
 
 
-  // Fetch Quota inside dialog if initialQuota is null and no DB error
-   useEffect(() => {
+  useEffect(() => {
     if (isOpen && !quota && !localDbSetupError) {
       const fetchQuota = async () => {
         try {
-          // Use RPC function first for consistency and potentially handle reset logic if needed
           const { data: remainingQuota, error: rpcError } = await supabase
              .rpc('get_remaining_quota', { p_user_id: user.id });
 
@@ -117,18 +110,19 @@ export function ProfileDialog({
                  errorMsg = "Database setup incomplete: Missing 'get_remaining_quota' function. Please run the SQL script from `supabase/schema.sql`. See README Step 3.";
              } else if (rpcError.message.includes("permission denied")) {
                  errorMsg = "Database access error: Permission denied for 'get_remaining_quota'. Check RLS policies. See README Step 3.";
+             } else if (rpcError.message.includes("relation \"public.quotas\" does not exist")) {
+                 errorMsg = "Database setup incomplete: Missing 'quotas' table. Run setup script.";
              }
              setLocalDbSetupError(errorMsg);
              toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
            } else {
-              // RPC succeeded, now fetch the full quota details to display total used/limit
                const { data, error: selectError } = await supabase
                  .from('quotas')
                  .select('user_id, request_count, quota_limit, last_reset_at')
                  .eq('user_id', user.id)
-                 .maybeSingle(); // Use maybeSingle() to handle no row found gracefully
+                 .maybeSingle();
 
-               if (selectError && selectError.code !== 'PGRST116') { // Handle errors other than "No rows found"
+               if (selectError && selectError.code !== 'PGRST116') {
                    console.error('Error fetching quota details after RPC in dialog:', selectError.message);
                    let errorMsg = `Failed to load full usage details: ${selectError.message}`;
                     if (selectError.message.includes("relation \"public.quotas\" does not exist")) {
@@ -143,28 +137,26 @@ export function ProfileDialog({
                    toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
                } else if (data && 'user_id' in data && 'request_count' in data && 'quota_limit' in data && 'last_reset_at' in data) {
                    setQuota(data as Quota);
-                   setLocalDbSetupError(null); // Clear error on successful fetch
+                   setLocalDbSetupError(null);
                } else if (!data && typeof remainingQuota === 'number') {
-                  // If select found no row (maybeSingle returned null) but RPC worked, initialize local state
                   console.log("Quota record not found yet for user (dialog):", user.id);
-                  const limit = DEFAULT_QUOTA_LIMIT; // Assume default limit
+                  const limit = DEFAULT_QUOTA_LIMIT;
                   const used = Math.max(0, limit - remainingQuota);
                   const nowISO = new Date().toISOString();
                   setQuota({
                       user_id: user.id,
                       request_count: used,
                       quota_limit: limit,
-                      last_reset_at: nowISO, // Use current time as placeholder reset
+                      last_reset_at: nowISO,
                       created_at: nowISO, // Placeholder
                       ip_address: null // Placeholder
                   });
-                  setLocalDbSetupError(null); // Clear error if RPC worked
+                  setLocalDbSetupError(null);
                } else if (!data && typeof remainingQuota !== 'number'){
-                   // Both RPC failed/returned non-number and select found nothing
                    const errorMsg = "Could not determine initial quota state.";
                    setLocalDbSetupError(errorMsg);
                    toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
-               } else if (data && !('request_count' in data)) { // Check if data might be incomplete
+               } else if (data && !('request_count' in data)) {
                    console.warn("Fetched quota data inside dialog is missing fields:", data);
                    const errorMsg = `Incomplete quota data received.`;
                    setLocalDbSetupError(errorMsg);
@@ -190,7 +182,6 @@ export function ProfileDialog({
     formState: { errors, isDirty },
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
-    // Update default values to include new URL fields
     defaultValues: {
       full_name: initialProfile?.full_name ?? '',
       username: initialProfile?.username ?? '',
@@ -203,9 +194,7 @@ export function ProfileDialog({
     },
   });
 
-  // Reset form when profile changes or dialog opens/closes
   useEffect(() => {
-    // Update reset to include new URL fields
     reset({
       full_name: profile?.full_name ?? '',
       username: profile?.username ?? '',
@@ -230,8 +219,6 @@ export function ProfileDialog({
       return;
     }
     const updateData = Object.fromEntries(
-       // Filter out null or empty strings before creating the update object
-       // Only include fields that have a non-empty value
       Object.entries(data).filter(([_, value]) => value !== null && value !== '')
     );
 
@@ -245,19 +232,17 @@ export function ProfileDialog({
             updated_at: new Date().toISOString(),
           })
           .eq('id', user.id)
-           // Ensure all updated columns are selected, including xp and badges
           .select('*, xp, badges')
           .single();
 
         if (error) {
           console.error('Error updating profile:', error.message);
           let errorMessage = `Could not save profile: ${error.message}`;
-           // Check for specific schema cache error related to columns
           if (error.message.includes("Could not find the") && error.message.includes("column") && error.message.includes("in the schema cache")) {
               const missingColumnMatch = error.message.match(/'(.*?)'/);
               const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
               errorMessage = `Database schema mismatch: Column '${missingColumn}' not found. Run the latest 'supabase/schema.sql'. See README Step 3.`;
-              setLocalDbSetupError(errorMessage); // Set the DB error state
+              setLocalDbSetupError(errorMessage);
           } else if (error.message.includes("violates row-level security policy")) {
             errorMessage = 'Could not save profile due to database security policy.';
           } else if (error.message.includes("relation \"public.profiles\" does not exist")) {
@@ -269,11 +254,11 @@ export function ProfileDialog({
           toast({ title: 'Save Failed', description: errorMessage, variant: 'destructive', duration: 7000 });
         } else if (updatedProfileData) {
           const completeProfile = updatedProfileData as Profile;
-          setProfile(completeProfile); // Update local state
-          onProfileUpdate(completeProfile); // **Crucially, call the callback**
+          setProfile(completeProfile);
+          onProfileUpdate(completeProfile);
           toast({ title: 'Profile Saved', description: 'Your changes have been saved.' });
-          reset(data); // Reset form to make isDirty false
-          setLocalDbSetupError(null); // Clear DB error on successful save
+          reset(data);
+          setLocalDbSetupError(null);
         }
       } catch (error: any) {
         console.error('Unexpected error updating profile:', error);
@@ -282,7 +267,7 @@ export function ProfileDialog({
     });
   };
 
-  // Simplified handler to redirect the user to the Composio OAuth URL
+  // Keep the existing OAuth redirection logic
   const handleAuthenticateApp = (appName: ComposioApp) => {
     console.log(`Initiating authentication for ${appName}...`);
 
@@ -296,21 +281,24 @@ export function ProfileDialog({
     }
 
      // Construct the Composio OAuth URL
-     // This URL structure might vary based on Composio's actual OAuth flow.
-     // You'll likely need a redirect_uri pointing back to your application.
-     // This redirect URI will receive the auth code after the user approves in Composio.
-     // For now, we assume a simple structure. Replace with the correct one.
-     const redirectUri = `${window.location.origin}/auth/composio-callback`; // Example callback URL
-     const authUrl = `${profile.composio_mcp_url}/connect?app=${appName}&redirect_uri=${encodeURIComponent(redirectUri)}&user_id=${encodeURIComponent(user.id)}`; // Pass user_id for tracking
+     const redirectUri = `${window.location.origin}/auth/composio-callback`;
+     const authUrl = `${profile.composio_mcp_url}/connect?app=${appName}&redirect_uri=${encodeURIComponent(redirectUri)}&user_id=${encodeURIComponent(user.id)}`;
 
      console.log(`Redirecting to Composio OAuth URL: ${authUrl}`);
 
-     // Redirect the user's browser to the Composio authentication page
+     // Redirect the user's browser
      window.location.href = authUrl;
 
-     // No need for setIsAuthenticating state, as the page will redirect.
-     // The actual database update (is_linkedin_authed = true) should happen
-     // in the /auth/composio-callback route handler after successful authentication.
+     // **Comment:** The backend logic requested using `composio-core`, `OpenAIToolSet`,
+     // `composio login`, and `composio add <app>` is typically handled server-side or
+     // via CLI and isn't directly executable within this client-side React component.
+     // The current OAuth flow handles user authentication by redirecting to Composio.
+     // The `composio add <app>` functionality seems related to associating an app
+     // with the user's entity *within Composio*, which happens during the OAuth flow
+     // when the user grants permission. The `getTools` part with specific actions
+     // (e.g., LINKEDIN_GET_THE_AUTHENTICATED_USER) would be used in a separate backend
+     // service or Server Action that interacts with the Composio API *after* authentication
+     // to perform actions, not during the initial authentication setup triggered here.
   };
 
 
@@ -318,19 +306,13 @@ export function ProfileDialog({
     toast({ title: "Upgrade Feature", description: "Billing/Upgrade functionality is not yet implemented.", variant: "default" });
   };
 
-  // Helper to get auth status based on app name
   const getAuthStatus = (appName: ComposioApp): boolean => {
      const key = `is_${appName}_authed` as keyof Profile;
-     // Ensure profile exists and the property is true, default to false
      return !!profile?.[key];
   }
 
-   // Badge awarding logic moved to parent (Dashboard.tsx)
-
-
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-       {/* <Confetti recycle={false} numberOfPieces={200} /> */} {/* Confetti handled in parent */}
        <DialogContent className="sm:max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90vh]">
         <DialogHeader className="px-6 pt-6">
           <DialogTitle>Profile & Settings</DialogTitle>
@@ -428,16 +410,13 @@ export function ProfileDialog({
                     </div>
                   </div>
 
-                   {/* App Specific URLs are no longer needed here as they are derived or managed by Composio */}
-
                    {/* App Authentication Buttons */}
                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
                        <Label className="sm:text-right sm:col-span-1 mt-2">App Authentication</Label>
                        <div className="col-span-1 sm:col-span-2 space-y-3">
                           {(['linkedin', 'twitter', 'youtube'] as ComposioApp[]).map((app) => {
                              const isAuthenticated = getAuthStatus(app);
-                             // Removed: const isLoading = isAuthenticating[app] ?? false;
-                             const isDisabled = !profile?.composio_mcp_url || !!localDbSetupError; // Simplified disabled logic
+                             const isDisabled = !profile?.composio_mcp_url || !!localDbSetupError;
                              const tooltipText = !profile?.composio_mcp_url ? "Enter MCP URL first" :
                                                 localDbSetupError ? "Cannot authenticate due to DB error" :
                                                 isAuthenticated ? `Re-authenticate ${app}` : `Authenticate ${app}`;
@@ -457,8 +436,7 @@ export function ProfileDialog({
                                           variant={isAuthenticated ? "outline" : "default"}
                                           size="sm"
                                           onClick={() => handleAuthenticateApp(app)}
-                                          disabled={isDisabled} // Use combined isDisabled variable
-                                          // Removed: loading={isLoading}
+                                          disabled={isDisabled}
                                         >
                                           {isAuthenticated ? <WifiOff className="mr-2 h-4 w-4" /> : <Wifi className="mr-2 h-4 w-4" />}
                                           {isAuthenticated ? 'Re-authenticate' : 'Authenticate'}
@@ -492,7 +470,6 @@ export function ProfileDialog({
                      <span>Experience Points (XP):</span>
                      <span className="font-medium">{xp?.toLocaleString() ?? 0} XP</span>
                   </div>
-                   {/* Stylized Fuel Tank */}
                    <TooltipProvider>
                     <Tooltip>
                        <TooltipTrigger asChild>
@@ -516,7 +493,7 @@ export function ProfileDialog({
                          <div className="flex flex-wrap gap-3">
                            {badges.map((badgeName) => {
                              const badgeInfo = BADGES.find(b => b.name === badgeName);
-                             const Icon = badgeInfo?.icon || BadgeCheck; // Fallback icon
+                             const Icon = badgeInfo?.icon || BadgeCheck;
                              return (
                                <TooltipProvider key={badgeName}>
                                 <Tooltip>

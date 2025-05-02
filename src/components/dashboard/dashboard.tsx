@@ -1,4 +1,3 @@
-
 // dashboard.tsx
 'use client';
 
@@ -144,10 +143,9 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
   // Use initial values for XP and badges directly
   const [xp, setXp] = useState<number>(initialXp);
   const [badges, setBadges] = useState<string[]>(initialBadges);
+  const [isClient, setIsClient] = useState(false); // State to track client-side mount
 
    // --- Calculate Derived State ---
-   // const xp = profile?.xp ?? 0; // Use state variable instead
-   // const badges = profile?.badges ?? []; // Use state variable instead
    const quotaUsed = quota?.request_count ?? 0;
    const quotaLimit = quota?.quota_limit ?? DEFAULT_QUOTA_LIMIT;
    const quotaRemaining = Math.max(0, quotaLimit - quotaUsed);
@@ -155,6 +153,12 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
    const quotaExceeded = quotaRemaining <= 0 && !!quota; // Only exceeded if quota is loaded
 
    // --- Effects ---
+
+   // Set isClient to true after mount to enable client-only rendering
+   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
 
   // Fetch or confirm profile/quota data on client-side if needed
   useEffect(() => {
@@ -194,9 +198,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                  setBadges(currentProfile.badges ?? initialBadges);
 
                   // Check if onboarding needs to run for this profile
-                  if (currentProfile && !currentProfile.badges?.includes('onboarded')) { // Example: Use a badge or a dedicated field
-                      setRunOnboarding(true);
-                  }
+                  // Moved onboarding check to the client-only effect
              } else {
                  console.warn("Profile still null/empty after calling get_user_profile on client");
                  toast({ title: "Profile Error", description: "Failed to load profile data. Please refresh.", variant: "destructive" });
@@ -209,9 +211,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
          }
       } else {
          // Profile was loaded initially, check onboarding status
-         if (!profile.badges?.includes('onboarded')) {
-             setRunOnboarding(true);
-         }
+         // Moved onboarding check to the client-only effect
          // Ensure local XP/Badge state matches initial profile if profile exists
          setXp(profile.xp ?? initialXp);
          setBadges(profile.badges ?? initialBadges);
@@ -302,6 +302,14 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
     };
     ensureData();
   }, [user.id, supabase, toast, profile, quota, dbSetupError, initialBadges, initialXp]); // Added initial props as deps
+
+
+  // Effect to check onboarding status only on client-side after profile is loaded
+  useEffect(() => {
+    if (isClient && profile && !profile.badges?.includes('onboarded')) {
+      setRunOnboarding(true);
+    }
+  }, [isClient, profile]); // Depend on isClient and profile
 
 
   // --- Callbacks and Event Handlers ---
@@ -1017,32 +1025,34 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
 
   return (
     <TooltipProvider>
-     {/* Onboarding Tour */}
-     <Joyride
-       steps={ONBOARDING_STEPS}
-       run={runOnboarding}
-       continuous
-       showProgress
-       showSkipButton
-       callback={handleJoyrideCallback}
-       styles={{
-         options: {
-           zIndex: 10000, // Ensure it's above other elements like dialogs
-           primaryColor: '#6D28D9', // Use primary color from theme
-         },
-         tooltip: {
-           backgroundColor: 'hsl(var(--card))', // Use card background
-           color: 'hsl(var(--card-foreground))', // Use card foreground
-           borderRadius: 'var(--radius)',
-         },
-         buttonNext: {
-           backgroundColor: 'hsl(var(--primary))',
-         },
-         buttonBack: {
-           color: 'hsl(var(--muted-foreground))',
-         },
-       }}
-     />
+     {/* Onboarding Tour - Render only on the client */}
+     {isClient && (
+        <Joyride
+          steps={ONBOARDING_STEPS}
+          run={runOnboarding}
+          continuous
+          showProgress
+          showSkipButton
+          callback={handleJoyrideCallback}
+          styles={{
+            options: {
+              zIndex: 10000, // Ensure it's above other elements like dialogs
+              primaryColor: '#6D28D9', // Use primary color from theme
+            },
+            tooltip: {
+              backgroundColor: 'hsl(var(--card))', // Use card background
+              color: 'hsl(var(--card-foreground))', // Use card foreground
+              borderRadius: 'var(--radius)',
+            },
+            buttonNext: {
+              backgroundColor: 'hsl(var(--primary))',
+            },
+            buttonBack: {
+              color: 'hsl(var(--muted-foreground))',
+            },
+          }}
+        />
+     )}
 
       {/* Confetti Effect */}
       {showConfetti && <Confetti recycle={false} numberOfPieces={300} />}
@@ -1346,4 +1356,3 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
     </TooltipProvider>
   );
 }
-

@@ -1,4 +1,4 @@
-
+// src/types/supabase.ts
 export type Json =
   | string
   | number
@@ -10,7 +10,7 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      profiles: { // Updated profiles table definition V3.2
+      profiles: { // Updated profiles table definition V3.1 - Added composio_api_key
         Row: {
           id: string // UUID, references auth.users.id
           updated_at: string | null
@@ -18,16 +18,16 @@ export type Database = {
           full_name: string | null
           phone_number: string | null
           composio_mcp_url: string | null
-          linkedin_url: string | null // Added
-          twitter_url: string | null // Added
-          youtube_url: string | null // Added
+          linkedin_url: string | null
+          twitter_url: string | null
+          youtube_url: string | null
           gemini_api_key: string | null
-          composio_api_key: string | null // Added
           is_linkedin_authed: boolean | null
           is_twitter_authed: boolean | null
           is_youtube_authed: boolean | null
-          xp: number | null // Added XP
-          badges: string[] | null // Added Badges (array of text)
+          xp: number | null
+          badges: string[] | null
+          composio_api_key: string | null // Added Composio API key
         }
         Insert: {
           id: string // UUID, references auth.users.id
@@ -36,16 +36,16 @@ export type Database = {
           full_name?: string | null
           phone_number?: string | null
           composio_mcp_url?: string | null
-          linkedin_url?: string | null // Added
-          twitter_url?: string | null // Added
-          youtube_url?: string | null // Added
+          linkedin_url?: string | null
+          twitter_url?: string | null
+          youtube_url?: string | null
           gemini_api_key?: string | null
-          composio_api_key?: string | null // Added
           is_linkedin_authed?: boolean | null
           is_twitter_authed?: boolean | null
           is_youtube_authed?: boolean | null
-          xp?: number | null // Added
-          badges?: string[] | null // Added
+          xp?: number | null
+          badges?: string[] | null
+          composio_api_key?: string | null // Added Composio API key
         }
         Update: {
           id?: string // UUID, references auth.users.id
@@ -54,16 +54,16 @@ export type Database = {
           full_name?: string | null
           phone_number?: string | null
           composio_mcp_url?: string | null
-          linkedin_url?: string | null // Added
-          twitter_url?: string | null // Added
-          youtube_url?: string | null // Added
+          linkedin_url?: string | null
+          twitter_url?: string | null
+          youtube_url?: string | null
           gemini_api_key?: string | null
-          composio_api_key?: string | null // Added
           is_linkedin_authed?: boolean | null
           is_twitter_authed?: boolean | null
           is_youtube_authed?: boolean | null
-          xp?: number | null // Added
-          badges?: string[] | null // Added
+          xp?: number | null
+          badges?: string[] | null
+          composio_api_key?: string | null // Added Composio API key
         }
         Relationships: [
           {
@@ -145,23 +145,23 @@ export type Database = {
         Args: {
           p_user_id: string
         }
-        Returns: { // Update return type to match updated profiles.Row V3.2
+        Returns: { // Update return type to match updated profiles.Row V3.1 - Added composio_api_key
           id: string
           updated_at: string | null
           username: string | null
           full_name: string | null
           phone_number: string | null
           composio_mcp_url: string | null
-          linkedin_url: string | null // Added
-          twitter_url: string | null // Added
-          youtube_url: string | null // Added
+          linkedin_url: string | null
+          twitter_url: string | null
+          youtube_url: string | null
           gemini_api_key: string | null
-          composio_api_key: string | null // Added
           is_linkedin_authed: boolean | null
           is_twitter_authed: boolean | null
           is_youtube_authed: boolean | null
-          xp: number | null // Added
-          badges: string[] | null // Added
+          xp: number | null
+          badges: string[] | null
+          composio_api_key: string | null // Added Composio API key
         }[] // Ensure it returns an array
       }
        handle_profile_update: { // Added definition for the trigger function if needed
@@ -270,3 +270,4 @@ export type UserProfileFunctionReturn = Database['public']['Functions']['get_use
 
 // Define types for Composio app authentication status
 export type ComposioApp = 'linkedin' | 'twitter' | 'youtube';
+```

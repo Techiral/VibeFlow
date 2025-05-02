@@ -3,7 +3,7 @@
 
 import type { User } from '@supabase/supabase-js';
 import type { Profile, Quota, ComposioApp } from '@/types/supabase';
-import { useState, useEffect, useTransition, useCallback } from 'react'; // Added useCallback
+import { useState, useEffect, useTransition, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -23,15 +23,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck, Star, Trophy, Zap, BrainCircuit } from 'lucide-react';
+import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck, Star, Trophy, Zap, BrainCircuit, Key } from 'lucide-react'; // Added Key icon
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { toast as sonnerToast } from 'sonner';
-import Confetti from 'react-confetti';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+// Removed OpenAIToolSet and OpenAI imports - logic moved to server action
+// import { OpenAIToolSet } from "composio-core";
+// import { OpenAI } from "openai";
+import { startComposioLogin } from '@/actions/composio-actions'; // Import the server action
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { startComposioLogin, handleAuthenticateApp } from '@/services/composio-service'; // Import the service functions
-
 
 interface ProfileDialogProps {
   isOpen: boolean;
@@ -45,7 +44,7 @@ interface ProfileDialogProps {
   dbSetupError: string | null;
 }
 
-// Schema updated to include composio_api_key
+// Schema includes composio_api_key now
 const profileSchema = z.object({
   full_name: z.string().max(100, 'Full name must be 100 characters or less').nullable().optional().or(z.literal('')),
   username: z.string().max(50, 'Username must be 50 characters or less').nullable().optional().or(z.literal('')),
@@ -55,9 +54,8 @@ const profileSchema = z.object({
   twitter_url: z.string().url('Invalid Twitter URL format (e.g., https://...)').max(255, 'URL too long').nullable().optional().or(z.literal('')),
   youtube_url: z.string().url('Invalid YouTube URL format (e.g., https://...)').max(255, 'URL too long').nullable().optional().or(z.literal('')),
   gemini_api_key: z.string().max(255, 'API Key must be 255 characters or less').nullable().optional().or(z.literal('')),
-  composio_api_key: z.string().max(255, 'Composio API Key must be 255 characters or less').nullable().optional().or(z.literal('')) // Added
+  composio_api_key: z.string().max(255, 'Composio API Key must be 255 characters or less').nullable().optional().or(z.literal('')), // Added Composio API key
 });
-
 
 type ProfileFormData = z.infer<typeof profileSchema>;
 
@@ -70,6 +68,8 @@ const BADGES = [
   { xp: 200, name: 'Social Samurai ⚔️', description: 'Generated 20 posts!', icon: Zap },
   { xp: 500, name: 'AI Maestro 🧑‍🔬', description: 'Mastered 50 generations!', icon: BrainCircuit },
 ];
+
+// Removed the server-side startComposioLogin function definition from here
 
 export function ProfileDialog({
   isOpen,
@@ -91,13 +91,11 @@ export function ProfileDialog({
   const badges = initialBadges ?? [];
   const [localDbSetupError, setLocalDbSetupError] = useState<string | null>(dbSetupError);
   const [isComposioAuthenticating, setIsComposioAuthenticating] = useState<Partial<Record<ComposioApp, boolean>>>({});
-
-  // State for Composio API key handling
-  const [composioStatus, setComposioStatus] = useState({
-    loading: false,
-    success: !!initialProfile?.composio_api_key, // Assume success if key exists initially
-    errorMessage: null as string | null,
-    apiKey: initialProfile?.composio_api_key || null as string | null,
+  const [composioStatus, setComposioStatus] = useState<{ loading: boolean; success: boolean; errorMessage: string | null; apiKey: string | null | undefined }>({ // Type adjusted
+        loading: false,
+        success: false,
+        errorMessage: null,
+        apiKey: initialProfile?.composio_api_key ?? null, // Initialize with profile key if exists
   });
 
 
@@ -105,87 +103,84 @@ export function ProfileDialog({
     setProfile(initialProfile);
     setQuota(initialQuota);
     setLocalDbSetupError(dbSetupError);
-    setComposioStatus(prev => ({
-        ...prev,
-        success: !!initialProfile?.composio_api_key,
-        apiKey: initialProfile?.composio_api_key || null
-    }));
+    setComposioStatus(prev => ({ ...prev, apiKey: initialProfile?.composio_api_key ?? null })); // Update API key when profile changes
   }, [initialProfile, initialQuota, dbSetupError]);
 
 
   useEffect(() => {
     if (isOpen && !quota && !localDbSetupError) {
       const fetchQuota = async () => {
-        try {
-          const { data: remainingQuota, error: rpcError } = await supabase
-             .rpc('get_remaining_quota', { p_user_id: user.id });
+         try {
+           // Use RPC function to get remaining quota (handles reset logic)
+           const { data: remainingQuota, error: rpcError } = await supabase
+              .rpc('get_remaining_quota', { p_user_id: user.id });
 
-           if (rpcError) {
-             console.error('Error calling get_remaining_quota RPC in dialog:', rpcError.message);
-             let errorMsg = `Failed to load usage data: ${rpcError.message}`;
-             if (rpcError.message.includes("function public.get_remaining_quota") && rpcError.message.includes("does not exist")) {
-                 errorMsg = "Database setup incomplete: Missing 'get_remaining_quota' function. Please run the SQL script from `supabase/schema.sql`. See README Step 3.";
-             } else if (rpcError.message.includes("permission denied")) {
-                 errorMsg = "Database access error: Permission denied for 'get_remaining_quota'. Check RLS policies. See README Step 3.";
-             } else if (rpcError.message.includes("relation \"public.quotas\" does not exist")) {
-                 errorMsg = "Database setup incomplete: Missing 'quotas' table. Run setup script.";
-             }
-             setLocalDbSetupError(errorMsg);
-             toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
-           } else {
-               const { data, error: selectError } = await supabase
-                 .from('quotas')
-                 .select('user_id, request_count, quota_limit, last_reset_at')
-                 .eq('user_id', user.id)
-                 .maybeSingle();
+            if (rpcError) {
+              console.error('Error calling get_remaining_quota RPC in dialog:', rpcError.message);
+              let errorMsg = `Failed to load usage data: ${rpcError.message}`;
+              if (rpcError.message.includes("function public.get_remaining_quota") && rpcError.message.includes("does not exist")) {
+                  errorMsg = "Database setup incomplete: Missing 'get_remaining_quota' function. Run setup script.";
+              } else if (rpcError.message.includes("relation \"public.quotas\" does not exist")) {
+                  errorMsg = "Database setup incomplete: Missing 'quotas' table. Run setup script.";
+              } else if (rpcError.message.includes("permission denied")) {
+                  errorMsg = "Database access error: Permission denied for 'get_remaining_quota'. Check RLS/function security.";
+              }
+              setLocalDbSetupError(errorMsg);
+              toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
+            } else {
+                const { data, error: selectError } = await supabase
+                  .from('quotas')
+                  .select('user_id, request_count, quota_limit, last_reset_at')
+                  .eq('user_id', user.id)
+                  .maybeSingle();
 
-               if (selectError && selectError.code !== 'PGRST116') {
-                   console.error('Error fetching quota details after RPC in dialog:', selectError.message);
-                   let errorMsg = `Failed to load full usage details: ${selectError.message}`;
-                    if (selectError.message.includes("relation \"public.quotas\" does not exist")) {
-                     errorMsg = "Database setup incomplete: Missing 'quotas' table. Please run the SQL script from `supabase/schema.sql`. See README Step 3.";
-                   } else if (selectError.message.includes("permission denied")) {
-                     errorMsg = "Database access error: Permission denied for 'quotas' table. Check RLS policies. See README Step 3.";
-                   } else if (selectError.message.includes("406")) {
-                       errorMsg = `Database configuration issue: Could not fetch quota details (Error 406). Check RLS/table access. Details: ${selectError.message}`;
-                       toast({ title: "Quota Load Error", description: "Could not retrieve usage details (406).", variant: "destructive" });
-                   }
-                   setLocalDbSetupError(errorMsg);
-                   toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
-               } else if (data && 'user_id' in data && 'request_count' in data && 'quota_limit' in data && 'last_reset_at' in data) {
-                   setQuota(data as Quota);
+                if (selectError && selectError.code !== 'PGRST116') { // Handle errors other than "No rows found"
+                    console.error('Error fetching quota details after RPC in dialog:', selectError.message);
+                    let errorMsg = `Failed to load full usage details: ${selectError.message}`;
+                     if (selectError.message.includes("relation \"public.quotas\" does not exist")) {
+                      errorMsg = "Database setup incomplete: Missing 'quotas' table. Run setup script.";
+                    } else if (selectError.message.includes("permission denied")) {
+                      errorMsg = "Database access error: Permission denied for 'quotas' table. Check RLS.";
+                    } else if (selectError.message.includes("406")) {
+                        errorMsg = `Database configuration issue: Could not fetch quota details (Error 406). Check RLS/table access. Details: ${selectError.message}`;
+                        toast({ title: "Quota Load Error", description: "Could not retrieve usage details (406).", variant: "destructive" });
+                    }
+                    setLocalDbSetupError(errorMsg);
+                    toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
+                } else if (data && 'user_id' in data && 'request_count' in data && 'quota_limit' in data && 'last_reset_at' in data) {
+                    setQuota(data as Quota);
+                    setLocalDbSetupError(null);
+                } else if (!data && typeof remainingQuota === 'number') {
+                   console.log("Quota record not found yet for user (dialog):", user.id);
+                   const limit = DEFAULT_QUOTA_LIMIT;
+                   const used = Math.max(0, limit - remainingQuota);
+                   const nowISO = new Date().toISOString();
+                   setQuota({
+                       user_id: user.id,
+                       request_count: used,
+                       quota_limit: limit,
+                       last_reset_at: nowISO,
+                       created_at: nowISO, // Placeholder
+                       ip_address: null // Placeholder
+                   });
                    setLocalDbSetupError(null);
-               } else if (!data && typeof remainingQuota === 'number') {
-                  console.log("Quota record not found yet for user (dialog):", user.id);
-                  const limit = DEFAULT_QUOTA_LIMIT;
-                  const used = Math.max(0, limit - remainingQuota);
-                  const nowISO = new Date().toISOString();
-                  setQuota({
-                      user_id: user.id,
-                      request_count: used,
-                      quota_limit: limit,
-                      last_reset_at: nowISO,
-                      created_at: nowISO, // Placeholder
-                      ip_address: null // Placeholder
-                  });
-                  setLocalDbSetupError(null);
-               } else if (!data && typeof remainingQuota !== 'number'){
-                   const errorMsg = "Could not determine initial quota state.";
-                   setLocalDbSetupError(errorMsg);
-                   toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
-               } else if (data && !('request_count' in data)) {
-                   console.warn("Fetched quota data inside dialog is missing fields:", data);
-                   const errorMsg = `Incomplete quota data received.`;
-                   setLocalDbSetupError(errorMsg);
-                   toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
-               }
-           }
-        } catch (err: any) {
-          console.error('Unexpected error fetching quota inside dialog:', err.message);
-          const errorMsg = `Unexpected error loading usage data: ${err.message}`;
-          setLocalDbSetupError(errorMsg);
-          toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
-        }
+                } else if (!data && typeof remainingQuota !== 'number'){
+                    const errorMsg = "Could not determine initial quota state.";
+                    setLocalDbSetupError(errorMsg);
+                    toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
+                } else if (data && !('request_count' in data)) {
+                    console.warn("Fetched quota data inside dialog is missing fields:", data);
+                    const errorMsg = `Incomplete quota data received.`;
+                    setLocalDbSetupError(errorMsg);
+                    toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
+                }
+            }
+         } catch (err: any) {
+           console.error('Unexpected error fetching quota inside dialog:', err.message);
+           const errorMsg = `Unexpected error loading usage data: ${err.message}`;
+           setLocalDbSetupError(errorMsg);
+           toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
+         }
       };
       fetchQuota();
     }
@@ -196,7 +191,7 @@ export function ProfileDialog({
     register,
     handleSubmit,
     reset,
-    setValue, // Added setValue from react-hook-form
+    setValue, // Use setValue to update the hidden composio_api_key field
     formState: { errors, isDirty },
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -207,9 +202,9 @@ export function ProfileDialog({
       composio_mcp_url: initialProfile?.composio_mcp_url ?? '',
       linkedin_url: initialProfile?.linkedin_url ?? '',
       twitter_url: initialProfile?.twitter_url ?? '',
-      youtube_url: initialProfile?.youtube_url ?? '', // Corrected reference
+      youtube_url: initialProfile?.youtube_url ?? '',
       gemini_api_key: initialProfile?.gemini_api_key ?? '',
-      composio_api_key: initialProfile?.composio_api_key ?? '', // Added default
+      composio_api_key: initialProfile?.composio_api_key ?? '', // Initialize with profile key
     },
   });
 
@@ -224,9 +219,9 @@ export function ProfileDialog({
       twitter_url: profile?.twitter_url ?? '',
       youtube_url: profile?.youtube_url ?? '',
       gemini_api_key: profile?.gemini_api_key ?? '',
-      composio_api_key: composioStatus.apiKey ?? profile?.composio_api_key ?? '', // Use composioStatus first
+      composio_api_key: composioStatus.apiKey ?? profile?.composio_api_key ?? '', // Update key in form
     });
-  }, [profile, composioStatus.apiKey, reset, isOpen]);
+  }, [profile, reset, isOpen, composioStatus.apiKey]); // Add composioStatus.apiKey dependency
 
   const quotaUsed = quota?.request_count ?? 0;
   const quotaLimit = quota?.quota_limit ?? DEFAULT_QUOTA_LIMIT;
@@ -234,19 +229,45 @@ export function ProfileDialog({
   const quotaPercentage = quotaLimit > 0 ? (quotaUsed / quotaLimit) * 100 : 0;
   const quotaExceeded = quotaRemaining <= 0 && !!quota;
 
+  // New function to handle authentication - calls the server action
+  const handleGetComposioKey = async () => {
+    setComposioStatus({ loading: true, success: false, errorMessage: null, apiKey: null });
+    try {
+       // Call the server action
+       const result = await startComposioLogin();
+
+       if (result.success && result.key) {
+           setComposioStatus({loading: false, success: true, errorMessage: null, apiKey: result.key});
+           setValue('composio_api_key', result.key, { shouldDirty: true }); // Update form value and mark as dirty
+           toast({ title: "Composio Key Retrieved", description: "Composio API Key obtained. Remember to save changes." });
+       } else {
+           const errorMsg = result.error || "Failed to get Composio API key.";
+           setComposioStatus({loading: false, success: false, errorMessage: errorMsg, apiKey: null});
+           toast({ title: "Composio Connection Error", description: errorMsg, variant: "destructive" });
+       }
+
+    } catch (error:any) {
+      console.error("Composio Login Action Error:", error);
+      const errorMsg = error.message || 'Unknown error occurred during Composio connection.';
+      setComposioStatus({ loading: false, success: false, errorMessage: errorMsg, apiKey: null });
+      toast({ title: "Composio Connection Error", description: errorMsg, variant: "destructive" });
+    }
+  };
+
+
   const onSubmit = async (data: ProfileFormData) => {
     if (localDbSetupError) {
       toast({ title: "Database Error", description: "Cannot save profile due to a database setup issue.", variant: "destructive" });
       return;
     }
-    // Include composio_api_key from state if it exists
-    const updateData = {
-      ...Object.fromEntries(
-        Object.entries(data).filter(([key, value]) => value !== null && value !== '' && key !== 'composio_api_key') // Exclude key from form data initially
-      ),
-      ...(composioStatus.apiKey ? { composio_api_key: composioStatus.apiKey } : {}), // Add key from state
-    };
-
+    // Exclude any null/empty values before sending to Supabase, but INCLUDE composio_api_key if present
+    const updateData = Object.fromEntries(
+        Object.entries(data).filter(([key, value]) => key === 'composio_api_key' || (value !== null && value !== ''))
+    );
+    // Ensure null is sent if key is explicitly empty, but allow saving if unchanged
+    if (data.composio_api_key === '') {
+        updateData.composio_api_key = null;
+    }
 
     startSavingTransition(async () => {
       try {
@@ -257,13 +278,14 @@ export function ProfileDialog({
             updated_at: new Date().toISOString(),
           })
           .eq('id', user.id)
-          .select('*, xp, badges')
+          .select('*, xp, badges, composio_api_key') // Re-select all fields including the key
           .single();
 
         if (error) {
           console.error('Error updating profile:', error.message);
           let errorMessage = `Could not save profile: ${error.message}`;
-          if (error.message.includes("Could not find the") && error.message.includes("column") && error.message.includes("in the schema cache")) {
+           // ... (keep existing specific error message handling) ...
+          if (error.message.includes("column") && error.message.includes("does not exist")) {
               const missingColumnMatch = error.message.match(/'(.*?)'/);
               const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
               errorMessage = `Database schema mismatch: Column '${missingColumn}' not found. Run the latest 'supabase/schema.sql'. See README Step 3.`;
@@ -279,12 +301,12 @@ export function ProfileDialog({
           toast({ title: 'Save Failed', description: errorMessage, variant: 'destructive', duration: 7000 });
         } else if (updatedProfileData) {
           const completeProfile = updatedProfileData as Profile;
-          setProfile(completeProfile);
-          onProfileUpdate(completeProfile);
+          setProfile(completeProfile); // Update local state
+          setComposioStatus(prev => ({ ...prev, apiKey: completeProfile.composio_api_key ?? null })); // Update key status
+          onProfileUpdate(completeProfile); // Notify parent component
           toast({ title: 'Profile Saved', description: 'Your changes have been saved.' });
-          // Reset form with updated data including the API key from state
-          reset({...data, composio_api_key: composioStatus.apiKey ?? ''});
-          setLocalDbSetupError(null);
+          reset(completeProfile); // Reset form dirtiness state with latest data
+          setLocalDbSetupError(null); // Clear local error if save succeeds
         }
       } catch (error: any) {
         console.error('Unexpected error updating profile:', error);
@@ -293,58 +315,50 @@ export function ProfileDialog({
     });
   };
 
-
-  // New function to handle Composio API key generation
-  const handleGetComposioKey = useCallback(async () => {
-    setComposioStatus({ loading: true, success: false, errorMessage: null, apiKey: null });
-    try {
-       const result = await startComposioLogin(); // Call the service function
-
-       if (result.success && result.key) {
-           setComposioStatus({loading: false, success: true, errorMessage: null, apiKey: result.key});
-           setValue('composio_api_key', result.key, { shouldDirty: true }); // Update form value
-           toast({ title: "Composio API Key Retrieved", description: "API Key retrieved successfully. Remember to save changes." });
-       } else {
-           setComposioStatus({loading: false, success: false, errorMessage: result.error || "Failed to retrieve Composio API Key.", apiKey: null});
-           toast({ title: "Composio Key Error", description: result.error || "Could not retrieve Composio API Key.", variant: "destructive" });
-       }
-
-    } catch (error:any) {
-      console.error("Composio Login Error:", error);
-      setComposioStatus({ loading: false, success: false, errorMessage: error.message || 'Unknown error', apiKey: null });
-      toast({ title: "Composio Connection Error", description: error.message || "Could not connect to Composio.", variant: "destructive" });
-    }
-  }, [toast, setValue]);
-
-  const handleAuthenticateComposio = useCallback(async (appName: ComposioApp) => {
+  // Updated function to call the backend API route for app authentication
+  const handleAuthenticateApp = useCallback(async (appName: ComposioApp) => {
     console.log(`Initiating app authentication for ${appName}...`);
-    if (!profile?.composio_api_key) {
-       toast({ title: "Composio Key Required", description: "Please generate and save your Composio API Key first.", variant: "destructive" });
-       return;
-    }
+
     if (localDbSetupError) {
        toast({ title: "Database Error", description: "Cannot authenticate app due to a database setup issue.", variant: "destructive" });
        return;
     }
+    // Check if Composio API key exists in profile or state before proceeding
+    if (!composioStatus.apiKey && !profile?.composio_api_key) {
+        toast({ title: "Composio Key Missing", description: "Please obtain your Composio API Key first.", variant: "destructive" });
+        return;
+    }
+
 
     setIsComposioAuthenticating(prev => ({...prev, [appName]: true}));
 
     try {
-        const result = await handleAuthenticateApp(appName, user.id, profile.composio_api_key);
+        // Call the backend API route
+        const response = await fetch('/api/auth/composio/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appName: appName, userId: user.id }) // Send appName and userId
+        });
 
-        if (result.success && result.authUrl) {
-             // Redirect user to the auth URL returned by the service
-             window.location.href = result.authUrl;
+        const result = await response.json();
+
+        if (response.ok && result.redirectUrl) {
+             // Redirect user to the Composio OAuth URL
+             console.log(`Redirecting user to: ${result.redirectUrl}`);
+             window.location.href = result.redirectUrl;
+             // Loading state will persist until redirect happens or fails
         } else {
-             toast({ title: `${appName} Auth Failed`, description: result.error || `Could not initiate authentication for ${appName}.`, variant: "destructive" });
+             // Handle errors from the API route
+             console.error(`API Composio Connect Error for ${appName}:`, result.error || `Status: ${response.status}`);
+             toast({ title: `${appName} Auth Failed`, description: result.error || `Could not initiate authentication for ${appName}. Server responded with status ${response.status}.`, variant: "destructive" });
+             setIsComposioAuthenticating(prev => ({...prev, [appName]: false})); // Clear loading on failure
         }
     } catch (error: any) {
-        console.error(`Error authenticating ${appName}:`, error);
-        toast({ title: `${appName} Auth Error`, description: error.message || 'Unknown error during authentication.', variant: 'destructive' });
-    } finally {
-         setIsComposioAuthenticating(prev => ({...prev, [appName]: false}));
+        console.error(`Error calling authentication API for ${appName}:`, error);
+        toast({ title: `${appName} Auth Error`, description: error.message || 'Unknown error during authentication API call.', variant: 'destructive' });
+        setIsComposioAuthenticating(prev => ({...prev, [appName]: false})); // Clear loading on failure
     }
-  }, [profile?.composio_api_key, user.id, toast, localDbSetupError]);
+  }, [user.id, toast, localDbSetupError, profile?.composio_api_key, composioStatus.apiKey]); // Added composio key dependencies
 
 
   const handleUpgrade = () => {
@@ -444,15 +458,15 @@ export function ProfileDialog({
                      </Label>
                      <div className="col-span-1 sm:col-span-2">
                        <Input
-                         id="composio_api_key_display"
+                         id="composio_api_key_display" // Use different ID for display field
                          type="password"
-                         placeholder={composioStatus.loading ? "Generating key..." : "Click 'Get Composio Key'"}
+                         placeholder={composioStatus.loading ? "Connecting..." : composioStatus.apiKey ? "Key Obtained - Save Changes" : "Click below to get key"}
                          className={`${errors.composio_api_key ? 'border-destructive' : ''}`}
-                         disabled={true} // Always disabled, value comes from state
-                         value={composioStatus.apiKey || ''}
+                         disabled // Display only, value managed by state/setValue
+                         value={composioStatus.apiKey ? '********' : ''} // Show masked key or placeholder
                        />
-                       {/* Hidden input registered with react-hook-form */}
-                       <input type="hidden" {...register('composio_api_key')} value={composioStatus.apiKey || ''} />
+                        {/* Hidden input to actually submit the value */}
+                         <input type="hidden" {...register('composio_api_key')} />
                        {errors.composio_api_key && <p className="text-xs text-destructive mt-1">{errors.composio_api_key.message}</p>}
                         <Button
                            type="button" // Ensure it doesn't submit the form
@@ -463,17 +477,18 @@ export function ProfileDialog({
                            loading={composioStatus.loading}
                            className="mt-2"
                        >
+                           <Key className="mr-2 h-4 w-4" />
                            {composioStatus.loading ? "Connecting..." : composioStatus.apiKey ? "Regenerate Key" : "Get Composio Key"}
                        </Button>
                       {composioStatus.errorMessage && <p className="text-xs text-destructive mt-1">{composioStatus.errorMessage}</p>}
                        <p className="text-xs text-muted-foreground mt-1">
-                        Connect to Composio to generate an API Key. Required for app authentication.
+                        Click to connect to Composio and generate an API Key. Required for app authentication. **You must save changes after getting the key.**
                        </p>
                      </div>
                    </div>
 
-                   {/* Composio MCP URL - No longer strictly needed for API key method */}
-                   {/*
+
+                   {/* Composio MCP URL */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
                         <Label htmlFor="composio_mcp_url" className="sm:text-right sm:col-span-1 mt-1">Composio MCP URL</Label>
                         <div className="col-span-1 sm:col-span-2">
@@ -486,12 +501,10 @@ export function ProfileDialog({
                         />
                         {errors.composio_mcp_url && <p className="text-xs text-destructive mt-1">{errors.composio_mcp_url.message}</p>}
                         <p className="text-xs text-muted-foreground mt-1">
-                            Find in your <a href="https://mcp.composio.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Composio MCP dashboard <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>. (Optional if using API Key)
+                            Find in your <a href="https://mcp.composio.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Composio MCP dashboard <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>. Needed for app authentication redirects.
                         </p>
                         </div>
                     </div>
-                   */}
-
 
                    {/* App Authentication Buttons */}
                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
@@ -499,11 +512,15 @@ export function ProfileDialog({
                        <div className="col-span-1 sm:col-span-2 space-y-3">
                           {(['linkedin', 'twitter', 'youtube'] as ComposioApp[]).map((app) => {
                              const isAuthenticated = getAuthStatus(app);
-                             // Disable if Composio API key is missing or DB error
-                             const isDisabled = !profile?.composio_api_key || !!localDbSetupError || isComposioAuthenticating[app];
-                             const tooltipText = !profile?.composio_api_key ? "Generate Composio API Key first" :
-                                                localDbSetupError ? "Cannot authenticate due to DB error" :
-                                                isAuthenticated ? `Re-authenticate ${app}` : `Authenticate ${app}`;
+                             // Disable if Composio MCP URL OR Composio API Key missing, or DB error
+                             const isDisabled = !profile?.composio_mcp_url || !(composioStatus.apiKey || profile?.composio_api_key) || !!localDbSetupError || isComposioAuthenticating[app];
+                             let tooltipText = '';
+                             if (!profile?.composio_mcp_url) tooltipText = "Enter Composio MCP URL first";
+                             else if (!(composioStatus.apiKey || profile?.composio_api_key)) tooltipText = "Get Composio API Key first";
+                             else if (localDbSetupError) tooltipText = "Cannot authenticate due to DB error";
+                             else if (isAuthenticated) tooltipText = `Re-authenticate ${app}`;
+                             else tooltipText = `Authenticate ${app}`;
+
 
                              return (
                                <div key={app} className="flex items-center justify-between p-3 bg-muted/30 rounded-md border border-border/50">
@@ -516,14 +533,14 @@ export function ProfileDialog({
                                    <Tooltip>
                                      <TooltipTrigger asChild>
                                         <Button
-                                          type="button"
+                                          type="button" // Important: Prevent form submission
                                           variant={isAuthenticated ? "outline" : "default"}
                                           size="sm"
-                                          onClick={() => handleAuthenticateComposio(app)}
+                                          onClick={() => handleAuthenticateApp(app)}
                                           disabled={isDisabled}
                                           loading={isComposioAuthenticating[app]}
                                         >
-                                          {isComposioAuthenticating[app] ? "Processing..." : isAuthenticated ? <WifiOff className="mr-2 h-4 w-4" /> : <Wifi className="mr-2 h-4 w-4 />}
+                                          {isComposioAuthenticating[app] ? "Redirecting..." : isAuthenticated ? <WifiOff className="mr-2 h-4 w-4" /> : <Wifi className="mr-2 h-4 w-4 />}
                                           {isComposioAuthenticating[app] ? "" : isAuthenticated ? 'Re-authenticate' : 'Authenticate'}
                                         </Button>
                                      </TooltipTrigger>
@@ -536,12 +553,12 @@ export function ProfileDialog({
                              );
                           })}
                           <p className="text-xs text-muted-foreground mt-1">
-                             Connect accounts via Composio to enable direct publishing. You will be redirected.
+                             Connect accounts via Composio to enable direct publishing. Requires MCP URL and Composio API Key. You will be redirected to Composio.
                           </p>
                        </div>
                     </div>
 
-                    {/* LinkedIn/Twitter/YouTube URLs - Keep these as they might be useful */}
+                    {/* LinkedIn/Twitter/YouTube URLs - Keep for user reference */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
                         <Label htmlFor="linkedin_url" className="sm:text-right sm:col-span-1 mt-1">LinkedIn URL</Label>
                          <div className="col-span-1 sm:col-span-2">
@@ -636,7 +653,7 @@ export function ProfileDialog({
               {localDbSetupError && !localDbSetupError.includes('quota') ? (
                 <Alert variant="destructive">
                   <Database className="h-4 w-4" />
-                  <AlertTitle>Profile Data Issue</AlertTitle>
+                  <AlertTitle>Usage Data Issue</AlertTitle>
                   <AlertDescription>Cannot load usage data due to a profile or database setup issue.</AlertDescription>
                 </Alert>
               ) : quota !== null ? (
@@ -654,7 +671,7 @@ export function ProfileDialog({
                     </Alert>
                   )}
                   <div className="flex justify-end pt-2">
-                    <Button onClick={handleUpgrade} size="sm">
+                    <Button onClick={handleUpgrade} size="sm" disabled={!!localDbSetupError}>
                       <CreditCard className="mr-2 h-4 w-4" /> Upgrade Plan (Soon)
                     </Button>
                   </div>
@@ -696,3 +713,4 @@ export function ProfileDialog({
     </Dialog>
   );
 }
+```

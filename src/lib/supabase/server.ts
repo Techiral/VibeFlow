@@ -7,7 +7,7 @@ import type { Database } from '@/types/supabase'; // Assuming you have types gen
 async function getCookie(name: string): Promise<string | undefined> {
   // cookies() can be called synchronously, but ensure compatibility and adhere to Next.js recommendations.
   // Await potentially helps if Next.js internals expect an async boundary here.
-  const cookieStore = await cookies(); // Await cookies() call
+  const cookieStore = cookies(); // Await cookies() call
   return cookieStore.get(name)?.value;
 }
 
@@ -15,10 +15,13 @@ async function getCookie(name: string): Promise<string | undefined> {
 async function setCookie(name: string, value: string, options: CookieOptions): Promise<void> {
   try {
     // cookies() can be called synchronously in Server Actions/Route Handlers
-    const cookieStore = await cookies(); // Await cookies() call
+    const cookieStore = cookies(); // Await cookies() call
     cookieStore.set({ name, value, ...options });
   } catch (error) {
     // Log error if setting fails (e.g., called from RSC render path where cookies() might not be writable)
+    // This warning is expected during RSC rendering paths and is handled gracefully.
+    // Supabase SSR tries to manage session cookies, but Next.js prevents direct cookie setting outside Server Actions/Route Handlers.
+    // The middleware handles the session update on subsequent requests.
     console.warn(`[Supabase Server Client] Failed to set cookie '${name}'. This might be expected if called during RSC rendering. Error: ${error}`);
   }
 }
@@ -27,10 +30,11 @@ async function setCookie(name: string, value: string, options: CookieOptions): P
 async function removeCookie(name: string, options: CookieOptions): Promise<void> {
   try {
     // cookies() can be called synchronously in Server Actions/Route Handlers
-    const cookieStore = await cookies(); // Await cookies() call
+    const cookieStore = cookies(); // Await cookies() call
     cookieStore.set({ name, value: '', ...options });
   } catch (error) {
      // Log error if removal fails
+     // This warning is expected during RSC rendering paths and is handled gracefully.
     console.warn(`[Supabase Server Client] Failed to remove cookie '${name}'. This might be expected if called during RSC rendering. Error: ${error}`);
   }
 }

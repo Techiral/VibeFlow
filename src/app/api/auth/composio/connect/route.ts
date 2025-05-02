@@ -36,10 +36,22 @@ export async function POST(request: Request) {
   }
 
   // 4. Initialize Composio ToolSet using the User's Key and Initiate Connection
+  let toolset;
   try {
+    console.log("API Composio Connect: Initializing OpenAIToolSet...");
     // **Use the user's API key from the header**
-    const toolset = new OpenAIToolSet({ apiKey: userComposioApiKey });
+    toolset = new OpenAIToolSet({ apiKey: userComposioApiKey });
+    console.log("API Composio Connect: OpenAIToolSet initialized successfully.");
+
+    // Verify getEntity exists before calling
+    if (typeof toolset.getEntity !== 'function') {
+        console.error("API Composio Connect: toolset.getEntity is not a function. Composio SDK might have changed or initialization failed.");
+        throw new Error("Composio SDK method 'getEntity' not found.");
+    }
+
+    console.log(`API Composio Connect: Calling getEntity for user ID: ${user.id}`);
     const entity = await toolset.getEntity(user.id); // Use VibeFlow user ID as entity ID
+    console.log(`API Composio Connect: Got entity object for ID: ${entity.id}`);
 
     console.log(`API Composio Connect: Initiating ${appName} connection for entity: ${entity.id}`);
 
@@ -73,9 +85,14 @@ export async function POST(request: Request) {
     console.error(`API Composio Connect: Error initiating ${appName} connection for user ${user.id}:`, error);
     // Provide more specific feedback if possible
     let errorMessage = `Failed to initiate ${appName} connection.`;
-    if (error.message?.includes('API key') || error.status === 401) {
+    let errorStatus = 500;
+
+    if (error.message?.includes('getEntity is not a function') || error.message?.includes("'getEntity' not found")) {
+         errorMessage = `Composio SDK issue: 'getEntity' method not found. Please check the 'composio-core' library version or initialization.`;
+         errorStatus = 500; // Internal server error due to SDK issue
+    } else if (error.message?.includes('API key') || error.status === 401 || error.message?.includes('Unauthorized')) {
          errorMessage = `Invalid Composio API Key provided. Please check the key in your profile.`;
-         return NextResponse.json({ error: errorMessage }, { status: 401 });
+         errorStatus = 401;
     } else if (error.message?.includes('entity')) {
         errorMessage = `Could not find or create Composio entity for user: ${error.message}`;
     } else if (error.message?.includes('integration')) {
@@ -83,6 +100,6 @@ export async function POST(request: Request) {
     } else {
         errorMessage = error.message || errorMessage;
     }
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: errorMessage }, { status: errorStatus });
   }
 }

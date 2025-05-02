@@ -1,8 +1,10 @@
 // src/services/composio-service.ts
 'use server';
 
-import { OpenAIToolSet } from "composio-core";
-import { OpenAI } from "openai";
+// Removed OpenAIToolSet import as it's not used here anymore
+// import { OpenAIToolSet } from "composio-core";
+// Removed OpenAI import as it's not used here anymore
+// import { OpenAI } from "openai";
 import { createClient } from '@/lib/supabase/server'; // Use server client for profile updates
 import type { ComposioApp } from '@/types/supabase';
 
@@ -34,77 +36,8 @@ export async function startComposioLogin(): Promise<{ success: boolean; key?: st
     return { success: true, key: apiKey };
 }
 
-export async function handleAuthenticateApp(
-    appName: ComposioApp,
-    userId: string,
-    composioApiKey: string
-): Promise<{ success: boolean; authUrl?: string; error?: string }> {
-    console.log(`Handling authentication for ${appName} for user ${userId}`);
-
-    try {
-        // Initialize Composio ToolSet with the user-specific API key
-        const toolset = new OpenAIToolSet({ apiKey: composioApiKey });
-        // OpenAI client might not be needed just for getting tools/auth URL
-        // const client = new OpenAI();
-
-        // Define the action based on the app
-        let action: string;
-        switch (appName) {
-            case 'linkedin':
-                action = "LINKEDIN_GET_THE_AUTHENTICATED_USER"; // Example action
-                break;
-            case 'twitter':
-                action = "TWITTER_GET_THE_AUTHENTICATED_USER"; // Example action
-                break;
-            case 'youtube':
-                action = "YOUTUBE_GET_THE_AUTHENTICATED_USER"; // Example action
-                break;
-            default:
-                throw new Error(`Unsupported app: ${appName}`);
-        }
-
-        console.log(`Getting tools for action: ${action}`);
-        // Get tools - this might trigger authentication if not connected
-        // Note: The exact behavior of getTools regarding authentication prompts isn't fully documented for direct API key use.
-        // It might implicitly handle the connection or require a separate connection step.
-        // For OAuth flows, Composio typically provides a connection URL.
-        // Let's assume `getTools` might return an auth URL if needed, or we might need a different method.
-
-        // --- Potential Issue: `getTools` might not be the correct method ---
-        // The `getTools` method is primarily for listing available actions for an LLM.
-        // For initiating authentication, Composio usually uses an OAuth flow triggered by a specific URL.
-        // Let's construct the likely OAuth URL pattern instead.
-
-        const supabase = await createClient();
-        const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('composio_mcp_url')
-            .eq('id', userId)
-            .single();
-
-        if (profileError || !profileData?.composio_mcp_url) {
-             throw new Error(`Could not retrieve Composio MCP URL for user: ${profileError?.message || 'URL not found'}`);
-        }
-
-        const mcpUrl = profileData.composio_mcp_url;
-        const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL || ''}/auth/composio-callback`; // Use env var for base URL
-        const authUrl = `${mcpUrl}/connect?app=${appName}&redirect_uri=${encodeURIComponent(redirectUri)}&user_id=${encodeURIComponent(userId)}`;
-
-        console.log(`Constructed auth URL: ${authUrl}`);
-
-        // Instead of calling getTools, return the constructed auth URL
-        // const tools = await toolset.getTools({ actions: [action] });
-        // console.log(`Tools received:`, tools);
-        // Check if tools array is empty or indicates required authentication action?
-
-        // Return the auth URL for the frontend to redirect to
-        return { success: true, authUrl: authUrl };
-
-    } catch (error: any) {
-        console.error(`Error during ${appName} authentication process:`, error.message);
-        return { success: false, error: error.message || `Failed to initiate ${appName} authentication.` };
-    }
-}
+// Removed the handleAuthenticateApp function as authentication is handled by
+// redirecting to the API route '/api/auth/composio/connect'
 
 // Placeholder for removing authentication (if needed)
 export async function handleDeauthenticateApp(appName: ComposioApp, userId: string): Promise<{ success: boolean; error?: string }> {

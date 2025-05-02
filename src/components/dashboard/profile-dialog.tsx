@@ -1,12 +1,11 @@
-// components/dashboard/profile-dialog.tsx
 'use client';
 
 import type { User } from '@supabase/supabase-js';
-import type { Profile, Quota, ComposioApp } from '@/types/supabase';
+import type { ComposioApp, Database, Profile, Quota } from '@/types/supabase';
 import { useState, useEffect, useTransition, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import * as z from 'zod';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -22,15 +21,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck, Star, Trophy, Zap, BrainCircuit, Key } from 'lucide-react'; // Added Key icon
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck, Star, Trophy, Zap, BrainCircuit, Key } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-// Removed OpenAIToolSet and OpenAI imports - logic moved to server action
-// import { OpenAIToolSet } from "composio-core";
-// import { OpenAI } from "openai";
-import { startComposioLogin } from '@/actions/composio-actions'; // Import the server action
+import { startComposioLogin } from '@/actions/composio-actions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { OpenAIToolSet, App as ComposioAppEnum } from "composio-core"; // Updated import
+import { OpenAI } from "openai";
+import { toast as sonnerToast } from 'sonner';
+import Confetti from 'react-confetti';
 
 interface ProfileDialogProps {
   isOpen: boolean;
@@ -69,8 +69,59 @@ const BADGES = [
   { xp: 500, name: 'AI Maestro 🧑‍🔬', description: 'Mastered 50 generations!', icon: BrainCircuit },
 ];
 
-// Removed the server-side startComposioLogin function definition from here
+// Authenticate App Function - Calls the backend API
+async function authenticateComposioApp(
+    appName: ComposioApp,
+    userId: string
+): Promise<{ success: boolean; authUrl?: string; error?: string }> {
+    console.log(`Initiating app authentication for ${appName}...`);
 
+    try {
+        // Call the backend API route
+        const response = await fetch('/api/auth/composio/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appName: appName, userId: userId }) // Send appName and userId
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.redirectUrl) {
+             console.log(`API call successful, redirect URL: ${result.redirectUrl}`);
+             // The redirection will be handled by the calling function (handleAuthenticateApp)
+             return { success: true, authUrl: result.redirectUrl };
+        } else {
+             // Handle errors from the API route
+             const errorMsg = result.error || `Could not initiate authentication for ${appName}. Server responded with status ${response.status}.`;
+             console.error(`API Composio Connect Error for ${appName}:`, errorMsg);
+             return { success: false, error: errorMsg };
+        }
+    } catch (error: any) {
+        console.error(`Error calling authentication API for ${appName}:`, error);
+        return { success: false, error: error.message || 'Unknown error during authentication API call.' };
+    }
+}
+
+// Function to handle the composio login process via server action
+async function getComposioKeyViaServerAction(): Promise<{ success: boolean; key?: string | null; error?: string }> {
+    console.log("Attempting Composio key retrieval via server action...");
+    try {
+       const result = await startComposioLogin(); // Call the server action
+       if (result.success && result.key) {
+           console.log("Composio key retrieved successfully via server action.");
+           return { success: true, key: result.key };
+       } else {
+           const errorMsg = result.error || "Failed to get Composio API key via server action.";
+           console.error(errorMsg);
+           return { success: false, error: errorMsg };
+       }
+    } catch (error: any) {
+        console.error("Error calling startComposioLogin server action:", error);
+        return { success: false, error: error.message || 'Unknown error calling server action.' };
+    }
+}
+
+// Rest of the ProfileDialog component
 export function ProfileDialog({
   isOpen,
   onOpenChange,
@@ -87,13 +138,13 @@ export function ProfileDialog({
   const [isSaving, startSavingTransition] = useTransition();
   const [profile, setProfile] = useState<Profile | null>(initialProfile);
   const [quota, setQuota] = useState<Quota | null>(initialQuota);
-  const xp = initialXp ?? 0;
-  const badges = initialBadges ?? [];
+  const [xp, setXp] = useState<number>(initialXp);
+  const [badges, setBadges] = useState<string[]>(initialBadges ?? []);
   const [localDbSetupError, setLocalDbSetupError] = useState<string | null>(dbSetupError);
   const [isComposioAuthenticating, setIsComposioAuthenticating] = useState<Partial<Record<ComposioApp, boolean>>>({});
-  const [composioStatus, setComposioStatus] = useState<{ loading: boolean; success: boolean; errorMessage: string | null; apiKey: string | null | undefined }>({ // Type adjusted
+  const [composioStatus, setComposioStatus] = useState<{ loading: boolean; success: boolean; errorMessage: string | null; apiKey: string | null | undefined }>({
         loading: false,
-        success: false,
+        success: !!initialProfile?.composio_api_key, // Set initial success based on key presence
         errorMessage: null,
         apiKey: initialProfile?.composio_api_key ?? null, // Initialize with profile key if exists
   });
@@ -102,9 +153,16 @@ export function ProfileDialog({
   useEffect(() => {
     setProfile(initialProfile);
     setQuota(initialQuota);
+    setXp(initialXp);
+    setBadges(initialBadges ?? []);
     setLocalDbSetupError(dbSetupError);
-    setComposioStatus(prev => ({ ...prev, apiKey: initialProfile?.composio_api_key ?? null })); // Update API key when profile changes
-  }, [initialProfile, initialQuota, dbSetupError]);
+     // Update status based on initial profile
+    setComposioStatus(prev => ({
+        ...prev,
+        success: !!initialProfile?.composio_api_key,
+        apiKey: initialProfile?.composio_api_key ?? null
+    }));
+  }, [initialProfile, initialQuota, dbSetupError, initialXp, initialBadges]);
 
 
   useEffect(() => {
@@ -187,96 +245,33 @@ export function ProfileDialog({
   }, [isOpen, quota, localDbSetupError, supabase, user.id, toast]);
 
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    setValue, // Use setValue to update the hidden composio_api_key field
-    formState: { errors, isDirty },
-  } = useForm<ProfileFormData>({
-    resolver: zodResolver(profileSchema),
-    defaultValues: {
-      full_name: initialProfile?.full_name ?? '',
-      username: initialProfile?.username ?? '',
-      phone_number: initialProfile?.phone_number ?? '',
-      composio_mcp_url: initialProfile?.composio_mcp_url ?? '',
-      linkedin_url: initialProfile?.linkedin_url ?? '',
-      twitter_url: initialProfile?.twitter_url ?? '',
-      youtube_url: initialProfile?.youtube_url ?? '',
-      gemini_api_key: initialProfile?.gemini_api_key ?? '',
-      composio_api_key: initialProfile?.composio_api_key ?? '', // Initialize with profile key
-    },
-  });
-
-  // Update form values when profile or composioStatus.apiKey changes
-  useEffect(() => {
-    reset({
-      full_name: profile?.full_name ?? '',
-      username: profile?.username ?? '',
-      phone_number: profile?.phone_number ?? '',
-      composio_mcp_url: profile?.composio_mcp_url ?? '',
-      linkedin_url: profile?.linkedin_url ?? '',
-      twitter_url: profile?.twitter_url ?? '',
-      youtube_url: profile?.youtube_url ?? '',
-      gemini_api_key: profile?.gemini_api_key ?? '',
-      composio_api_key: composioStatus.apiKey ?? profile?.composio_api_key ?? '', // Update key in form
-    });
-  }, [profile, reset, isOpen, composioStatus.apiKey]); // Add composioStatus.apiKey dependency
-
-  const quotaUsed = quota?.request_count ?? 0;
-  const quotaLimit = quota?.quota_limit ?? DEFAULT_QUOTA_LIMIT;
-  const quotaRemaining = Math.max(0, quotaLimit - quotaUsed);
-  const quotaPercentage = quotaLimit > 0 ? (quotaUsed / quotaLimit) * 100 : 0;
-  const quotaExceeded = quotaRemaining <= 0 && !!quota;
-
-  // New function to handle authentication - calls the server action
-  const handleGetComposioKey = async () => {
-    setComposioStatus({ loading: true, success: false, errorMessage: null, apiKey: null });
-    try {
-       // Call the server action
-       const result = await startComposioLogin();
-
-       if (result.success && result.key) {
-           setComposioStatus({loading: false, success: true, errorMessage: null, apiKey: result.key});
-           setValue('composio_api_key', result.key, { shouldDirty: true }); // Update form value and mark as dirty
-           toast({ title: "Composio Key Retrieved", description: "Composio API Key obtained. Remember to save changes." });
-       } else {
-           const errorMsg = result.error || "Failed to get Composio API key.";
-           setComposioStatus({loading: false, success: false, errorMessage: errorMsg, apiKey: null});
-           toast({ title: "Composio Connection Error", description: errorMsg, variant: "destructive" });
-       }
-
-    } catch (error:any) {
-      console.error("Composio Login Action Error:", error);
-      const errorMsg = error.message || 'Unknown error occurred during Composio connection.';
-      setComposioStatus({ loading: false, success: false, errorMessage: errorMsg, apiKey: null });
-      toast({ title: "Composio Connection Error", description: errorMsg, variant: "destructive" });
-    }
-  };
-
-
   const onSubmit = async (data: ProfileFormData) => {
     if (localDbSetupError) {
       toast({ title: "Database Error", description: "Cannot save profile due to a database setup issue.", variant: "destructive" });
       return;
     }
-    // Exclude any null/empty values before sending to Supabase, but INCLUDE composio_api_key if present
-    const updateData = Object.fromEntries(
-        Object.entries(data).filter(([key, value]) => key === 'composio_api_key' || (value !== null && value !== ''))
-    );
-    // Ensure null is sent if key is explicitly empty, but allow saving if unchanged
-    if (data.composio_api_key === '') {
-        updateData.composio_api_key = null;
+    // Include composio_api_key from composioStatus state, not just form data
+    const updateData = {
+        ...Object.fromEntries(
+            Object.entries(data).filter(([key, value]) => value !== null && value !== '' && key !== 'composio_api_key') // Exclude key from form data
+        ),
+        composio_api_key: composioStatus.apiKey, // Explicitly use the state value
+        updated_at: new Date().toISOString(),
+    };
+
+    // Handle case where API key might be explicitly removed (set to null)
+    if (composioStatus.apiKey === null && profile?.composio_api_key !== null) {
+        updateData.composio_api_key = null; // Ensure DB gets null if removed
+    } else if (composioStatus.apiKey === null && profile?.composio_api_key === null) {
+        delete updateData.composio_api_key; // Don't send null if it was already null
     }
+
 
     startSavingTransition(async () => {
       try {
         const { data: updatedProfileData, error } = await supabase
           .from('profiles')
-          .update({
-            ...updateData,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData) // Use the prepared updateData
           .eq('id', user.id)
           .select('*, xp, badges, composio_api_key') // Re-select all fields including the key
           .single();
@@ -284,25 +279,27 @@ export function ProfileDialog({
         if (error) {
           console.error('Error updating profile:', error.message);
           let errorMessage = `Could not save profile: ${error.message}`;
-           // ... (keep existing specific error message handling) ...
-          if (error.message.includes("column") && error.message.includes("does not exist")) {
-              const missingColumnMatch = error.message.match(/'(.*?)'/);
-              const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
-              errorMessage = `Database schema mismatch: Column '${missingColumn}' not found. Run the latest 'supabase/schema.sql'. See README Step 3.`;
-              setLocalDbSetupError(errorMessage);
-          } else if (error.message.includes("violates row-level security policy")) {
-            errorMessage = 'Could not save profile due to database security policy.';
-          } else if (error.message.includes("relation \"public.profiles\" does not exist")) {
-            errorMessage = 'The `profiles` table is missing. Run the setup script.';
-            setLocalDbSetupError(errorMessage);
-          } else if (error.message.includes("406")) {
-            errorMessage = `Could not save profile (Error 406). Check table/column access. Details: ${error.message}`;
-          }
+           if (error.message.includes("column") && error.message.includes("does not exist")) {
+               const missingColumnMatch = error.message.match(/'(.*?)'/);
+               const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
+               errorMessage = `Database schema mismatch: Column '${missingColumn}' not found. Run the latest 'supabase/schema.sql'. See README Step 3.`;
+               setLocalDbSetupError(errorMessage);
+           } else if (error.message.includes("violates row-level security policy")) {
+             errorMessage = 'Could not save profile due to database security policy.';
+           } else if (error.message.includes("relation \"public.profiles\" does not exist")) {
+             errorMessage = 'The `profiles` table is missing. Run the setup script.';
+             setLocalDbSetupError(errorMessage);
+           } else if (error.message.includes("406")) {
+             errorMessage = `Could not save profile (Error 406). Check table/column access. Details: ${error.message}`;
+           }
           toast({ title: 'Save Failed', description: errorMessage, variant: 'destructive', duration: 7000 });
         } else if (updatedProfileData) {
           const completeProfile = updatedProfileData as Profile;
           setProfile(completeProfile); // Update local state
-          setComposioStatus(prev => ({ ...prev, apiKey: completeProfile.composio_api_key ?? null })); // Update key status
+          setComposioStatus(prev => ({ ...prev, apiKey: completeProfile.composio_api_key ?? null })); // Ensure status matches saved state
+          // Update local XP/Badge state immediately after save
+          setXp(completeProfile.xp ?? initialXp);
+          setBadges(completeProfile.badges ?? initialBadges);
           onProfileUpdate(completeProfile); // Notify parent component
           toast({ title: 'Profile Saved', description: 'Your changes have been saved.' });
           reset(completeProfile); // Reset form dirtiness state with latest data
@@ -315,50 +312,40 @@ export function ProfileDialog({
     });
   };
 
-  // Updated function to call the backend API route for app authentication
-  const handleAuthenticateApp = useCallback(async (appName: ComposioApp) => {
-    console.log(`Initiating app authentication for ${appName}...`);
+ const handleAuthenticateApp = useCallback(async (appName: ComposioApp) => {
+    console.log(`Starting authentication for ${appName}...`);
 
     if (localDbSetupError) {
        toast({ title: "Database Error", description: "Cannot authenticate app due to a database setup issue.", variant: "destructive" });
        return;
     }
-    // Check if Composio API key exists in profile or state before proceeding
-    if (!composioStatus.apiKey && !profile?.composio_api_key) {
-        toast({ title: "Composio Key Missing", description: "Please obtain your Composio API Key first.", variant: "destructive" });
+    if (!profile?.composio_mcp_url) {
+        toast({ title: "Composio URL Missing", description: "Please enter your Composio MCP URL in profile first.", variant: "destructive" });
         return;
     }
-
 
     setIsComposioAuthenticating(prev => ({...prev, [appName]: true}));
 
     try {
-        // Call the backend API route
-        const response = await fetch('/api/auth/composio/connect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ appName: appName, userId: user.id }) // Send appName and userId
-        });
+        // Call the API route
+        console.log(`Calling API /api/auth/composio/connect for ${appName} with MCP: ${profile.composio_mcp_url}`);
+        const result = await authenticateComposioApp(appName, user.id);
+        console.log(`authenticateComposioApp API for ${appName} returned:`, result.success);
 
-        const result = await response.json();
-
-        if (response.ok && result.redirectUrl) {
-             // Redirect user to the Composio OAuth URL
-             console.log(`Redirecting user to: ${result.redirectUrl}`);
-             window.location.href = result.redirectUrl;
-             // Loading state will persist until redirect happens or fails
+        if (result.success && result.authUrl) {
+            console.log(`Redirecting user to Composio OAuth URL: ${result.authUrl}`);
+            window.location.href = result.authUrl; // Redirect the user
         } else {
-             // Handle errors from the API route
-             console.error(`API Composio Connect Error for ${appName}:`, result.error || `Status: ${response.status}`);
-             toast({ title: `${appName} Auth Failed`, description: result.error || `Could not initiate authentication for ${appName}. Server responded with status ${response.status}.`, variant: "destructive" });
-             setIsComposioAuthenticating(prev => ({...prev, [appName]: false})); // Clear loading on failure
+            console.error(`Authentication initiation failed for ${appName}:`, result.error);
+            toast({ title: `${appName} Auth Failed`, description: result.error || `Could not initiate authentication for ${appName}.`, variant: "destructive" });
+            setIsComposioAuthenticating(prev => ({...prev, [appName]: false}));
         }
     } catch (error: any) {
-        console.error(`Error calling authentication API for ${appName}:`, error);
-        toast({ title: `${appName} Auth Error`, description: error.message || 'Unknown error during authentication API call.', variant: 'destructive' });
-        setIsComposioAuthenticating(prev => ({...prev, [appName]: false})); // Clear loading on failure
+        console.error(`Error in handleAuthenticateApp for ${appName}:`, error);
+        toast({ title: `${appName} Auth Error`, description: error.message || 'Unknown error during authentication.', variant: 'destructive' });
+        setIsComposioAuthenticating(prev => ({...prev, [appName]: false}));
     }
-  }, [user.id, toast, localDbSetupError, profile?.composio_api_key, composioStatus.apiKey]); // Added composio key dependencies
+ }, [user.id, toast, localDbSetupError, profile?.composio_mcp_url]);
 
 
   const handleUpgrade = () => {
@@ -370,347 +357,271 @@ export function ProfileDialog({
      return !!profile?.[key];
   }
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-       <DialogContent className="sm:max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90vh]">
-        <DialogHeader className="px-6 pt-6">
-          <DialogTitle>Profile & Settings</DialogTitle>
-          <DialogDescription>
-            Manage your profile, API keys, app connections, and usage.
-          </DialogDescription>
-        </DialogHeader>
+   const quotaUsed = quota?.request_count ?? 0;
+   const quotaLimit = quota?.quota_limit ?? DEFAULT_QUOTA_LIMIT;
+   const quotaPercentage = (quotaUsed / quotaLimit) * 100;
+   const quotaExceeded = quotaPercentage > 100;
 
-        {localDbSetupError && (
-          <Alert variant="destructive" className="mx-6 mt-[-10px] mb-4">
-            <Database className="h-4 w-4" />
-            <AlertTitle>Database Setup/Configuration Issue</AlertTitle>
-            <AlertDescription>{localDbSetupError}</AlertDescription>
-          </Alert>
+  return (
+    
+       
+        
+          
+            Profile &amp; Settings
+          
+          
+            Manage your profile, API keys, app connections, and usage.
+          
+        
+        {localDbSetupError &amp;&amp; (
+          
+            
+              
+              Database Setup/Configuration Issue
+            
+            {localDbSetupError}
+          
         )}
 
-        <ScrollArea className="overflow-y-auto px-6 -mx-6">
-          <div className="grid gap-8 py-4">
+        
+          
+            
+              {/* Profile Form */}
+              
+                
+                  
+                    User Information
+                  
+                  
+                    
+                      Email
+                      
+                      N/A
+                    
+                    
+                      Full Name
+                      
+                      
+                        
+                         {...register('full_name')} className={`${errors.full_name ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} /&gt;
+                        {errors.full_name &amp;&amp; {errors.full_name.message}}
+                      
+                    
+                    
+                      Username
+                      
+                      
+                         {...register('username')} className={`${errors.username ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} /&gt;
+                        {errors.username &amp;&amp; {errors.username.message}}
+                      
+                    
+                    
+                      Phone
+                      
+                      
+                         {...register('phone_number')} className={`${errors.phone_number ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} /&gt;
+                        {errors.phone_number &amp;&amp; {errors.phone_number.message}}
+                      
+                    
+                  
+                
 
-            {/* Profile Form */}
-            <form id="profile-form" onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Settings2 className="h-5 w-5"/> User Information</h3>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-x-4 gap-y-2">
-                    <Label htmlFor="email" className="sm:text-right sm:col-span-1">Email</Label>
-                    <Input id="email" value={user.email ?? 'N/A'} readOnly disabled className="col-span-1 sm:col-span-2 bg-muted/50" />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                    <Label htmlFor="full_name" className="sm:text-right sm:col-span-1 mt-1">Full Name</Label>
-                    <div className="col-span-1 sm:col-span-2">
-                      <Input id="full_name" {...register('full_name')} className={`${errors.full_name ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} />
-                      {errors.full_name && <p className="text-xs text-destructive mt-1">{errors.full_name.message}</p>}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                    <Label htmlFor="username" className="sm:text-right sm:col-span-1 mt-1">Username</Label>
-                    <div className="col-span-1 sm:col-span-2">
-                      <Input id="username" {...register('username')} className={`${errors.username ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} />
-                      {errors.username && <p className="text-xs text-destructive mt-1">{errors.username.message}</p>}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                    <Label htmlFor="phone_number" className="sm:text-right sm:col-span-1 mt-1">Phone</Label>
-                    <div className="col-span-1 sm:col-span-2">
-                      <Input id="phone_number" {...register('phone_number')} className={`${errors.phone_number ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} />
-                      {errors.phone_number && <p className="text-xs text-destructive mt-1">{errors.phone_number.message}</p>}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                
+                {/* Integrations Section */}
+                
+                  
+                     Integrations
+                  
+                  
+                     {/* Gemini API Key */}
+                     
+                       
+                         Gemini Key
+                       
+                       
+                         
+                           
+                             {...register('gemini_api_key')}
+                             placeholder="Enter your Google Gemini API Key"
+                             className={`${errors.gemini_api_key ? 'border-destructive' : ''}`}
+                             disabled={!!localDbSetupError}
+                           /&gt;
+                           {errors.gemini_api_key &amp;&amp; {errors.gemini_api_key.message}}
+                           
+                             Get key from Google AI Studio . Required for generation.
+                           
+                         
+                       
+                     
 
-              <Separator />
+                      {/* Composio MCP URL */}
+                      
+                          Composio MCP URL
+                          
+                          
+                            
+                              {...register('composio_mcp_url')}
+                              placeholder="e.g., https://mcp.composio.dev/u/your-id"
+                              className={`${errors.composio_mcp_url ? 'border-destructive' : ''}`}
+                              disabled={!!localDbSetupError}
+                            /&gt;
+                            {errors.composio_mcp_url &amp;&amp; {errors.composio_mcp_url.message}}
+                            
+                              Find in your Composio MCP dashboard . Needed for app authentication redirects.
+                            
+                          
+                      
 
-              {/* Integrations Section */}
-              <div>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><LinkIcon className="h-5 w-5"/> Integrations</h3>
-                <div className="space-y-4">
-                   {/* Gemini API Key */}
-                   <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                     <Label htmlFor="gemini_api_key" className="sm:text-right sm:col-span-1 mt-1">
-                       Gemini Key
-                     </Label>
-                     <div className="col-span-1 sm:col-span-2">
-                       <Input
-                         id="gemini_api_key"
-                         type="password"
-                         {...register('gemini_api_key')}
-                         placeholder="Enter your Google Gemini API Key"
-                         className={`${errors.gemini_api_key ? 'border-destructive' : ''}`}
-                         disabled={!!localDbSetupError}
-                       />
-                       {errors.gemini_api_key && <p className="text-xs text-destructive mt-1">{errors.gemini_api_key.message}</p>}
-                       <p className="text-xs text-muted-foreground mt-1">
-                         Get key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Google AI Studio <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>. Required for generation.
-                       </p>
-                     </div>
-                   </div>
+                      {/* LinkedIn/Twitter/YouTube URLs - Kept for reference if needed */}
+                      
+                          LinkedIn URL (Ref)
+                           
+                           
+                              {...register('linkedin_url')} placeholder="Optional: Your LinkedIn profile URL" className={`${errors.linkedin_url ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} /&gt;
+                              {errors.linkedin_url &amp;&amp; {errors.linkedin_url.message}}
+                           
+                      
+                      
+                          Twitter URL (Ref)
+                           
+                           
+                              {...register('twitter_url')} placeholder="Optional: Your Twitter profile URL" className={`${errors.twitter_url ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} /&gt;
+                              {errors.twitter_url &amp;&amp; {errors.twitter_url.message}}
+                           
+                      
+                      
+                          YouTube URL (Ref)
+                           
+                           
+                             {...register('youtube_url')} placeholder="Optional: Your YouTube channel URL" className={`${errors.youtube_url ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} /&gt;
+                             {errors.youtube_url &amp;&amp; {errors.youtube_url.message}}
+                           
+                      
+                   
+                 
+               
+             {/* Quota Adjustment for Tuning ---*/}
+             
+           
 
-                   {/* Composio API Key - New Field */}
-                   <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                     <Label htmlFor="composio_api_key_display" className="sm:text-right sm:col-span-1 mt-1">
-                       Composio API Key
-                     </Label>
-                     <div className="col-span-1 sm:col-span-2">
-                       <Input
-                         id="composio_api_key_display" // Use different ID for display field
-                         type="password"
-                         placeholder={composioStatus.loading ? "Connecting..." : composioStatus.apiKey ? "Key Obtained - Save Changes" : "Click below to get key"}
-                         className={`${errors.composio_api_key ? 'border-destructive' : ''}`}
-                         disabled // Display only, value managed by state/setValue
-                         value={composioStatus.apiKey ? '********' : ''} // Show masked key or placeholder
-                       />
-                        {/* Hidden input to actually submit the value */}
-                         <input type="hidden" {...register('composio_api_key')} />
-                       {errors.composio_api_key && <p className="text-xs text-destructive mt-1">{errors.composio_api_key.message}</p>}
-                        <Button
-                           type="button" // Ensure it doesn't submit the form
-                           size="sm"
-                           variant="outline"
-                           onClick={handleGetComposioKey}
-                           disabled={composioStatus.loading || !!localDbSetupError}
-                           loading={composioStatus.loading}
-                           className="mt-2"
-                       >
-                           <Key className="mr-2 h-4 w-4" />
-                           {composioStatus.loading ? "Connecting..." : composioStatus.apiKey ? "Regenerate Key" : "Get Composio Key"}
-                       </Button>
-                      {composioStatus.errorMessage && <p className="text-xs text-destructive mt-1">{composioStatus.errorMessage}</p>}
-                       <p className="text-xs text-muted-foreground mt-1">
-                        Click to connect to Composio and generate an API Key. Required for app authentication. **You must save changes after getting the key.**
-                       </p>
-                     </div>
-                   </div>
+           
 
+           {/* Gamification Section */}
+           
+              
+                 AI Fuel &amp; Badges
+              
+              
+                 
+                    Experience Points (XP):
+                    {xp?.toLocaleString() ?? 0} XP
+                 
+                  
+                   
 
-                   {/* Composio MCP URL */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                        <Label htmlFor="composio_mcp_url" className="sm:text-right sm:col-span-1 mt-1">Composio MCP URL</Label>
-                        <div className="col-span-1 sm:col-span-2">
-                        <Input
-                            id="composio_mcp_url"
-                            {...register('composio_mcp_url')}
-                            placeholder="e.g., https://mcp.composio.dev/u/your-id"
-                            className={`${errors.composio_mcp_url ? 'border-destructive' : ''}`}
-                            disabled={!!localDbSetupError}
-                        />
-                        {errors.composio_mcp_url && <p className="text-xs text-destructive mt-1">{errors.composio_mcp_url.message}</p>}
-                        <p className="text-xs text-muted-foreground mt-1">
-                            Find in your <a href="https://mcp.composio.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Composio MCP dashboard <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>. Needed for app authentication redirects.
-                        </p>
-                        </div>
-                    </div>
-
-                   {/* App Authentication Buttons */}
-                   <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                       <Label className="sm:text-right sm:col-span-1 mt-2">App Authentication</Label>
-                       <div className="col-span-1 sm:col-span-2 space-y-3">
-                          {(['linkedin', 'twitter', 'youtube'] as ComposioApp[]).map((app) => {
-                             const isAuthenticated = getAuthStatus(app);
-                             // Disable if Composio MCP URL OR Composio API Key missing, or DB error
-                             const isDisabled = !profile?.composio_mcp_url || !(composioStatus.apiKey || profile?.composio_api_key) || !!localDbSetupError || isComposioAuthenticating[app];
-                             let tooltipText = '';
-                             if (!profile?.composio_mcp_url) tooltipText = "Enter Composio MCP URL first";
-                             else if (!(composioStatus.apiKey || profile?.composio_api_key)) tooltipText = "Get Composio API Key first";
-                             else if (localDbSetupError) tooltipText = "Cannot authenticate due to DB error";
-                             else if (isAuthenticated) tooltipText = `Re-authenticate ${app}`;
-                             else tooltipText = `Authenticate ${app}`;
-
-
-                             return (
-                               <div key={app} className="flex items-center justify-between p-3 bg-muted/30 rounded-md border border-border/50">
-                                 <div className="flex items-center gap-2">
-                                    {isAuthenticated ? <CheckCircle className="h-5 w-5 text-green-500" /> : <XCircle className="h-5 w-5 text-muted-foreground"/>}
-                                    <span className="capitalize font-medium">{app}</span>
-                                    <span className="text-xs text-muted-foreground">({isAuthenticated ? 'Authenticated' : 'Not Authenticated'})</span>
-                                 </div>
-                                 <TooltipProvider>
-                                   <Tooltip>
-                                     <TooltipTrigger asChild>
-                                        <Button
-                                          type="button" // Important: Prevent form submission
-                                          variant={isAuthenticated ? "outline" : "default"}
-                                          size="sm"
-                                          onClick={() => handleAuthenticateApp(app)}
-                                          disabled={isDisabled}
-                                          loading={isComposioAuthenticating[app]}
-                                        >
-                                          {isComposioAuthenticating[app] ? "Redirecting..." : isAuthenticated ? <WifiOff className="mr-2 h-4 w-4" /> : <Wifi className="mr-2 h-4 w-4 />}
-                                          {isComposioAuthenticating[app] ? "" : isAuthenticated ? 'Re-authenticate' : 'Authenticate'}
-                                        </Button>
-                                     </TooltipTrigger>
-                                     <TooltipContent side="top">
-                                       <p>{tooltipText}</p>
-                                     </TooltipContent>
-                                   </Tooltip>
-                                 </TooltipProvider>
-                               </div>
-                             );
+                 
+                     
+                     {(badges ?? []).length > 0 ? ( // Check if badges array exists and has items
+                        
+                          {(badges || []).map((badgeName) =&gt; { // Add fallback for badges
+                            const badgeInfo = BADGES.find(b =&gt; b.name === badgeName);
+                            const Icon = badgeInfo?.icon || BadgeCheck;
+                            return (
+                              
+                               
+                                   
+                                       
+                                        {badgeName}
+                                   
+                                   {badgeInfo &amp;&amp; (
+                                     
+                                       
+                                         
+                                           
+                                         
+                                       
+                                       {badgeInfo.description}
+                                     
+                                   )}
+                                
+                              
+                            );
                           })}
-                          <p className="text-xs text-muted-foreground mt-1">
-                             Connect accounts via Composio to enable direct publishing. Requires MCP URL and Composio API Key. You will be redirected to Composio.
-                          </p>
-                       </div>
-                    </div>
+                        
+                      ) : (
+                        Keep generating posts to unlock badges!
+                      )}
+                   
+              
+           
 
-                    {/* LinkedIn/Twitter/YouTube URLs - Keep for user reference */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                        <Label htmlFor="linkedin_url" className="sm:text-right sm:col-span-1 mt-1">LinkedIn URL</Label>
-                         <div className="col-span-1 sm:col-span-2">
-                            <Input id="linkedin_url" {...register('linkedin_url')} className={`${errors.linkedin_url ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} />
-                            {errors.linkedin_url && <p className="text-xs text-destructive mt-1">{errors.linkedin_url.message}</p>}
-                         </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                        <Label htmlFor="twitter_url" className="sm:text-right sm:col-span-1 mt-1">Twitter URL</Label>
-                         <div className="col-span-1 sm:col-span-2">
-                            <Input id="twitter_url" {...register('twitter_url')} className={`${errors.twitter_url ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} />
-                            {errors.twitter_url && <p className="text-xs text-destructive mt-1">{errors.twitter_url.message}</p>}
-                         </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                        <Label htmlFor="youtube_url" className="sm:text-right sm:col-span-1 mt-1">YouTube URL</Label>
-                         <div className="col-span-1 sm:col-span-2">
-                           <Input id="youtube_url" {...register('youtube_url')} className={`${errors.youtube_url ? 'border-destructive' : ''}`} disabled={!!localDbSetupError} />
-                           {errors.youtube_url && <p className="text-xs text-destructive mt-1">{errors.youtube_url.message}</p>}
-                         </div>
-                    </div>
+           
 
-                </div>
-              </div>
-            </form>
+           {/* Billing/Quota Section */}
+           
+             
+                Usage &amp; Billing
+             
+             {localDbSetupError &amp;&amp; !localDbSetupError.includes('quota') ? (
+               
+                 
+                   Usage Data Issue
+                 
+                 Cannot load usage data due to a profile or database setup issue.
+               
+             ) : quota !== null ? (
+               
+                 
+                    Monthly Requests Used:
+                    {quotaUsed} / {quotaLimit}
+                 
+                  
+                 {quotaExceeded &amp;&amp; (
+                   
+                     
+                       Quota Limit Reached
+                     
+                     Upgrade to continue generating posts.
+                   
+                 )}
+                 
+                   
+                     Upgrade
+                   
+                 
+                 {quota.last_reset_at &amp;&amp; (
+                   
+                     Quota resets on: {new Date(new Date(quota.last_reset_at).setMonth(new Date(quota.last_reset_at).getMonth() + 1)).toLocaleDateString()}
+                   
+                 )}
+               
+             ) : (
+               
+                 {localDbSetupError &amp;&amp; localDbSetupError.includes('quota') ? (
+                   
+                     Error loading quota.
+                   
+                 ) : (
+                   
+                     Loading usage data...
+                   
+                 )}
+               
+             )}
+           
+         
+       
 
-            <Separator />
-
-            {/* Gamification Section */}
-            <div>
-               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Fuel className="h-5 w-5"/> AI Fuel & Badges</h3>
-               <div className="space-y-4">
-                  <div className="flex justify-between items-center text-sm mb-1">
-                     <span>Experience Points (XP):</span>
-                     <span className="font-medium">{xp?.toLocaleString() ?? 0} XP</span>
-                  </div>
-                   <TooltipProvider>
-                    <Tooltip>
-                       <TooltipTrigger asChild>
-                           <div className="w-full h-4 bg-muted rounded-full overflow-hidden border border-border/50 relative cursor-help">
-                             <div
-                               className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 ease-out"
-                               style={{ width: `${Math.min((xp ?? 0) / (BADGES[BADGES.length - 1]?.xp || 1000) * 100, 100)}%` }}
-                             ></div>
-                             <Fuel className="absolute left-1 top-1/2 transform -translate-y-1/2 h-3 w-3 text-white mix-blend-difference" />
-                           </div>
-                       </TooltipTrigger>
-                       <TooltipContent>
-                         <p>Earn {XP_PER_REQUEST} XP for each successful AI generation or tuning!</p>
-                       </TooltipContent>
-                    </Tooltip>
-                   </TooltipProvider>
-
-                  <div className="mt-4">
-                      <h4 className="text-sm font-semibold mb-2">Unlocked Badges:</h4>
-                      {badges && badges.length > 0 ? (
-                         <div className="flex flex-wrap gap-3">
-                           {badges.map((badgeName) => {
-                             const badgeInfo = BADGES.find(b => b.name === badgeName);
-                             const Icon = badgeInfo?.icon || BadgeCheck;
-                             return (
-                               <TooltipProvider key={badgeName}>
-                                <Tooltip>
-                                   <TooltipTrigger asChild>
-                                        <div className="flex items-center gap-2 p-2 border border-green-500/30 bg-green-500/10 rounded-md text-xs cursor-default">
-                                           <Icon className="h-4 w-4 text-green-500" />
-                                            <span className="font-medium text-green-400">{badgeName}</span>
-                                        </div>
-                                   </TooltipTrigger>
-                                    {badgeInfo && (
-                                       <TooltipContent>
-                                         <p>{badgeInfo.description}</p>
-                                       </TooltipContent>
-                                    )}
-                                </Tooltip>
-                               </TooltipProvider>
-                             );
-                           })}
-                         </div>
-                       ) : (
-                         <p className="text-xs text-muted-foreground italic">Keep generating posts to unlock badges!</p>
-                       )}
-                    </div>
-               </div>
-            </div>
-
-            <Separator />
-
-            {/* Billing/Quota Section */}
-            <div>
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><CreditCard className="h-5 w-5"/> Usage & Billing</h3>
-              {localDbSetupError && !localDbSetupError.includes('quota') ? (
-                <Alert variant="destructive">
-                  <Database className="h-4 w-4" />
-                  <AlertTitle>Usage Data Issue</AlertTitle>
-                  <AlertDescription>Cannot load usage data due to a profile or database setup issue.</AlertDescription>
-                </Alert>
-              ) : quota !== null ? (
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center text-sm">
-                    <span>Monthly Requests Used:</span>
-                    <span className="font-medium">{quotaUsed} / {quotaLimit}</span>
-                  </div>
-                  <Progress value={quotaPercentage} className="w-full h-2" />
-                  {quotaExceeded && (
-                    <Alert variant="destructive" className="mt-4">
-                      <Info className="h-4 w-4" />
-                      <AlertTitle>Quota Limit Reached</AlertTitle>
-                      <AlertDescription>Upgrade to continue generating posts.</AlertDescription>
-                    </Alert>
-                  )}
-                  <div className="flex justify-end pt-2">
-                    <Button onClick={handleUpgrade} size="sm" disabled={!!localDbSetupError}>
-                      <CreditCard className="mr-2 h-4 w-4" /> Upgrade Plan (Soon)
-                    </Button>
-                  </div>
-                  {quota.last_reset_at && (
-                    <p className="text-xs text-muted-foreground text-center pt-2">
-                      Quota resets on: {new Date(new Date(quota.last_reset_at).setMonth(new Date(quota.last_reset_at).getMonth() + 1)).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center justify-center text-muted-foreground py-4">
-                  {localDbSetupError && localDbSetupError.includes('quota') ? (
-                    <span className='text-destructive text-sm flex items-center gap-2'><Database className="h-4 w-4" /> Error loading quota.</span>
-                  ) : (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading usage data...
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </ScrollArea>
-
-        <DialogFooter className="pt-4 border-t border-border/50 px-6 pb-4">
-          <DialogClose asChild>
-            <Button type="button" variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button
-            type="submit"
-            form="profile-form"
-            disabled={isSaving || !isDirty || !!localDbSetupError}
-            loading={isSaving}
-          >
-            <Save className="mr-2 h-4 w-4" /> Save Changes
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+       
+         
+           
+             Cancel
+           
+           
+             Save Changes
+           
+         
+       
+     
   );
 }
-```

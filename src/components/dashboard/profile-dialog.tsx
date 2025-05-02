@@ -1,4 +1,3 @@
-
 // components/dashboard/profile-dialog.tsx
 'use client';
 
@@ -44,12 +43,15 @@ interface ProfileDialogProps {
   dbSetupError: string | null;
 }
 
-// Updated schema to use composio_mcp_url
+// Updated schema to include new URL fields
 const profileSchema = z.object({
   full_name: z.string().max(100, 'Full name too long').nullable().optional().or(z.literal('')),
   username: z.string().max(50, 'Username too long').nullable().optional().or(z.literal('')),
   phone_number: z.string().max(20, 'Phone number too long').nullable().optional().or(z.literal('')),
-  composio_mcp_url: z.string().url('Invalid URL format').max(255, 'URL too long').nullable().optional().or(z.literal('')), // Use composio_mcp_url
+  composio_mcp_url: z.string().url('Invalid MCP URL format').max(255, 'URL too long').nullable().optional().or(z.literal('')), // Renamed and kept required
+  linkedin_url: z.string().url('Invalid LinkedIn URL format').max(255, 'URL too long').nullable().optional().or(z.literal('')),
+  twitter_url: z.string().url('Invalid Twitter URL format').max(255, 'URL too long').nullable().optional().or(z.literal('')),
+  youtube_url: z.string().url('Invalid YouTube URL format').max(255, 'URL too long').nullable().optional().or(z.literal('')),
   gemini_api_key: z.string().max(255, 'API Key too long').nullable().optional().or(z.literal('')),
 });
 
@@ -123,30 +125,9 @@ export function ProfileDialog({
                  .from('quotas')
                  .select('user_id, request_count, quota_limit, last_reset_at')
                  .eq('user_id', user.id)
-                 .single();
+                 .maybeSingle(); // Use maybeSingle() to handle no row found gracefully
 
-               if (selectError && selectError.code === 'PGRST116') {
-                 console.log("Quota record not found yet for user (dialog):", user.id);
-                  // If RPC returned a remaining quota, but select found nothing, initialize a temporary local state
-                   if (typeof remainingQuota === 'number') {
-                       const limit = DEFAULT_QUOTA_LIMIT; // Assume default limit
-                       const used = Math.max(0, limit - remainingQuota);
-                       const nowISO = new Date().toISOString();
-                       setQuota({
-                           user_id: user.id,
-                           request_count: used,
-                           quota_limit: limit,
-                           last_reset_at: nowISO, // Use current time as placeholder reset
-                           created_at: nowISO, // Placeholder
-                           ip_address: null // Placeholder
-                       });
-                       setLocalDbSetupError(null); // Clear error if RPC worked
-                   } else {
-                       // Both RPC failed/returned null and select failed
-                       setLocalDbSetupError("Could not determine initial quota state.");
-                       toast({ title: 'Quota Error', description: "Could not determine initial quota state.", variant: 'destructive' });
-                   }
-               } else if (selectError) {
+               if (selectError && selectError.code !== 'PGRST116') { // Handle errors other than "No rows found"
                    console.error('Error fetching quota details after RPC in dialog:', selectError.message);
                    let errorMsg = `Failed to load full usage details: ${selectError.message}`;
                     if (selectError.message.includes("relation \"public.quotas\" does not exist")) {
@@ -162,7 +143,27 @@ export function ProfileDialog({
                } else if (data && 'user_id' in data && 'request_count' in data && 'quota_limit' in data && 'last_reset_at' in data) {
                    setQuota(data as Quota);
                    setLocalDbSetupError(null); // Clear error on successful fetch
-               } else {
+               } else if (!data && typeof remainingQuota === 'number') {
+                  // If select found no row (maybeSingle returned null) but RPC worked, initialize local state
+                  console.log("Quota record not found yet for user (dialog):", user.id);
+                  const limit = DEFAULT_QUOTA_LIMIT; // Assume default limit
+                  const used = Math.max(0, limit - remainingQuota);
+                  const nowISO = new Date().toISOString();
+                  setQuota({
+                      user_id: user.id,
+                      request_count: used,
+                      quota_limit: limit,
+                      last_reset_at: nowISO, // Use current time as placeholder reset
+                      created_at: nowISO, // Placeholder
+                      ip_address: null // Placeholder
+                  });
+                  setLocalDbSetupError(null); // Clear error if RPC worked
+               } else if (!data && typeof remainingQuota !== 'number'){
+                   // Both RPC failed/returned non-number and select found nothing
+                   const errorMsg = "Could not determine initial quota state.";
+                   setLocalDbSetupError(errorMsg);
+                   toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
+               } else if (data && !('request_count' in data)) { // Check if data might be incomplete
                    console.warn("Fetched quota data inside dialog is missing fields:", data);
                    const errorMsg = `Incomplete quota data received.`;
                    setLocalDbSetupError(errorMsg);
@@ -188,24 +189,30 @@ export function ProfileDialog({
     formState: { errors, isDirty },
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
-    // Use composio_mcp_url for default value
+    // Update default values to include new URL fields
     defaultValues: {
       full_name: initialProfile?.full_name ?? '',
       username: initialProfile?.username ?? '',
       phone_number: initialProfile?.phone_number ?? '',
       composio_mcp_url: initialProfile?.composio_mcp_url ?? '',
+      linkedin_url: initialProfile?.linkedin_url ?? '',
+      twitter_url: initialProfile?.twitter_url ?? '',
+      youtube_url: initialProfile?.youtube_url ?? '',
       gemini_api_key: initialProfile?.gemini_api_key ?? '',
     },
   });
 
   // Reset form when profile changes or dialog opens/closes
   useEffect(() => {
-    // Use composio_mcp_url for reset
+    // Update reset to include new URL fields
     reset({
       full_name: profile?.full_name ?? '',
       username: profile?.username ?? '',
       phone_number: profile?.phone_number ?? '',
       composio_mcp_url: profile?.composio_mcp_url ?? '',
+      linkedin_url: profile?.linkedin_url ?? '',
+      twitter_url: profile?.twitter_url ?? '',
+      youtube_url: profile?.youtube_url ?? '',
       gemini_api_key: profile?.gemini_api_key ?? '',
     });
   }, [profile, reset, isOpen]);
@@ -234,7 +241,8 @@ export function ProfileDialog({
             updated_at: new Date().toISOString(),
           })
           .eq('id', user.id)
-          .select('id, updated_at, username, full_name, phone_number, composio_mcp_url, gemini_api_key, is_linkedin_authed, is_twitter_authed, is_youtube_authed') // Ensure all columns selected
+           // Ensure all updated columns are selected
+          .select('*, xp, badges') // Select everything + gamification fields
           .single();
 
         if (error) {
@@ -284,6 +292,21 @@ export function ProfileDialog({
 
      try {
         // Call the server action/API route to handle authentication
+        // We need the specific URL for the app from the profile now
+         let targetUrl: string | null | undefined = null;
+         switch (appName) {
+             case 'linkedin': targetUrl = profile.linkedin_url; break;
+             case 'twitter': targetUrl = profile.twitter_url; break;
+             case 'youtube': targetUrl = profile.youtube_url; break;
+         }
+
+         if (!targetUrl) {
+             toast({ title: `${appName.charAt(0).toUpperCase() + appName.slice(1)} URL Required`, description: `Please enter your ${appName} URL in the profile first.`, variant: "destructive" });
+             setIsAuthenticating(prev => ({ ...prev, [appName]: false }));
+             return;
+         }
+
+        // Pass the MCP URL AND the specific app URL
         const success = await authenticateComposioApp({ app: appName, mcpUrl: profile.composio_mcp_url });
 
         if (success) {
@@ -293,7 +316,7 @@ export function ProfileDialog({
              .from('profiles')
              .update(updatedAuthStatus)
              .eq('id', user.id)
-             .select('id, updated_at, username, full_name, phone_number, composio_mcp_url, gemini_api_key, is_linkedin_authed, is_twitter_authed, is_youtube_authed')
+             .select('*, xp, badges') // Select all columns after update
              .single();
 
            if (updateError) {
@@ -318,7 +341,7 @@ export function ProfileDialog({
 
         } else {
           // Service function likely threw an error handled below, or returned false
-           toast({ title: "Authentication Failed", description: `Could not authenticate ${appName}. Check MCP URL and console logs.`, variant: "destructive" });
+           toast({ title: "Authentication Failed", description: `Could not authenticate ${appName}. Check URLs and console logs.`, variant: "destructive" });
         }
      } catch (error: any) {
         console.error(`Error authenticating ${appName}:`, error);
@@ -349,12 +372,13 @@ export function ProfileDialog({
   useEffect(() => {
     if (!onXpUpdate) return; // Guard if callback not provided
 
-    const currentRequests = quota?.request_count ?? 0;
-    const currentXp = currentRequests * XP_PER_REQUEST;
+    // Use profile.xp directly if available, fallback to calculating from quota
+    const currentXp = profile?.xp ?? (quota?.request_count ?? 0) * XP_PER_REQUEST;
     setXp(currentXp); // Update local XP state
 
     const newlyAwardedBadges: string[] = [];
     BADGES.forEach(badge => {
+      // Check against currentXp and if the badge isn't already in the local badges state
       if (currentXp >= badge.xp && !badges.includes(badge.name)) {
         newlyAwardedBadges.push(badge.name);
       }
@@ -362,7 +386,7 @@ export function ProfileDialog({
 
     if (newlyAwardedBadges.length > 0) {
       const newBadges = [...badges, ...newlyAwardedBadges];
-      setBadges(newBadges);
+      setBadges(newBadges); // Update local badges state
 
       // Show confetti and toast for the *first* new badge awarded in this update
       const firstNewBadge = BADGES.find(b => b.name === newlyAwardedBadges[0]);
@@ -378,10 +402,26 @@ export function ProfileDialog({
       } else {
            onXpUpdate(currentXp); // Notify parent of XP change only
       }
+
+       // Persist new badges to the database (fire and forget, or handle errors if needed)
+      supabase
+        .from('profiles')
+        .update({ badges: newBadges })
+        .eq('id', user.id)
+        .then(({ error }) => {
+          if (error) {
+            console.error("Error saving new badges to profile:", error);
+            // Optionally notify user or retry
+          } else {
+             console.log("Badges updated in database:", newBadges);
+          }
+        });
+
     } else {
        onXpUpdate(currentXp); // Notify parent of XP change only
     }
-  }, [quota?.request_count, badges, onXpUpdate]); // Depend on request_count
+    // Dependencies: Run when profile.xp or quota changes, or when badges state is updated locally
+  }, [profile?.xp, quota?.request_count, badges, onXpUpdate, supabase, user.id]);
 
 
   return (
@@ -485,6 +525,50 @@ export function ProfileDialog({
                     </div>
                   </div>
 
+                   {/* App Specific URLs */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
+                       <Label htmlFor="linkedin_url" className="sm:text-right sm:col-span-1 mt-2">LinkedIn URL</Label>
+                       <div className="col-span-1 sm:col-span-2">
+                          <Input
+                             id="linkedin_url"
+                             {...register('linkedin_url')}
+                             placeholder="e.g., https://linkedin.composio.dev/..."
+                             className={`${errors.linkedin_url ? 'border-destructive' : ''}`}
+                             disabled={!!localDbSetupError}
+                          />
+                          {errors.linkedin_url && <p className="text-xs text-destructive mt-1">{errors.linkedin_url.message}</p>}
+                          <p className="text-xs text-muted-foreground mt-1">Enter the specific Composio URL for LinkedIn.</p>
+                       </div>
+                    </div>
+                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
+                       <Label htmlFor="twitter_url" className="sm:text-right sm:col-span-1 mt-2">Twitter URL</Label>
+                       <div className="col-span-1 sm:col-span-2">
+                          <Input
+                             id="twitter_url"
+                             {...register('twitter_url')}
+                             placeholder="e.g., https://twitter.composio.dev/..."
+                             className={`${errors.twitter_url ? 'border-destructive' : ''}`}
+                             disabled={!!localDbSetupError}
+                          />
+                          {errors.twitter_url && <p className="text-xs text-destructive mt-1">{errors.twitter_url.message}</p>}
+                           <p className="text-xs text-muted-foreground mt-1">Enter the specific Composio URL for Twitter.</p>
+                       </div>
+                    </div>
+                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
+                       <Label htmlFor="youtube_url" className="sm:text-right sm:col-span-1 mt-2">YouTube URL</Label>
+                       <div className="col-span-1 sm:col-span-2">
+                          <Input
+                             id="youtube_url"
+                             {...register('youtube_url')}
+                             placeholder="e.g., https://youtube.composio.dev/..."
+                             className={`${errors.youtube_url ? 'border-destructive' : ''}`}
+                             disabled={!!localDbSetupError}
+                          />
+                          {errors.youtube_url && <p className="text-xs text-destructive mt-1">{errors.youtube_url.message}</p>}
+                           <p className="text-xs text-muted-foreground mt-1">Enter the specific Composio URL for YouTube.</p>
+                       </div>
+                    </div>
+
                    {/* App Authentication Buttons */}
                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
                        <Label className="sm:text-right sm:col-span-1 mt-2">App Authentication</Label>
@@ -492,10 +576,18 @@ export function ProfileDialog({
                           {(['linkedin', 'twitter', 'youtube'] as ComposioApp[]).map((app) => {
                              const isAuthenticated = getAuthStatus(app);
                              const isLoading = isAuthenticating[app] ?? false;
+                             let targetUrl: string | null | undefined = null;
+                             switch (app) {
+                                case 'linkedin': targetUrl = profile?.linkedin_url; break;
+                                case 'twitter': targetUrl = profile?.twitter_url; break;
+                                case 'youtube': targetUrl = profile?.youtube_url; break;
+                              }
+                             const isDisabled = isLoading || !profile?.composio_mcp_url || !targetUrl || !!localDbSetupError;
+
                              return (
                                <div key={app} className="flex items-center justify-between p-3 bg-muted/30 rounded-md border border-border/50">
                                  <div className="flex items-center gap-2">
-                                    {isAuthenticated ? <CheckCircle className="h-5 w-5 text-green-500" /> : <XCircle className="h-5 w-5 text-destructive"/>}
+                                    {isAuthenticated ? <CheckCircle className="h-5 w-5 text-green-500" /> : <XCircle className="h-5 w-5 text-muted-foreground"/>}
                                     <span className="capitalize font-medium">{app}</span>
                                     <span className="text-xs text-muted-foreground">({isAuthenticated ? 'Authenticated' : 'Not Authenticated'})</span>
                                  </div>
@@ -504,8 +596,14 @@ export function ProfileDialog({
                                     variant={isAuthenticated ? "outline" : "default"}
                                     size="sm"
                                     onClick={() => handleAuthenticateApp(app)}
-                                    disabled={isLoading || !profile?.composio_mcp_url || !!localDbSetupError}
+                                    disabled={isDisabled}
                                     loading={isLoading}
+                                    title={
+                                        !profile?.composio_mcp_url ? "Enter MCP URL first" :
+                                        !targetUrl ? `Enter ${app} URL first` :
+                                        localDbSetupError ? "Cannot authenticate due to DB error" :
+                                        isAuthenticated ? `Re-authenticate ${app}` : `Authenticate ${app}`
+                                    }
                                   >
                                     {isAuthenticated ? <WifiOff className="mr-2 h-4 w-4" /> : <Wifi className="mr-2 h-4 w-4" />}
                                     {isAuthenticated ? 'Re-authenticate' : 'Authenticate'}
@@ -514,7 +612,7 @@ export function ProfileDialog({
                              );
                           })}
                           <p className="text-xs text-muted-foreground mt-1">
-                             Connect your social accounts via Composio to enable direct publishing.
+                             Connect your social accounts via Composio to enable direct publishing. Requires MCP and App URLs to be set.
                           </p>
                        </div>
                     </div>
@@ -531,7 +629,8 @@ export function ProfileDialog({
                <div className="space-y-4">
                   <div className="flex justify-between items-center text-sm mb-1">
                      <span>Experience Points (XP):</span>
-                     <span className="font-medium">{xp.toLocaleString()} XP</span>
+                      {/* Add null check before calling toLocaleString */}
+                     <span className="font-medium">{typeof xp === 'number' ? xp.toLocaleString() : 0} XP</span>
                   </div>
                    {/* Replace Progress with a stylized Fuel Tank */}
                    <div className="w-full h-4 bg-muted rounded-full overflow-hidden border border-border/50 relative">

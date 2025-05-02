@@ -13,7 +13,7 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 
 2.  **Set Up Environment Variables:**
 
-    Create a `.env.local` file in the root of the project and add your Supabase API keys:
+    Create a `.env.local` file in the root of the project and add your Supabase API keys **and** your Composio Developer API Key:
 
     ```plaintext
     # Replace with your actual Supabase URL and Anon Key
@@ -21,8 +21,17 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
     NEXT_PUBLIC_SUPABASE_URL=YOUR_SUPABASE_URL
     NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 
+    # Replace with your Composio Developer API Key.
+    # Obtain this by running `composio login` in your terminal (after installing `composio-core`)
+    # or from your Composio developer dashboard.
+    # This key is used by the backend to initiate connections.
+    COMPOSIO_API_KEY=YOUR_COMPOSIO_DEV_API_KEY
+
     # GOOGLE_GENAI_API_KEY is no longer set here.
     # Users will add their key in the application's profile settings.
+
+    # Optional: Set the base URL if running behind a proxy or in a specific domain
+    # NEXT_PUBLIC_BASE_URL=http://localhost:9002
     ```
 
     **Important:** Keep your API keys secure and do not commit `.env.local` to version control.
@@ -62,7 +71,7 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 6.  **Open the App:**
     Navigate to `http://localhost:9002` (or the specified port) in your browser. Sign up or log in.
 
-7.  **Add Gemini API Key & Composio URL:**
+7.  **Add Gemini API Key & Composio MCP URL:**
     Go to your profile settings (click the user icon in the dashboard) and add your Google Gemini API Key and your Composio MCP URL.
     *   Get a Gemini Key from [Google AI Studio](https://aistudio.google.com/app/apikey).
     *   Find your Composio MCP URL in your [Composio MCP dashboard](https://mcp.composio.dev).
@@ -75,6 +84,9 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
         - `layout.tsx`: Layout for dashboard routes.
     -   `login/page.tsx`: The authentication page.
     -   `layout.tsx`: The root layout for the application.
+    -   `api/auth/composio/`: API routes for handling Composio authentication.
+        - `connect/route.ts`: Initiates the OAuth connection flow. **Requires `COMPOSIO_API_KEY` env var.**
+    -   `auth/composio-callback/`: Route handler for the OAuth callback from Composio.
 -   `src/components/`: Reusable React components.
     -   `dashboard/`: Components specific to the dashboard UI.
         - `dashboard.tsx`: The core UI for content input and post generation.
@@ -91,7 +103,7 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
     -   `utils.ts`: General utility functions.
 -   `src/services/`: Business logic services.
     - `content-parser.ts`: Parses content from URLs (placeholder).
-    - `composio-service.ts`: Handles Composio app authentication logic.
+    - `composio-service.ts`: Handles Composio app de-authentication logic.
 -   `src/hooks/`: Custom React hooks (e.g., `useToast`, `useMobile`).
 -   `src/types/`: TypeScript type definitions.
     -   `supabase.ts`: Auto-generated or manually defined Supabase database types.
@@ -107,20 +119,21 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 ## Features
 
 -   **Authentication:** Supabase Auth for user login/signup.
--   **Profile Management:** Users can update their name, username, phone, **Composio MCP URL**, **LinkedIn/Twitter/YouTube URLs (optional)**, and **Google Gemini API Key**.
+-   **Profile Management:** Users can update their name, username, phone, **Composio MCP URL**, **Composio API Key (for user-level actions - currently simplified)**, **LinkedIn/Twitter/YouTube URLs (optional)**, and **Google Gemini API Key**.
 -   **Content Input:** Accepts URLs or raw text.
 -   **Persona Selection:** Choose an AI writing style (e.g., Tech CEO, Casual Gen Z).
 -   **AI Summarization:** Uses Google Gemini via Genkit (user's API key) to summarize input content. Includes **auto-retry** for temporary API issues.
 -   **Social Post Generation:** Generates posts for LinkedIn, Twitter, and YouTube based on the summary and selected persona (user's API key). Includes **auto-retry**.
 -   **Post Tuning:** Refine generated posts with AI suggestions ("Make wittier", "More concise", etc.) (user's API key). Includes **auto-retry**.
 -   **AI Advisor:** Analyzes generated posts for tone, clarity, and engagement, providing inline suggestions for improvement (user's API key). Includes **auto-retry**.
--   **Composio App Authentication:** Authenticate LinkedIn, Twitter, and YouTube accounts via Composio for future publishing.
+-   **Composio App Authentication:** Authenticate LinkedIn, Twitter, and YouTube accounts via Composio OAuth flow for future publishing. **Requires server-side `COMPOSIO_API_KEY`**.
+-   **Composio App De-authentication:** Disconnect connected social accounts.
 -   **Quota Management:** Tracks user requests against a monthly limit (100 requests/month). Displays usage in the profile. Disables generation/tuning/analysis when quota is exceeded. Includes retry logic for temporary API issues. Quota is refunded for failed AI operations.
 -   **Gamification:** XP meter ("AI Fuel Tank") and unlockable badges for reaching generation milestones, with toast/confetti notifications.
 -   **Rate Limiting & Queueing:** Handles API rate limits with auto-retry countdowns (future: optional request queueing).
 -   **UI:** Built with Next.js App Router, React Server Components, ShadCN UI, and Tailwind CSS. Includes hover effects and subtle animations.
 -   **Database:** Supabase PostgreSQL for user profiles, quotas, gamification data (XP/badges), etc.
--   **(Placeholder) Publishing:** UI elements for publishing posts (integration not fully implemented).
+-   **(Placeholder) Publishing:** UI elements for publishing posts (integration requires backend logic using Composio actions).
 -   **(Placeholder) Billing:** UI elements for upgrading plans (integration not yet implemented).
 -   **(Optional) Onboarding:** A guided walkthrough for first-time users (react-joyride integration).
 
@@ -160,6 +173,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   is_youtube_authed boolean DEFAULT false,
   xp integer DEFAULT 0, -- Added XP column
   badges text[] DEFAULT ARRAY[]::text[], -- Added badges column (array of text)
+  composio_api_key text, -- Added field for Composio API Key
   -- Add length constraints if they don't exist
   CONSTRAINT username_length CHECK (char_length(username) <= 50),
   CONSTRAINT full_name_length CHECK (char_length(full_name) <= 100),
@@ -168,7 +182,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   CONSTRAINT linkedin_url_length CHECK (char_length(linkedin_url) <= 255),
   CONSTRAINT twitter_url_length CHECK (char_length(twitter_url) <= 255),
   CONSTRAINT youtube_url_length CHECK (char_length(youtube_url) <= 255),
-  CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255)
+  CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255),
+  CONSTRAINT composio_api_key_length CHECK (char_length(composio_api_key) <= 255) -- Constraint for new column
 );
 
 -- Add columns if they don't exist (Safer than dropping/recreating)
@@ -183,6 +198,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_twitter_authed boolean D
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_youtube_authed boolean DEFAULT false;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS xp integer DEFAULT 0;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS badges text[] DEFAULT ARRAY[]::text[];
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS composio_api_key text; -- Ensure new column is added
 
 
 -- Add constraints if they don't exist (more complex to check existence, ensure they match above)
@@ -236,6 +252,12 @@ BEGIN
     WHERE conname = 'gemini_api_key_length' AND conrelid = 'public.profiles'::regclass
   ) THEN
      ALTER TABLE public.profiles ADD CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255);
+  END IF;
+  IF NOT EXISTS ( -- Add constraint check for new column
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'composio_api_key_length' AND conrelid = 'public.profiles'::regclass
+  ) THEN
+     ALTER TABLE public.profiles ADD CONSTRAINT composio_api_key_length CHECK (char_length(composio_api_key) <= 255);
   END IF;
 END $$;
 
@@ -338,9 +360,9 @@ BEGIN
   IF NOT FOUND THEN
     RAISE NOTICE '[get_user_profile] Profile not found for user %, attempting to insert.', p_user_id;
     BEGIN
-        -- Ensure all default values are included, especially for new boolean/array/XP columns
-        INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed, xp, badges)
-        VALUES (p_user_id, now(), false, false, false, 0, ARRAY[]::text[])
+        -- Ensure all default values are included, especially for new boolean/array/XP/composio_api_key columns
+        INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed, xp, badges, composio_api_key)
+        VALUES (p_user_id, now(), false, false, false, 0, ARRAY[]::text[], null) -- Added composio_api_key default
         ON CONFLICT (id) DO NOTHING; -- Handle potential race conditions
 
         -- After attempting insert (even if conflict occurred), try selecting again
@@ -533,8 +555,8 @@ GRANT EXECUTE ON FUNCTION public.get_remaining_quota(uuid) TO authenticated;
 -- 6. Optional Seed Steps (Commented out - Run manually if needed after initial setup)
 /*
 -- Seed initial profiles for existing users (run once after table creation)
-INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed, xp, badges)
-SELECT id, NOW(), false, false, false, 0, ARRAY[]::text[] FROM auth.users
+INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed, xp, badges, composio_api_key)
+SELECT id, NOW(), false, false, false, 0, ARRAY[]::text[], null FROM auth.users
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed initial quotas for existing users (run once after table creation)

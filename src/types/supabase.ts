@@ -10,7 +10,7 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      profiles: { // Updated profiles table definition V3
+      profiles: { // Updated profiles table definition V3.2
         Row: {
           id: string // UUID, references auth.users.id
           updated_at: string | null
@@ -22,6 +22,7 @@ export type Database = {
           twitter_url: string | null // Added
           youtube_url: string | null // Added
           gemini_api_key: string | null
+          composio_api_key: string | null // Added
           is_linkedin_authed: boolean | null
           is_twitter_authed: boolean | null
           is_youtube_authed: boolean | null
@@ -39,6 +40,7 @@ export type Database = {
           twitter_url?: string | null // Added
           youtube_url?: string | null // Added
           gemini_api_key?: string | null
+          composio_api_key?: string | null // Added
           is_linkedin_authed?: boolean | null
           is_twitter_authed?: boolean | null
           is_youtube_authed?: boolean | null
@@ -56,6 +58,7 @@ export type Database = {
           twitter_url?: string | null // Added
           youtube_url?: string | null // Added
           gemini_api_key?: string | null
+          composio_api_key?: string | null // Added
           is_linkedin_authed?: boolean | null
           is_twitter_authed?: boolean | null
           is_youtube_authed?: boolean | null
@@ -142,7 +145,7 @@ export type Database = {
         Args: {
           p_user_id: string
         }
-        Returns: { // Update return type to match updated profiles.Row V3
+        Returns: { // Update return type to match updated profiles.Row V3.2
           id: string
           updated_at: string | null
           username: string | null
@@ -153,6 +156,7 @@ export type Database = {
           twitter_url: string | null // Added
           youtube_url: string | null // Added
           gemini_api_key: string | null
+          composio_api_key: string | null // Added
           is_linkedin_authed: boolean | null
           is_twitter_authed: boolean | null
           is_youtube_authed: boolean | null

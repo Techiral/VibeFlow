@@ -5,17 +5,16 @@ import type { Database } from '@/types/supabase'; // Assuming you have types gen
 
 // Helper function to safely get cookies - Make it async
 async function getCookie(name: string): Promise<string | undefined> {
-  // cookies() can be called synchronously, but ensure compatibility and adhere to Next.js recommendations.
-  // Await potentially helps if Next.js internals expect an async boundary here.
-  const cookieStore = cookies(); // Await cookies() call
+  // Await cookies() call here
+  const cookieStore = await cookies();
   return cookieStore.get(name)?.value;
 }
 
 // Helper function to safely set cookies - Make it async
 async function setCookie(name: string, value: string, options: CookieOptions): Promise<void> {
   try {
-    // cookies() can be called synchronously in Server Actions/Route Handlers
-    const cookieStore = cookies(); // Await cookies() call
+    // Await cookies() call here
+    const cookieStore = await cookies();
     cookieStore.set({ name, value, ...options });
   } catch (error) {
     // Log error if setting fails (e.g., called from RSC render path where cookies() might not be writable)
@@ -29,8 +28,8 @@ async function setCookie(name: string, value: string, options: CookieOptions): P
 // Helper function to safely remove cookies - Make it async
 async function removeCookie(name: string, options: CookieOptions): Promise<void> {
   try {
-    // cookies() can be called synchronously in Server Actions/Route Handlers
-    const cookieStore = cookies(); // Await cookies() call
+     // Await cookies() call here
+    const cookieStore = await cookies();
     cookieStore.set({ name, value: '', ...options });
   } catch (error) {
      // Log error if removal fails

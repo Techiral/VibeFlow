@@ -131,15 +131,16 @@ This file (`supabase/schema.sql`) contains the necessary SQL commands to set up 
 **Important:** The script is **idempotent** (safe to run multiple times) using `CREATE OR REPLACE FUNCTION`, `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ADD COLUMN IF NOT EXISTS`, etc. Running the latest version will update your schema without data loss.
 
 ```sql
--- Content of supabase/schema.sql (V3 - Idempotent & Update-Friendly):
--- Supabase Schema Setup V3 (Idempotent & Update-Friendly)
+-- Content of supabase/schema.sql (V3.1 - Idempotent & Update-Friendly with Trigger Drop Order Fix):
+-- Supabase Schema Setup V3.1
 -- This script can be run multiple times safely.
 
--- Drop dependent functions/views first if they might prevent table alterations
+-- Drop dependent objects in the correct order
+DROP TRIGGER IF EXISTS on_profile_update ON public.profiles;
+DROP FUNCTION IF EXISTS public.handle_profile_update(); -- Now safe to drop
 DROP FUNCTION IF EXISTS public.get_user_profile(uuid);
 DROP FUNCTION IF EXISTS public.increment_quota(uuid, integer);
 DROP FUNCTION IF EXISTS public.get_remaining_quota(uuid);
-DROP FUNCTION IF EXISTS public.handle_profile_update();
 
 
 -- 1. Profiles Table
@@ -171,6 +172,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 );
 
 -- Add columns if they don't exist (Safer than dropping/recreating)
+-- Using ALTER TABLE ... ADD COLUMN IF NOT EXISTS
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS composio_mcp_url text;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS linkedin_url text;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS twitter_url text;
@@ -184,7 +186,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS badges text[] DEFAULT ARRAY
 
 
 -- Add constraints if they don't exist (more complex to check existence, ensure they match above)
--- Example for one constraint (repeat for others if needed, ensuring names are unique or manage drops)
+-- Using DO block to check for constraint existence before adding
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -193,43 +195,43 @@ BEGIN
   ) THEN
     ALTER TABLE public.profiles ADD CONSTRAINT username_length CHECK (char_length(username) <= 50);
   END IF;
-    IF NOT EXISTS (
+  IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'full_name_length' AND conrelid = 'public.profiles'::regclass
   ) THEN
      ALTER TABLE public.profiles ADD CONSTRAINT full_name_length CHECK (char_length(full_name) <= 100);
   END IF;
-    IF NOT EXISTS (
+  IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'phone_number_length' AND conrelid = 'public.profiles'::regclass
   ) THEN
      ALTER TABLE public.profiles ADD CONSTRAINT phone_number_length CHECK (char_length(phone_number) <= 20);
   END IF;
-    IF NOT EXISTS (
+  IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'composio_mcp_url_length' AND conrelid = 'public.profiles'::regclass
   ) THEN
      ALTER TABLE public.profiles ADD CONSTRAINT composio_mcp_url_length CHECK (char_length(composio_mcp_url) <= 255);
   END IF;
-      IF NOT EXISTS (
+  IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'linkedin_url_length' AND conrelid = 'public.profiles'::regclass
   ) THEN
      ALTER TABLE public.profiles ADD CONSTRAINT linkedin_url_length CHECK (char_length(linkedin_url) <= 255);
   END IF;
-    IF NOT EXISTS (
+  IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'twitter_url_length' AND conrelid = 'public.profiles'::regclass
   ) THEN
      ALTER TABLE public.profiles ADD CONSTRAINT twitter_url_length CHECK (char_length(twitter_url) <= 255);
   END IF;
-    IF NOT EXISTS (
+  IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'youtube_url_length' AND conrelid = 'public.profiles'::regclass
   ) THEN
      ALTER TABLE public.profiles ADD CONSTRAINT youtube_url_length CHECK (char_length(youtube_url) <= 255);
   END IF;
-    IF NOT EXISTS (
+  IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'gemini_api_key_length' AND conrelid = 'public.profiles'::regclass
   ) THEN
@@ -250,7 +252,7 @@ BEGIN
 END $$;
 
 
--- Policies for profiles table (Recreate using CREATE OR REPLACE POLICY if supported, or DROP/CREATE)
+-- Policies for profiles table (DROP/CREATE for safety on re-run)
 DROP POLICY IF EXISTS "Allow authenticated users to view own profile" ON public.profiles;
 CREATE POLICY "Allow authenticated users to view own profile"
   ON public.profiles FOR SELECT
@@ -262,7 +264,7 @@ CREATE POLICY "Allow authenticated users to update own profile"
   USING (auth.uid() = id)
   WITH CHECK (auth.uid() = id);
 
--- Trigger function to update updated_at timestamp
+-- Trigger function to update updated_at timestamp (CREATE OR REPLACE is idempotent)
 CREATE OR REPLACE FUNCTION public.handle_profile_update()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -271,8 +273,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Drop existing trigger before creating a new one to avoid errors on re-run
-DROP TRIGGER IF EXISTS on_profile_update ON public.profiles;
+-- Create the trigger (DROP IF EXISTS was done at the top)
+-- Ensure the trigger is created *after* the function it calls
 CREATE TRIGGER on_profile_update
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE PROCEDURE public.handle_profile_update();
@@ -307,20 +309,19 @@ BEGIN
   END IF;
 END $$;
 
--- Policies for quotas table
+-- Policies for quotas table (DROP/CREATE for safety)
 DROP POLICY IF EXISTS "Allow authenticated users to view own quota" ON public.quotas;
 CREATE POLICY "Allow authenticated users to view own quota"
   ON public.quotas FOR SELECT
   USING (auth.uid() = user_id);
 
--- Allow modification only through SECURITY DEFINER functions
--- Drop insert/update policies if they exist and are not needed
+-- Prevent direct modification - only allow via SECURITY DEFINER functions
 DROP POLICY IF EXISTS "Allow insert for own quota" ON public.quotas;
 DROP POLICY IF EXISTS "Allow update for own quota" ON public.quotas;
 
 
 -- 3. get_user_profile Function (Upsert Logic, returns SETOF)
--- Improved: Explicitly re-fetch after insert/on conflict to ensure return
+-- CREATE OR REPLACE is idempotent
 CREATE OR REPLACE FUNCTION public.get_user_profile(p_user_id uuid)
 RETURNS SETOF public.profiles -- Return type matches the table structure
 LANGUAGE plpgsql
@@ -337,6 +338,7 @@ BEGIN
   IF NOT FOUND THEN
     RAISE NOTICE '[get_user_profile] Profile not found for user %, attempting to insert.', p_user_id;
     BEGIN
+        -- Ensure all default values are included, especially for new boolean/array/XP columns
         INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed, xp, badges)
         VALUES (p_user_id, now(), false, false, false, 0, ARRAY[]::text[])
         ON CONFLICT (id) DO NOTHING; -- Handle potential race conditions
@@ -367,12 +369,13 @@ BEGIN
 END;
 $$;
 
--- Grant execute permission to authenticated users
-REVOKE EXECUTE ON FUNCTION public.get_user_profile(uuid) FROM PUBLIC; -- Ensure no public access first
+-- Grant execute permission to authenticated users (DROP/CREATE grant)
+REVOKE EXECUTE ON FUNCTION public.get_user_profile(uuid) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.get_user_profile(uuid) TO authenticated;
 
 
 -- 4. increment_quota Function (Handles Reset and Increment, updates XP)
+-- CREATE OR REPLACE is idempotent
 CREATE OR REPLACE FUNCTION public.increment_quota(p_user_id uuid, p_increment_amount integer)
 RETURNS integer -- Returns the new REMAINING quota
 LANGUAGE plpgsql
@@ -461,10 +464,13 @@ EXCEPTION
 END;
 $$;
 
+-- Grant execute permission (DROP/CREATE grant)
+REVOKE EXECUTE ON FUNCTION public.increment_quota(uuid, integer) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.increment_quota(uuid, integer) TO authenticated;
 
 
 -- 5. get_remaining_quota Function (Handles Reset Check)
+-- CREATE OR REPLACE is idempotent
 CREATE OR REPLACE FUNCTION public.get_remaining_quota(p_user_id uuid)
 RETURNS integer
 LANGUAGE plpgsql
@@ -519,6 +525,8 @@ EXCEPTION
 END;
 $$;
 
+-- Grant execute permission (DROP/CREATE grant)
+REVOKE EXECUTE ON FUNCTION public.get_remaining_quota(uuid) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.get_remaining_quota(uuid) TO authenticated;
 
 
@@ -535,4 +543,5 @@ SELECT id, 0, NOW(), 100, NOW() FROM auth.users
 ON CONFLICT (user_id) DO NOTHING;
 */
 
-RAISE NOTICE 'VibeFlow schema setup/update script completed (V3).';
+RAISE NOTICE 'VibeFlow schema setup/update script completed (V3.1).';
+```

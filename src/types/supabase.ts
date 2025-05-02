@@ -203,8 +203,12 @@ export type Database = {
           is_linkedin_authed: boolean | null // Added
           is_twitter_authed: boolean | null // Added
           is_youtube_authed: boolean | null // Added
-        }
+        }[] // Ensure it returns an array
       }
+       handle_profile_update: { // Added definition for the trigger function if needed
+         Args: Record<string, unknown>
+         Returns: unknown // Typically returns TRIGGER
+       }
     }
     Enums: {
       [_ in never]: never
@@ -301,7 +305,9 @@ export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type Quota = Database['public']['Tables']['quotas']['Row'];
 
 // Define specific type for the return of get_user_profile function
-export type UserProfileFunctionReturn = Database['public']['Functions']['get_user_profile']['Returns'];
+// It returns an array, so we take the first element or define it as potentially undefined/null
+export type UserProfileFunctionReturn = Database['public']['Functions']['get_user_profile']['Returns'] extends (infer R)[] ? R : never;
+
 
 // Define types for Composio app authentication status
 export type ComposioApp = 'linkedin' | 'twitter' | 'youtube';

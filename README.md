@@ -1,6 +1,6 @@
 # Firebase Studio - VibeFlow
 
-This is a NextJS starter project called VibeFlow, built within Firebase Studio. It allows users to input content (URL or text), summarize it using AI, and generate tailored social media posts for different platforms (LinkedIn, Twitter, YouTube). Users can then tune these posts and (placeholder for) publish them.
+This is a NextJS starter project called VibeFlow, built within Firebase Studio. It allows users to input content (URL or text), summarize it using AI, and generate tailored social media posts for different platforms (LinkedIn, Twitter, YouTube). Users can then tune these posts, authenticate their social accounts via Composio, and (placeholder for) publish them.
 
 ## Getting Started
 
@@ -35,10 +35,11 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
      * `function public.get_user_profile does not exist`
      * `function public.increment_quota does not exist`
      * `function public.get_remaining_quota does not exist`
+     * `"composio_mcp_url" column does not exist` (or similar column errors)
 
     a.  Navigate to the **SQL Editor** in your Supabase project dashboard.
     b.  Click **+ New query**.
-    c.  Paste and run the **entire** content of the SQL file found at `supabase/schema.sql`. This file contains commands to create the tables, functions, enable Row Level Security (RLS), and define security policies.
+    c.  Paste and run the **entire** content of the SQL file found at `supabase/schema.sql`. This file contains commands to create (or replace) the tables, functions, enable Row Level Security (RLS), and define security policies. **If you have run a previous version of this script, running the latest version will safely update your schema.**
 
 4.  **Run Development Server:**
     ```bash
@@ -56,8 +57,10 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 6.  **Open the App:**
     Navigate to `http://localhost:9002` (or the specified port) in your browser. Sign up or log in.
 
-7.  **Add Gemini API Key:**
-    Go to your profile settings (click the user icon in the dashboard) and add your Google Gemini API Key. You can get one from [Google AI Studio](https://aistudio.google.com/app/apikey).
+7.  **Add Gemini API Key & Composio URL:**
+    Go to your profile settings (click the user icon in the dashboard) and add your Google Gemini API Key and your Composio MCP URL.
+    *   Get a Gemini Key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+    *   Find your Composio MCP URL in your [Composio MCP dashboard](https://mcp.composio.dev).
 
 ## Project Structure
 
@@ -70,16 +73,20 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 -   `src/components/`: Reusable React components.
     -   `dashboard/`: Components specific to the dashboard UI.
         - `dashboard.tsx`: The core UI for content input and post generation.
-        - `profile-dialog.tsx`: Dialog for managing user profile and settings.
+        - `profile-dialog.tsx`: Dialog for managing user profile and settings (including API keys and Composio URL).
+        - `ai-advisor-panel.tsx`: (New) Panel for displaying AI feedback on posts.
     -   `ui/`: ShadCN UI components.
 -   `src/ai/`: Contains AI-related code using Genkit.
-    -   `ai-instance.ts`: Configures the default Genkit instance (may be less used now).
-    -   `flows/`: Defines the AI workflows (summarization, post generation, tuning) which now accept API keys dynamically.
+    -   `ai-instance.ts`: Configures the default Genkit instance.
+    -   `flows/`: Defines the AI workflows (summarization, post generation, tuning, analysis).
+        - `analyze-post.ts`: (New) Flow for analyzing post drafts.
     -   `dev.ts`: Entry point for running Genkit flows in development mode.
 -   `src/lib/`: Utility functions and library integrations.
     -   `supabase/`: Supabase client setup (client, server, middleware).
     -   `utils.ts`: General utility functions.
--   `src/services/`: Business logic services (e.g., content parsing).
+-   `src/services/`: Business logic services.
+    - `content-parser.ts`: Parses content from URLs (placeholder).
+    - `composio-service.ts`: (New) Handles Composio app authentication logic.
 -   `src/hooks/`: Custom React hooks (e.g., `useToast`, `useMobile`).
 -   `src/types/`: TypeScript type definitions.
     -   `supabase.ts`: Auto-generated or manually defined Supabase database types.
@@ -87,7 +94,7 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 -   `middleware.ts`: Next.js middleware for Supabase session handling.
 -   `supabase/`: Contains SQL schema and setup files.
     -   `schema.sql`: **(Crucial)** SQL commands for creating tables and functions. **Must be run in Supabase SQL Editor.**
--   `next.config.ts`: Next.js configuration.
+-   `next.config.js`: Next.js configuration (includes webpack fallback for `async_hooks`).
 -   `tailwind.config.ts`: Tailwind CSS configuration.
 -   `tsconfig.json`: TypeScript configuration.
 -   `components.json`: ShadCN UI configuration.
@@ -95,38 +102,49 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 ## Features
 
 -   **Authentication:** Supabase Auth for user login/signup.
--   **Profile Management:** Users can update their name, username, phone, Composio URL, and crucially, their **Google Gemini API Key**.
+-   **Profile Management:** Users can update their name, username, phone, **Composio MCP URL**, and **Google Gemini API Key**.
 -   **Content Input:** Accepts URLs or raw text.
--   **AI Summarization:** Uses Google Gemini via Genkit (using user's API key) to summarize input content.
--   **Social Post Generation:** Generates posts for LinkedIn, Twitter, and YouTube based on the summary (using user's API key).
--   **Post Tuning:** Allows users to refine generated posts with AI assistance (using user's API key).
--   **Quota Management:** Tracks user requests against a monthly limit (100 requests/month). Displays usage in the profile. Disables generation/tuning when quota is exceeded.
+-   **Persona Selection:** Choose an AI writing style (e.g., Tech CEO, Casual Gen Z).
+-   **AI Summarization:** Uses Google Gemini via Genkit (user's API key) to summarize input content.
+-   **Social Post Generation:** Generates posts for LinkedIn, Twitter, and YouTube based on the summary and selected persona (user's API key).
+-   **Post Tuning:** Refine generated posts with AI suggestions ("Make wittier", "More concise", etc.) (user's API key).
+-   **AI Advisor:** Analyzes generated posts for tone, clarity, and engagement, providing inline suggestions for improvement (user's API key).
+-   **Composio App Authentication:** Authenticate LinkedIn, Twitter, and YouTube accounts via Composio for future publishing.
+-   **Quota Management:** Tracks user requests against a monthly limit (100 requests/month). Displays usage in the profile. Disables generation/tuning/analysis when quota is exceeded. Includes retry logic for temporary API issues.
+-   **Gamification:** XP meter ("AI Fuel Tank") and unlockable badges for reaching generation milestones.
+-   **Rate Limiting & Queueing:** Handles API rate limits with auto-retry countdowns (future: optional request queueing).
 -   **UI:** Built with Next.js App Router, React Server Components, ShadCN UI, and Tailwind CSS.
--   **Database:** Supabase PostgreSQL for storing user profiles, quotas, and potentially other application data.
--   **(Placeholder) Publishing:** Includes UI elements for publishing posts (integration with Composio MCP is intended but not fully implemented).
--   **(Placeholder) Billing:** Includes UI elements for upgrading plans (billing integration not yet implemented).
+-   **Database:** Supabase PostgreSQL for user profiles, quotas, etc.
+-   **(Placeholder) Publishing:** UI elements for publishing posts (integration not fully implemented).
+-   **(Placeholder) Billing:** UI elements for upgrading plans (integration not yet implemented).
 
 ## Supabase Schema (`supabase/schema.sql`)
 
 This file (`supabase/schema.sql`) contains the necessary SQL commands to set up your database. **You must execute this script in the Supabase SQL Editor** (see Step 3 in Getting Started). Failure to do so will result in application errors related to missing tables or functions (e.g., `relation "public.profiles" does not exist`).
 
+**Important:** The script includes `DROP...CASCADE` statements to allow re-running it safely if you need to update the schema.
+
 ```sql
 -- Content of supabase/schema.sql:
 -- 1. Profiles Table
+DROP TABLE IF EXISTS public.profiles CASCADE; -- Add CASCADE to drop dependent objects if needed
 CREATE TABLE public.profiles (
   id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   updated_at timestamp with time zone,
   username text UNIQUE,
   full_name text,
   phone_number text,
-  composio_url text,
+  composio_mcp_url text, -- Renamed from composio_url
   gemini_api_key text, -- Consider encrypting this column in a real application
+  is_linkedin_authed boolean DEFAULT false,
+  is_twitter_authed boolean DEFAULT false,
+  is_youtube_authed boolean DEFAULT false,
   PRIMARY KEY (id),
   CONSTRAINT username_length CHECK (char_length(username) <= 50),
   CONSTRAINT full_name_length CHECK (char_length(full_name) <= 100),
-   CONSTRAINT phone_number_length CHECK (char_length(phone_number) <= 20),
-   CONSTRAINT composio_url_length CHECK (char_length(composio_url) <= 255),
-   CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255)
+  CONSTRAINT phone_number_length CHECK (char_length(phone_number) <= 20),
+  CONSTRAINT composio_mcp_url_length CHECK (char_length(composio_mcp_url) <= 255), -- Constraint for renamed column
+  CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255)
 );
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -149,12 +167,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Drop existing trigger before creating a new one to avoid errors on re-run
+DROP TRIGGER IF EXISTS on_profile_update ON public.profiles;
 CREATE TRIGGER on_profile_update
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE PROCEDURE public.handle_profile_update();
 
 
 -- 2. Quotas Table
+DROP TABLE IF EXISTS public.quotas CASCADE; -- Add CASCADE
 CREATE TABLE public.quotas (
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   request_count integer NOT NULL DEFAULT 0,
@@ -171,10 +192,14 @@ CREATE POLICY "Allow authenticated users to view own quota"
   ON public.quotas FOR SELECT
   USING (auth.uid() = user_id);
 
--- Note: Updates to quota should ideally be handled by secure functions
+-- Allow inserts by the increment_quota function (SECURITY DEFINER)
+-- Allow updates by the increment_quota function (SECURITY DEFINER)
+-- No direct insert/update policies for users needed if handled by functions.
 
 
 -- 3. get_user_profile Function (Upsert Logic)
+-- Drop function if exists before creating
+DROP FUNCTION IF EXISTS public.get_user_profile(uuid);
 CREATE OR REPLACE FUNCTION public.get_user_profile(p_user_id uuid)
 RETURNS SETOF public.profiles -- Return type matches the table
 LANGUAGE plpgsql
@@ -187,9 +212,11 @@ BEGIN
   -- Try to select the profile
   SELECT * INTO profile_record FROM public.profiles WHERE id = p_user_id;
 
-  -- If profile doesn't exist, insert a new one
+  -- If profile doesn't exist, insert a new one with defaults
   IF NOT FOUND THEN
-    INSERT INTO public.profiles (id) VALUES (p_user_id)
+    INSERT INTO public.profiles (id, is_linkedin_authed, is_twitter_authed, is_youtube_authed)
+    VALUES (p_user_id, false, false, false)
+    ON CONFLICT (id) DO NOTHING -- Handle potential race conditions
     RETURNING * INTO profile_record;
   END IF;
 
@@ -203,6 +230,8 @@ GRANT EXECUTE ON FUNCTION public.get_user_profile(uuid) TO authenticated;
 
 
 -- 4. increment_quota Function (Handles Reset and Increment)
+-- Drop function if exists before creating
+DROP FUNCTION IF EXISTS public.increment_quota(uuid, integer);
 CREATE OR REPLACE FUNCTION public.increment_quota(p_user_id uuid, p_increment_amount integer)
 RETURNS integer -- Returns the new REMAINING quota
 LANGUAGE plpgsql
@@ -282,6 +311,8 @@ BEGIN
   RETURN remaining_quota;
 
 EXCEPTION
+    WHEN SQLSTATE '23514' THEN -- check_violation
+        RAISE EXCEPTION 'quota_exceeded'; -- Re-raise specific error for quota limit check
     WHEN OTHERS THEN
         -- Log the error or handle it as needed
         RAISE WARNING 'Error in increment_quota for user %: %', p_user_id, SQLERRM;
@@ -294,6 +325,8 @@ GRANT EXECUTE ON FUNCTION public.increment_quota(uuid, integer) TO authenticated
 
 
 -- 5. get_remaining_quota Function (Handles Reset Check)
+-- Drop function if exists before creating
+DROP FUNCTION IF EXISTS public.get_remaining_quota(uuid);
 CREATE OR REPLACE FUNCTION public.get_remaining_quota(p_user_id uuid)
 RETURNS integer
 LANGUAGE plpgsql
@@ -328,6 +361,7 @@ BEGIN
     remaining_quota := current_limit;
 
      -- Optional: Update the record here if found to be outdated (or rely on increment function)
+     -- This ensures the view is consistent even if increment hasn't run recently
      UPDATE public.quotas
      SET request_count = 0, last_reset_at = now()
      WHERE user_id = p_user_id;
@@ -345,8 +379,8 @@ $$;
 GRANT EXECUTE ON FUNCTION public.get_remaining_quota(uuid) TO authenticated;
 
 -- 6. Seed initial profiles for existing users (Optional, run once after setup)
--- INSERT INTO public.profiles (id, updated_at)
--- SELECT id, NOW() FROM auth.users
+-- INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed)
+-- SELECT id, NOW(), false, false, false FROM auth.users
 -- ON CONFLICT (id) DO NOTHING;
 
 -- 7. Seed initial quotas for existing users (Optional, run once after setup)
@@ -355,4 +389,4 @@ GRANT EXECUTE ON FUNCTION public.get_remaining_quota(uuid) TO authenticated;
 -- ON CONFLICT (user_id) DO NOTHING;
 ```
 
-**Security Note:** Storing API keys directly in the database (`profiles.gemini_api_key`) is generally **not recommended for production environments** without proper security measures like encryption at rest or using a secrets management service (like HashiCorp Vault or cloud provider secrets managers). For this hackathon project, it's a simplification.
+**Security Note:** Storing API keys directly in the database (`profiles.gemini_api_key`) is generally **not recommended for production environments** without proper security measures like encryption at rest or using a secrets management service. For this hackathon project, it's a simplification.

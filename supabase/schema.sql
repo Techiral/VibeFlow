@@ -1,22 +1,22 @@
--- Content of supabase/schema.sql:
 -- 1. Profiles Table
+DROP TABLE IF EXISTS public.profiles CASCADE; -- Add CASCADE to drop dependent objects if needed
 CREATE TABLE public.profiles (
   id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   updated_at timestamp with time zone,
   username text UNIQUE,
   full_name text,
   phone_number text,
-  composio_mcp_url text, -- Renamed from composio_url to be more specific
+  composio_mcp_url text, -- Renamed from composio_url
   gemini_api_key text, -- Consider encrypting this column in a real application
-  is_linkedin_authed boolean DEFAULT false, -- Added for LinkedIn auth status
-  is_twitter_authed boolean DEFAULT false, -- Added for Twitter auth status
-  is_youtube_authed boolean DEFAULT false, -- Added for YouTube auth status
+  is_linkedin_authed boolean DEFAULT false,
+  is_twitter_authed boolean DEFAULT false,
+  is_youtube_authed boolean DEFAULT false,
   PRIMARY KEY (id),
   CONSTRAINT username_length CHECK (char_length(username) <= 50),
   CONSTRAINT full_name_length CHECK (char_length(full_name) <= 100),
-   CONSTRAINT phone_number_length CHECK (char_length(phone_number) <= 20),
-   CONSTRAINT composio_mcp_url_length CHECK (char_length(composio_mcp_url) <= 255),
-   CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255)
+  CONSTRAINT phone_number_length CHECK (char_length(phone_number) <= 20),
+  CONSTRAINT composio_mcp_url_length CHECK (char_length(composio_mcp_url) <= 255), -- Constraint for renamed column
+  CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255)
 );
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -39,12 +39,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Drop existing trigger before creating a new one to avoid errors on re-run
+DROP TRIGGER IF EXISTS on_profile_update ON public.profiles;
 CREATE TRIGGER on_profile_update
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE PROCEDURE public.handle_profile_update();
 
 
 -- 2. Quotas Table
+DROP TABLE IF EXISTS public.quotas CASCADE; -- Add CASCADE
 CREATE TABLE public.quotas (
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   request_count integer NOT NULL DEFAULT 0,
@@ -61,26 +64,16 @@ CREATE POLICY "Allow authenticated users to view own quota"
   ON public.quotas FOR SELECT
   USING (auth.uid() = user_id);
 
--- Allow insert for authenticated users (needed for increment_quota's ON CONFLICT)
-CREATE POLICY "Allow authenticated users to insert own quota"
-  ON public.quotas FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
--- Allow update for authenticated users (needed for increment_quota's ON CONFLICT DO UPDATE)
-CREATE POLICY "Allow authenticated users to update own quota"
-  ON public.quotas FOR UPDATE
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
-
--- Note: Updates to quota should ideally be handled by secure functions
+-- Allow inserts by the increment_quota function (SECURITY DEFINER)
+-- Allow updates by the increment_quota function (SECURITY DEFINER)
+-- No direct insert/update policies for users needed if handled by functions.
 
 
 -- 3. get_user_profile Function (Upsert Logic)
--- Drop the existing function if it exists to ensure the return type is updated
+-- Drop function if exists before creating
 DROP FUNCTION IF EXISTS public.get_user_profile(uuid);
-
 CREATE OR REPLACE FUNCTION public.get_user_profile(p_user_id uuid)
-RETURNS SETOF public.profiles -- Return type matches the table (now includes auth status)
+RETURNS SETOF public.profiles -- Return type matches the table
 LANGUAGE plpgsql
 SECURITY DEFINER -- Important: Allows the function to bypass RLS briefly for insert
 SET search_path = public -- Ensures it uses the public schema
@@ -91,10 +84,11 @@ BEGIN
   -- Try to select the profile
   SELECT * INTO profile_record FROM public.profiles WHERE id = p_user_id;
 
-  -- If profile doesn't exist, insert a new one
+  -- If profile doesn't exist, insert a new one with defaults
   IF NOT FOUND THEN
-    -- Insert only the ID, let other columns default or be updated later
-    INSERT INTO public.profiles (id) VALUES (p_user_id)
+    INSERT INTO public.profiles (id, is_linkedin_authed, is_twitter_authed, is_youtube_authed)
+    VALUES (p_user_id, false, false, false)
+    ON CONFLICT (id) DO NOTHING -- Handle potential race conditions
     RETURNING * INTO profile_record;
   END IF;
 
@@ -108,6 +102,8 @@ GRANT EXECUTE ON FUNCTION public.get_user_profile(uuid) TO authenticated;
 
 
 -- 4. increment_quota Function (Handles Reset and Increment)
+-- Drop function if exists before creating
+DROP FUNCTION IF EXISTS public.increment_quota(uuid, integer);
 CREATE OR REPLACE FUNCTION public.increment_quota(p_user_id uuid, p_increment_amount integer)
 RETURNS integer -- Returns the new REMAINING quota
 LANGUAGE plpgsql
@@ -132,11 +128,11 @@ BEGIN
   FROM public.quotas q
   WHERE q.user_id = p_user_id;
 
-  -- If no record exists, create one
+  -- If no record exists, create one (should ideally be handled on profile creation/first fetch)
    IF NOT FOUND THEN
      INSERT INTO public.quotas (user_id, request_count, quota_limit, last_reset_at)
      VALUES (p_user_id, 0, 100, now())
-     ON CONFLICT (user_id) DO NOTHING; -- Avoid race conditions if called concurrently
+     ON CONFLICT (user_id) DO NOTHING; -- Avoid race conditions
 
      -- Re-fetch after potential insert
       SELECT
@@ -149,11 +145,6 @@ BEGIN
         current_last_reset
       FROM public.quotas q
       WHERE q.user_id = p_user_id;
-
-      -- Handle case where insert might have happened but wasn't found immediately before
-      IF NOT FOUND THEN
-        RAISE EXCEPTION 'Failed to initialize or find quota for user %', p_user_id;
-      END IF;
    END IF;
 
 
@@ -177,7 +168,7 @@ BEGIN
      new_count := 0;
   END IF;
 
-  -- Update the quota record using ON CONFLICT to handle potential race conditions
+  -- Update the quota record
   INSERT INTO public.quotas (user_id, request_count, last_reset_at, quota_limit)
   VALUES (p_user_id, new_count, current_last_reset, current_limit)
   ON CONFLICT (user_id)
@@ -192,8 +183,8 @@ BEGIN
   RETURN remaining_quota;
 
 EXCEPTION
-    WHEN SQLSTATE '23514' THEN -- Catch check constraint violation (quota_exceeded)
-        RAISE EXCEPTION 'quota_exceeded'; -- Re-raise specific error
+    WHEN SQLSTATE '23514' THEN -- check_violation
+        RAISE EXCEPTION 'quota_exceeded'; -- Re-raise specific error for quota limit check
     WHEN OTHERS THEN
         -- Log the error or handle it as needed
         RAISE WARNING 'Error in increment_quota for user %: %', p_user_id, SQLERRM;
@@ -206,6 +197,8 @@ GRANT EXECUTE ON FUNCTION public.increment_quota(uuid, integer) TO authenticated
 
 
 -- 5. get_remaining_quota Function (Handles Reset Check)
+-- Drop function if exists before creating
+DROP FUNCTION IF EXISTS public.get_remaining_quota(uuid);
 CREATE OR REPLACE FUNCTION public.get_remaining_quota(p_user_id uuid)
 RETURNS integer
 LANGUAGE plpgsql
@@ -240,6 +233,7 @@ BEGIN
     remaining_quota := current_limit;
 
      -- Optional: Update the record here if found to be outdated (or rely on increment function)
+     -- This ensures the view is consistent even if increment hasn't run recently
      UPDATE public.quotas
      SET request_count = 0, last_reset_at = now()
      WHERE user_id = p_user_id;
@@ -257,8 +251,8 @@ $$;
 GRANT EXECUTE ON FUNCTION public.get_remaining_quota(uuid) TO authenticated;
 
 -- 6. Seed initial profiles for existing users (Optional, run once after setup)
--- INSERT INTO public.profiles (id, updated_at)
--- SELECT id, NOW() FROM auth.users
+-- INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed)
+-- SELECT id, NOW(), false, false, false FROM auth.users
 -- ON CONFLICT (id) DO NOTHING;
 
 -- 7. Seed initial quotas for existing users (Optional, run once after setup)

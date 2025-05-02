@@ -4,7 +4,7 @@
 import type { User } from '@supabase/supabase-js';
 import type { Profile, Quota } from '@/types/supabase'; // Import specific types
 import { useState, useTransition, useEffect, useCallback } from 'react'; // Added useCallback
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,13 +18,13 @@ import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, In
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
-import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post'; // Corrected import path
+import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
 import { ProfileDialog } from './profile-dialog'; // Import the profile dialog
 import { Progress } from "@/components/ui/progress"; // Import Progress component
-import AiAdvisorPanel from '@/components/dashboard/ai-advisor-panel'; // Corrected import path
+import AiAdvisorPanel from '@/components/dashboard/ai-advisor-panel';
 import { toast as sonnerToast } from 'sonner'; // Import sonner toast for confetti effect
 import Confetti from 'react-confetti';
 import Joyride, { Step, CallBackProps } from 'react-joyride'; // Import react-joyride
@@ -121,6 +121,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
   const router = useRouter();
   const supabase = createClient();
   const { toast } = useToast();
+  const searchParams = useSearchParams(); // Get search params
   const [isPending, startTransition] = useTransition();
   const [contentInput, setContentInput] = useState('');
   const [summary, setSummary] = useState<string | null>(null);
@@ -158,6 +159,33 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
    useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Effect to show toast messages from Composio callback
+  useEffect(() => {
+    const successParam = searchParams.get('success');
+    const errorParam = searchParams.get('error');
+    const messageParam = searchParams.get('message');
+    const appParam = searchParams.get('app');
+
+    if (successParam === 'composio_auth' && appParam) {
+      toast({
+        title: `${appParam.charAt(0).toUpperCase() + appParam.slice(1)} Authenticated`,
+        description: `Successfully connected your ${appParam} account via Composio.`,
+        variant: 'default',
+      });
+      // Optional: Force refresh profile data here if needed
+      // Optionally: Clear the query params from the URL
+      router.replace('/dashboard', { scroll: false });
+    } else if (errorParam === 'composio_auth_failed' || errorParam === 'composio_db_update_failed') {
+      toast({
+        title: "Composio Authentication Failed",
+        description: messageParam || `Could not authenticate with Composio. Please try again.`,
+        variant: "destructive",
+      });
+      // Optionally: Clear the query params from the URL
+      router.replace('/dashboard', { scroll: false });
+    }
+  }, [searchParams, toast, router]);
 
 
   // Fetch or confirm profile/quota data on client-side if needed
@@ -905,8 +933,10 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
           case 'youtube': targetUrl = profile?.youtube_url; break;
       }
 
-     if (!profile?.composio_mcp_url || !targetUrl) {
-         toast({ title: `Composio URL Missing`, description: `Please add your main Composio MCP URL and the specific ${platform} app URL in your profile to enable publishing.`, variant: "destructive" });
+     // Use is_authed flag to check connection status before attempting to publish
+     const isAuthenticatedKey = `is_${platform}_authed` as keyof Profile;
+     if (!profile?.composio_mcp_url || !profile?.[isAuthenticatedKey]) {
+         toast({ title: `${platform.charAt(0).toUpperCase() + platform.slice(1)} Not Authenticated`, description: `Please authenticate with ${platform} via Composio in your profile first.`, variant: "destructive" });
          setIsProfileDialogOpen(true);
          return;
      }
@@ -926,19 +956,31 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
 
     startTransition(async () => {
       try {
-        console.log(`Publishing to ${platform} via ${targetUrl}:`, postContent);
-        // Placeholder: Replace with actual API call to Composio/Platform
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        console.log(`Publishing to ${platform} via Composio (MCP: ${profile.composio_mcp_url}):`, postContent);
+        // Placeholder: Replace with actual API call to Composio/Platform via your backend or a Server Action
+        // This would likely involve sending the postContent and target platform/account info
+        // to an endpoint that uses Composio's tooling (like the Python example).
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+        // Example check:
+        // const response = await fetch('/api/publish', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify({ platform, content: postContent, userId: user.id })
+        // });
+        // if (!response.ok) {
+        //    const errorData = await response.json();
+        //    throw new Error(errorData.message || `Failed to publish to ${platform}`);
+        // }
         toast({ title: "Post Published!", description: `Successfully published to ${platform}.`, variant: "default" });
         publishSuccess = true;
       } catch (error: any) {
          console.error(`Publishing to ${platform} failed:`, error);
          let description = `Publishing to ${platform} failed: ${error.message || 'Unknown error'}`;
           if (error.message.includes("authentication") || error.message.includes("connect")) {
-              description = `Please connect your ${platform} account via Composio first.`
-              // Consider adding a button/link to trigger the auth flow again
+              description = `Authentication issue with ${platform}. Please try re-authenticating via Composio in your profile.`
+              // Consider updating the DB auth status to false here
           } else if (error.message.includes("invalid Composio URL")) {
-               description = `Invalid Composio ${platform} URL in profile. Please check and update.`;
+               description = `Invalid Composio MCP URL in profile. Please check and update.`;
                setIsProfileDialogOpen(true);
           }
         toast({ title: "Publishing Failed", description, variant: "destructive" });
@@ -1187,6 +1229,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
               className="min-h-[200px] md:min-h-[300px] lg:min-h-[350px] bg-input/50 border-border/50 text-base resize-none flex-grow" // Use flex-grow
               disabled={isDisabled}
               suppressHydrationWarning
+              spellCheck={false} // Prevent hydration mismatch from spellcheck attribute
             />
           </CardContent>
           <CardFooter>
@@ -1251,6 +1294,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                                   onChange={(e) => setPostDrafts(prev => ({...prev, [platform]: e.target.value}))} // Allow editing
                                   className="min-h-[150px] bg-input/30 border-border/30 resize-none text-sm h-full"
                                   suppressHydrationWarning
+                                  spellCheck={false} // Prevent hydration mismatch from spellcheck attribute
                                 />
                              )}
                             {/* Tuning Buttons */}
@@ -1297,7 +1341,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                                       {/* Conditional rendering for publish button */}
                                        <Button
                                          onClick={() => handlePublishPost(platform)}
-                                         disabled={isDisabled || !postDrafts[platform] || !profile?.composio_mcp_url || !profile?.[`${platform}_url` as keyof Profile] || isPublishing[platform]}
+                                         disabled={isDisabled || !postDrafts[platform] || !profile?.composio_mcp_url || !profile?.[`is_${platform}_authed` as keyof Profile] || isPublishing[platform]}
                                          loading={isPublishing[platform]}
                                          size="sm"
                                        >
@@ -1305,9 +1349,11 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                                        </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    {!profile?.composio_mcp_url || !profile?.[`${platform}_url` as keyof Profile]
-                                      ? <p>Add Composio MCP & {platform} URLs in profile</p>
-                                      : <p>Publish this post (placeholder)</p>
+                                    {!profile?.composio_mcp_url
+                                      ? <p>Add Composio MCP URL in profile</p>
+                                      : !profile?.[`is_${platform}_authed` as keyof Profile]
+                                        ? <p>Authenticate {platform} in profile</p>
+                                        : <p>Publish this post (placeholder)</p>
                                     }
                                   </TooltipContent>
                                 </Tooltip>

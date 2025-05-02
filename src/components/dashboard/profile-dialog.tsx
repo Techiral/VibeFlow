@@ -1,4 +1,3 @@
-
 // components/dashboard/profile-dialog.tsx
 'use client';
 
@@ -27,8 +26,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck, Star, Trophy, Zap, BrainCircuit } from 'lucide-react'; // Updated icons
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { authenticateComposioApp } from '@/services/composio-service'; // Import the new service
-import { toast as sonnerToast } from 'sonner'; // Import sonner toast for confetti effect
+// Removed: import { authenticateComposioApp } from '@/services/composio-service';
+import { toast as sonnerToast } from 'sonner';
 import Confetti from 'react-confetti';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Added Select for Persona
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Added Tooltip
@@ -85,7 +84,7 @@ export function ProfileDialog({
   const supabase = createClient();
   const { toast } = useToast();
   const [isSaving, startSavingTransition] = useTransition();
-  const [isAuthenticating, setIsAuthenticating] = useState<Partial<Record<ComposioApp, boolean>>>({});
+  // Removed: const [isAuthenticating, setIsAuthenticating] = useState<Partial<Record<ComposioApp, boolean>>>({});
   const [profile, setProfile] = useState<Profile | null>(initialProfile);
   const [quota, setQuota] = useState<Quota | null>(initialQuota);
   // Use initial props directly for display
@@ -283,93 +282,35 @@ export function ProfileDialog({
     });
   };
 
-  const handleAuthenticateApp = async (appName: ComposioApp) => {
-     console.log(`Starting authentication for ${appName}...`);
-     if (!profile?.composio_mcp_url) {
+  // Simplified handler to redirect the user to the Composio OAuth URL
+  const handleAuthenticateApp = (appName: ComposioApp) => {
+    console.log(`Initiating authentication for ${appName}...`);
+
+    if (!profile?.composio_mcp_url) {
       toast({ title: "MCP URL Required", description: "Please enter your Composio MCP URL first.", variant: "destructive" });
       return;
-     }
-      if (localDbSetupError) {
-       toast({ title: "Database Error", description: "Cannot authenticate app due to a database setup issue.", variant: "destructive" });
-       return;
-     }
+    }
+    if (localDbSetupError) {
+      toast({ title: "Database Error", description: "Cannot authenticate app due to a database setup issue.", variant: "destructive" });
+      return;
+    }
 
-     setIsAuthenticating(prev => ({ ...prev, [appName]: true }));
+     // Construct the Composio OAuth URL
+     // This URL structure might vary based on Composio's actual OAuth flow.
+     // You'll likely need a redirect_uri pointing back to your application.
+     // This redirect URI will receive the auth code after the user approves in Composio.
+     // For now, we assume a simple structure. Replace with the correct one.
+     const redirectUri = `${window.location.origin}/auth/composio-callback`; // Example callback URL
+     const authUrl = `${profile.composio_mcp_url}/connect?app=${appName}&redirect_uri=${encodeURIComponent(redirectUri)}&user_id=${encodeURIComponent(user.id)}`; // Pass user_id for tracking
 
-     try {
-        // We need the specific URL for the app from the profile now
-         let targetUrl: string | null | undefined = null;
-         switch (appName) {
-             case 'linkedin': targetUrl = profile.linkedin_url; break;
-             case 'twitter': targetUrl = profile.twitter_url; break;
-             case 'youtube': targetUrl = profile.youtube_url; break;
-         }
+     console.log(`Redirecting to Composio OAuth URL: ${authUrl}`);
 
-         if (!targetUrl) {
-             toast({ title: `${appName.charAt(0).toUpperCase() + appName.slice(1)} URL Required`, description: `Please enter your ${appName} URL in the profile first.`, variant: "destructive" });
-             setIsAuthenticating(prev => ({ ...prev, [appName]: false }));
-             return;
-         }
+     // Redirect the user's browser to the Composio authentication page
+     window.location.href = authUrl;
 
-        console.log(`Calling authenticateComposioApp for ${appName} with MCP: ${profile.composio_mcp_url}`);
-        // Pass the MCP URL AND the specific app URL
-        const success = await authenticateComposioApp({ app: appName, mcpUrl: profile.composio_mcp_url });
-        console.log(`authenticateComposioApp for ${appName} returned: ${success}`);
-
-
-        if (success) {
-           // Update the profile state locally and in the database
-           const updatedAuthStatus = { [`is_${appName}_authed`]: true };
-           console.log(`Updating Supabase profile for ${appName} auth...`);
-           const { data: updatedProfileData, error: updateError } = await supabase
-             .from('profiles')
-             .update(updatedAuthStatus)
-             .eq('id', user.id)
-             .select('*, xp, badges') // Select all columns after update
-             .single();
-
-           if (updateError) {
-              console.error(`Supabase update error for ${appName} auth:`, updateError);
-              // Check for schema cache error related to auth columns
-              if (updateError.message.includes("Could not find the") && updateError.message.includes("column") && updateError.message.includes("in the schema cache")) {
-                 const missingColumnMatch = updateError.message.match(/'(.*?)'/);
-                 const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
-                 const authErrorMsg = `Database schema mismatch: Auth column '${missingColumn}' not found. Run 'supabase/schema.sql'. See README Step 3.`;
-                 setLocalDbSetupError(authErrorMsg);
-                 throw new Error(authErrorMsg); // Throw to be caught below
-              }
-              throw updateError; // Throw other update errors
-           }
-
-           if(updatedProfileData){
-              const completeProfile = updatedProfileData as Profile;
-              console.log(`Supabase profile updated successfully for ${appName}. New profile:`, completeProfile);
-              setProfile(completeProfile); // Update local state
-              onProfileUpdate(completeProfile); // Notify parent
-              toast({ title: `${appName.charAt(0).toUpperCase() + appName.slice(1)} Authenticated`, description: `Successfully authenticated ${appName}.`, variant: "default" });
-              setLocalDbSetupError(null); // Clear DB error on success
-           } else {
-              console.warn(`Supabase update for ${appName} auth returned no data.`);
-              throw new Error("Failed to retrieve updated profile after authentication.");
-           }
-
-        } else {
-          // Service function likely threw an error handled below, or returned false
-           console.warn(`authenticateComposioApp function returned false for ${appName}.`);
-           toast({ title: "Authentication Failed", description: `Could not authenticate ${appName}. Check URLs and console logs.`, variant: "destructive" });
-        }
-     } catch (error: any) {
-        console.error(`Error in handleAuthenticateApp for ${appName}:`, error);
-         let errorMsg = `Failed to authenticate ${appName}: ${error.message}`;
-         // Check if it's the specific DB setup error we set above
-         if (localDbSetupError && error.message.includes('Auth column')) {
-             errorMsg = localDbSetupError; // Use the specific error message
-         }
-        toast({ title: "Authentication Error", description: errorMsg, variant: "destructive" });
-        // Optionally update DB state to false if needed, though it should already be false
-     } finally {
-        setIsAuthenticating(prev => ({ ...prev, [appName]: false }));
-     }
+     // No need for setIsAuthenticating state, as the page will redirect.
+     // The actual database update (is_linkedin_authed = true) should happen
+     // in the /auth/composio-callback route handler after successful authentication.
   };
 
 
@@ -487,49 +428,7 @@ export function ProfileDialog({
                     </div>
                   </div>
 
-                   {/* App Specific URLs */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                       <Label htmlFor="linkedin_url" className="sm:text-right sm:col-span-1 mt-1">LinkedIn URL</Label>
-                       <div className="col-span-1 sm:col-span-2">
-                          <Input
-                             id="linkedin_url"
-                             {...register('linkedin_url')}
-                             placeholder="e.g., https://linkedin.composio.dev/..."
-                             className={`${errors.linkedin_url ? 'border-destructive' : ''}`}
-                             disabled={!!localDbSetupError}
-                          />
-                          {errors.linkedin_url && <p className="text-xs text-destructive mt-1">{errors.linkedin_url.message}</p>}
-                          <p className="text-xs text-muted-foreground mt-1">Composio app URL for LinkedIn. Required for publishing.</p>
-                       </div>
-                    </div>
-                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                       <Label htmlFor="twitter_url" className="sm:text-right sm:col-span-1 mt-1">Twitter URL</Label>
-                       <div className="col-span-1 sm:col-span-2">
-                          <Input
-                             id="twitter_url"
-                             {...register('twitter_url')}
-                             placeholder="e.g., https://twitter.composio.dev/..."
-                             className={`${errors.twitter_url ? 'border-destructive' : ''}`}
-                             disabled={!!localDbSetupError}
-                          />
-                          {errors.twitter_url && <p className="text-xs text-destructive mt-1">{errors.twitter_url.message}</p>}
-                           <p className="text-xs text-muted-foreground mt-1">Composio app URL for Twitter. Required for publishing.</p>
-                       </div>
-                    </div>
-                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                       <Label htmlFor="youtube_url" className="sm:text-right sm:col-span-1 mt-1">YouTube URL</Label>
-                       <div className="col-span-1 sm:col-span-2">
-                          <Input
-                             id="youtube_url"
-                             {...register('youtube_url')}
-                             placeholder="e.g., https://youtube.composio.dev/..."
-                             className={`${errors.youtube_url ? 'border-destructive' : ''}`}
-                             disabled={!!localDbSetupError}
-                          />
-                          {errors.youtube_url && <p className="text-xs text-destructive mt-1">{errors.youtube_url.message}</p>}
-                           <p className="text-xs text-muted-foreground mt-1">Composio app URL for YouTube. Required for publishing.</p>
-                       </div>
-                    </div>
+                   {/* App Specific URLs are no longer needed here as they are derived or managed by Composio */}
 
                    {/* App Authentication Buttons */}
                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
@@ -537,16 +436,9 @@ export function ProfileDialog({
                        <div className="col-span-1 sm:col-span-2 space-y-3">
                           {(['linkedin', 'twitter', 'youtube'] as ComposioApp[]).map((app) => {
                              const isAuthenticated = getAuthStatus(app);
-                             const isLoading = isAuthenticating[app] ?? false;
-                             let targetUrl: string | null | undefined = null;
-                             switch (app) {
-                                case 'linkedin': targetUrl = profile?.linkedin_url; break;
-                                case 'twitter': targetUrl = profile?.twitter_url; break;
-                                case 'youtube': targetUrl = profile?.youtube_url; break;
-                              }
-                             const isDisabled = isLoading || !profile?.composio_mcp_url || !targetUrl || !!localDbSetupError;
+                             // Removed: const isLoading = isAuthenticating[app] ?? false;
+                             const isDisabled = !profile?.composio_mcp_url || !!localDbSetupError; // Simplified disabled logic
                              const tooltipText = !profile?.composio_mcp_url ? "Enter MCP URL first" :
-                                                !targetUrl ? `Enter ${app} URL first` :
                                                 localDbSetupError ? "Cannot authenticate due to DB error" :
                                                 isAuthenticated ? `Re-authenticate ${app}` : `Authenticate ${app}`;
 
@@ -566,7 +458,7 @@ export function ProfileDialog({
                                           size="sm"
                                           onClick={() => handleAuthenticateApp(app)}
                                           disabled={isDisabled} // Use combined isDisabled variable
-                                          loading={isLoading}
+                                          // Removed: loading={isLoading}
                                         >
                                           {isAuthenticated ? <WifiOff className="mr-2 h-4 w-4" /> : <Wifi className="mr-2 h-4 w-4" />}
                                           {isAuthenticated ? 'Re-authenticate' : 'Authenticate'}
@@ -581,7 +473,7 @@ export function ProfileDialog({
                              );
                           })}
                           <p className="text-xs text-muted-foreground mt-1">
-                             Connect accounts via Composio to enable direct publishing.
+                             Connect accounts via Composio to enable direct publishing. You will be redirected to Composio.
                           </p>
                        </div>
                     </div>

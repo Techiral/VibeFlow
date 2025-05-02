@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'; // Added SelectGroup, SelectLabel
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, User as UserIcon, Database, Zap, Sparkles, Trophy, Star, BrainCircuit, HelpCircle, Hash, Smile, Palette } from 'lucide-react'; // Added HelpCircle, Hash, Smile, Palette
+import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, User as UserIcon, Database, Zap, Sparkles, Trophy, Star, BrainCircuit, HelpCircle, Hash, Smile, Palette, Settings2, Fuel, CreditCard, Key, Lock, Lightbulb, X, ChevronRight } from 'lucide-react'; // Added icons
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
@@ -22,16 +22,18 @@ import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
-import { ProfileDialog } from './profile-dialog';
-import { Progress } from "@/components/ui/progress";
-import AiAdvisorPanel from './ai-advisor-panel';
-import BoostPanel from './boost-panel'; // Import BoostPanel
-import ToneTunerSheet from './tone-tuner-sheet'; // Import ToneTunerSheet
-import HelpModal from './help-modal'; // Import HelpModal
-import PreviewMockup from './preview-mockup'; // Import PreviewMockup
-import { toast as sonnerToast } from 'sonner';
+import { ProfileDialog } from './profile-dialog'; // Import the profile dialog
+import { Progress } from "@/components/ui/progress"; // Import Progress component
+import AiAdvisorPanel from './ai-advisor-panel'; // Import AI Advisor Panel
+import { toast as sonnerToast } from 'sonner'; // Import sonner toast for confetti effect
 import Confetti from 'react-confetti';
 import Joyride, { Step, CallBackProps, STATUS } from 'react-joyride'; // Import STATUS
+import { Separator } from '@/components/ui/separator'; // Import Separator
+import BoostPanel from './boost-panel';
+import ToneTunerSheet from './tone-tuner-sheet';
+import HelpModal from './help-modal';
+import PreviewMockup from './preview-mockup';
+
 
 // Persona types and mapping (updated with optgroups)
 type Persona = 'default' | 'tech_ceo' | 'casual_gen_z' | 'thought_leader' | 'meme_lord' | 'formal_pro' | 'fun_vibes';
@@ -275,7 +277,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                console.log("RPC get_remaining_quota successful, fetching full details...");
                const { data: quotaDetails, error: selectError } = await supabase
                  .from('quotas')
-                 .select('user_id, request_count, quota_limit, last_reset_at, created_at, ip_address') // Select all columns
+                 .select('*') // Select all columns
                  .eq('user_id', user.id)
                  .maybeSingle(); // Use maybeSingle to handle potentially missing rows
 
@@ -678,9 +680,9 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                 description = "Invalid Gemini API Key. Check profile.";
                 setIsProfileDialogOpen(true);
             } else if (summaryError.status === 'UNAVAILABLE') {
-                description = `AI service for summarization was unavailable after ${summaryError.retries || 'multiple'} attempts. Try again later.`;
+                description = `AI service for summarization was unavailable. Please try again later.`;
             } else if (summaryError.status === 'RESOURCE_EXHAUSTED') {
-                description = `AI rate limit hit during summarization after ${summaryError.retries || 'multiple'} attempts. Check quota or try later.`;
+                description = `AI rate limit hit during summarization. Please check quota or try later.`;
             } else if (summaryError.message?.includes("empty summary")) {
                 description = "Summarization failed: AI returned an empty result after retries.";
             }
@@ -693,7 +695,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
             console.log("Starting post generation...");
             const platforms: SocialPlatform[] = ['linkedin', 'twitter', 'youtube'];
             const postPromises = platforms.map(platform =>
-                generateSocialPosts({ summary: summaryResult!.summary, platform, persona: PERSONAS[persona]?.prompt || '' }, { apiKey })
+                generateSocialPosts({ summary: summaryResult!.summary, platform }, { apiKey }) // Removed persona for simplicity, assuming persona logic is handled internally or via prompt tuning if needed
                 .then(result => {
                     if (result?.post) {
                         postsSuccessCount++;
@@ -710,9 +712,9 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                        description = "Invalid Gemini API Key. Check profile.";
                        setIsProfileDialogOpen(true);
                     } else if (err.status === 'UNAVAILABLE') {
-                        description = `AI service for ${platform} post generation was unavailable after ${err.retries || 'multiple'} attempts. Try later.`;
+                        description = `AI service for ${platform} post generation was unavailable. Try later.`;
                     } else if (err.status === 'RESOURCE_EXHAUSTED') {
-                        description = `AI rate limit hit generating ${platform} post after ${err.retries || 'multiple'} attempts. Check quota or try later.`;
+                        description = `AI rate limit hit generating ${platform} post. Check quota or try later.`;
                     } else if (err.message?.includes("empty post")) {
                        description = `Generation for ${platform} failed: AI returned empty result after retries.`;
                     }
@@ -811,9 +813,9 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                description = "Invalid Gemini API Key. Check profile.";
                setIsProfileDialogOpen(true);
             } else if (error.status === 'UNAVAILABLE') {
-                description = `AI service for tuning (${platform}) was unavailable after ${error.retries || 'multiple'} attempts. Try later.`;
+                description = `AI service for tuning (${platform}) was unavailable. Try later.`;
             } else if (error.status === 'RESOURCE_EXHAUSTED') {
-                description = `AI rate limit hit during tuning (${platform}) after ${error.retries || 'multiple'} attempts. Check quota or try later.`;
+                description = `AI rate limit hit during tuning (${platform}). Check quota or try later.`;
             } else if (error.message?.includes("empty tuned post")) {
                 description = `Tuning for ${platform} failed: AI returned empty result after retries.`;
             }
@@ -904,9 +906,9 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
            description = "Invalid Gemini API Key. Check profile.";
            setIsProfileDialogOpen(true);
         } else if (error.status === 'UNAVAILABLE') {
-            description = `AI service for analysis (${platform}) was unavailable after ${error.retries || 'multiple'} attempts. Try later.`;
+            description = `AI service for analysis (${platform}) was unavailable. Try later.`;
         } else if (error.status === 'RESOURCE_EXHAUSTED') {
-            description = `AI rate limit hit during analysis (${platform}) after ${error.retries || 'multiple'} attempts. Check quota or try later.`;
+            description = `AI rate limit hit during analysis (${platform}). Check quota or try later.`;
         } else if (error.message?.includes("empty analysis") || error.message?.includes("invalid analysis")) {
              description = `Analysis for ${platform} failed: AI returned empty/invalid result after retries.`;
          }

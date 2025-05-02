@@ -99,7 +99,7 @@ export function ProfileDialog({
     setQuota(initialQuota);
     // No need to update local xp/badges state here, just use props directly
     setLocalDbSetupError(dbSetupError);
-  }, [initialProfile, initialQuota, dbSetupError]); // Removed initialXp, initialBadges deps
+  }, [initialProfile, initialQuota, dbSetupError]);
 
 
   // Fetch Quota inside dialog if initialQuota is null and no DB error
@@ -284,6 +284,7 @@ export function ProfileDialog({
   };
 
   const handleAuthenticateApp = async (appName: ComposioApp) => {
+     console.log(`Starting authentication for ${appName}...`);
      if (!profile?.composio_mcp_url) {
       toast({ title: "MCP URL Required", description: "Please enter your Composio MCP URL first.", variant: "destructive" });
       return;
@@ -310,12 +311,16 @@ export function ProfileDialog({
              return;
          }
 
+        console.log(`Calling authenticateComposioApp for ${appName} with MCP: ${profile.composio_mcp_url}`);
         // Pass the MCP URL AND the specific app URL
         const success = await authenticateComposioApp({ app: appName, mcpUrl: profile.composio_mcp_url });
+        console.log(`authenticateComposioApp for ${appName} returned: ${success}`);
+
 
         if (success) {
            // Update the profile state locally and in the database
            const updatedAuthStatus = { [`is_${appName}_authed`]: true };
+           console.log(`Updating Supabase profile for ${appName} auth...`);
            const { data: updatedProfileData, error: updateError } = await supabase
              .from('profiles')
              .update(updatedAuthStatus)
@@ -324,6 +329,7 @@ export function ProfileDialog({
              .single();
 
            if (updateError) {
+              console.error(`Supabase update error for ${appName} auth:`, updateError);
               // Check for schema cache error related to auth columns
               if (updateError.message.includes("Could not find the") && updateError.message.includes("column") && updateError.message.includes("in the schema cache")) {
                  const missingColumnMatch = updateError.message.match(/'(.*?)'/);
@@ -337,18 +343,23 @@ export function ProfileDialog({
 
            if(updatedProfileData){
               const completeProfile = updatedProfileData as Profile;
+              console.log(`Supabase profile updated successfully for ${appName}. New profile:`, completeProfile);
               setProfile(completeProfile); // Update local state
               onProfileUpdate(completeProfile); // Notify parent
               toast({ title: `${appName.charAt(0).toUpperCase() + appName.slice(1)} Authenticated`, description: `Successfully authenticated ${appName}.`, variant: "default" });
               setLocalDbSetupError(null); // Clear DB error on success
+           } else {
+              console.warn(`Supabase update for ${appName} auth returned no data.`);
+              throw new Error("Failed to retrieve updated profile after authentication.");
            }
 
         } else {
           // Service function likely threw an error handled below, or returned false
+           console.warn(`authenticateComposioApp function returned false for ${appName}.`);
            toast({ title: "Authentication Failed", description: `Could not authenticate ${appName}. Check URLs and console logs.`, variant: "destructive" });
         }
      } catch (error: any) {
-        console.error(`Error authenticating ${appName}:`, error);
+        console.error(`Error in handleAuthenticateApp for ${appName}:`, error);
          let errorMsg = `Failed to authenticate ${appName}: ${error.message}`;
          // Check if it's the specific DB setup error we set above
          if (localDbSetupError && error.message.includes('Auth column')) {
@@ -369,7 +380,8 @@ export function ProfileDialog({
   // Helper to get auth status based on app name
   const getAuthStatus = (appName: ComposioApp): boolean => {
      const key = `is_${appName}_authed` as keyof Profile;
-     return profile?.[key] ?? false;
+     // Ensure profile exists and the property is true, default to false
+     return !!profile?.[key];
   }
 
    // Badge awarding logic moved to parent (Dashboard.tsx)
@@ -553,7 +565,7 @@ export function ProfileDialog({
                                           variant={isAuthenticated ? "outline" : "default"}
                                           size="sm"
                                           onClick={() => handleAuthenticateApp(app)}
-                                          disabled={isDisabled}
+                                          disabled={isDisabled} // Use combined isDisabled variable
                                           loading={isLoading}
                                         >
                                           {isAuthenticated ? <WifiOff className="mr-2 h-4 w-4" /> : <Wifi className="mr-2 h-4 w-4" />}
@@ -586,7 +598,7 @@ export function ProfileDialog({
                <div className="space-y-4">
                   <div className="flex justify-between items-center text-sm mb-1">
                      <span>Experience Points (XP):</span>
-                     <span className="font-medium">{(xp ?? 0).toLocaleString()} XP</span>
+                     <span className="font-medium">{xp?.toLocaleString() ?? 0} XP</span>
                   </div>
                    {/* Stylized Fuel Tank */}
                    <TooltipProvider>

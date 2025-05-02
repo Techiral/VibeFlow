@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck } from 'lucide-react'; // Added Fuel and BadgeCheck
+import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wifi, WifiOff, CheckCircle, XCircle, Link as LinkIcon, Fuel, BadgeCheck, Star, Trophy, Zap, BrainCircuit } from 'lucide-react'; // Updated icons
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { authenticateComposioApp } from '@/services/composio-service'; // Import the new service
@@ -38,36 +38,35 @@ interface ProfileDialogProps {
   user: User;
   initialProfile: Profile | null;
   initialQuota: Quota | null;
-  initialXp: number; // Added initialXp
-  initialBadges: string[]; // Added initialBadges
   onProfileUpdate: (profile: Profile) => void; // Callback to update parent state
-  onXpUpdate: (xp: number, newBadge?: string) => void; // Callback for XP/Badge updates
+  // onXpUpdate: (xp: number, newBadge?: string) => void; // Callback removed, parent will derive from profile
   dbSetupError: string | null;
 }
 
-// Updated schema to include new URL fields
+// Updated schema to include new URL fields and constraints
 const profileSchema = z.object({
-  full_name: z.string().max(100, 'Full name too long').nullable().optional().or(z.literal('')),
-  username: z.string().max(50, 'Username too long').nullable().optional().or(z.literal('')),
-  phone_number: z.string().max(20, 'Phone number too long').nullable().optional().or(z.literal('')),
-  composio_mcp_url: z.string().url('Invalid MCP URL format').max(255, 'URL too long').nullable().optional().or(z.literal('')), // Renamed and kept required
-  linkedin_url: z.string().url('Invalid LinkedIn URL format').max(255, 'URL too long').nullable().optional().or(z.literal('')),
-  twitter_url: z.string().url('Invalid Twitter URL format').max(255, 'URL too long').nullable().optional().or(z.literal('')),
-  youtube_url: z.string().url('Invalid YouTube URL format').max(255, 'URL too long').nullable().optional().or(z.literal('')),
-  gemini_api_key: z.string().max(255, 'API Key too long').nullable().optional().or(z.literal('')),
+  full_name: z.string().max(100, 'Full name must be 100 characters or less').nullable().optional().or(z.literal('')),
+  username: z.string().max(50, 'Username must be 50 characters or less').nullable().optional().or(z.literal('')),
+  phone_number: z.string().max(20, 'Phone number must be 20 characters or less').nullable().optional().or(z.literal('')),
+  composio_mcp_url: z.string().url('Invalid MCP URL format (e.g., https://...)').max(255, 'URL too long').nullable().optional().or(z.literal('')),
+  linkedin_url: z.string().url('Invalid LinkedIn URL format (e.g., https://...)').max(255, 'URL too long').nullable().optional().or(z.literal('')),
+  twitter_url: z.string().url('Invalid Twitter URL format (e.g., https://...)').max(255, 'URL too long').nullable().optional().or(z.literal('')),
+  youtube_url: z.string().url('Invalid YouTube URL format (e.g., https://...)').max(255, 'URL too long').nullable().optional().or(z.literal('')),
+  gemini_api_key: z.string().max(255, 'API Key must be 255 characters or less').nullable().optional().or(z.literal('')),
 });
+
 
 type ProfileFormData = z.infer<typeof profileSchema>;
 
 const DEFAULT_QUOTA_LIMIT = 100;
-const XP_PER_REQUEST = 10; // XP awarded per successful request
+// const XP_PER_REQUEST = 10; // Removed, XP is now read directly from profile
 
-// Badge thresholds and names
+// Badge definitions - moved to dashboard.tsx for consistency, but keep here for reference if needed
 const BADGES = [
-  { xp: 50, name: 'Vibe Starter ✨', description: 'Generated 5 posts!' },
-  { xp: 100, name: 'Content Ninja 🥷', description: 'Generated 10 posts!' },
-  { xp: 200, name: 'Social Samurai ⚔️', description: 'Generated 20 posts!' },
-  { xp: 500, name: 'AI Maestro 🧑‍🔬', description: 'Mastered 50 generations!' },
+  { xp: 50, name: 'Vibe Starter ✨', description: 'Generated 5 posts!', icon: Star },
+  { xp: 100, name: 'Content Ninja 🥷', description: 'Generated 10 posts!', icon: Trophy },
+  { xp: 200, name: 'Social Samurai ⚔️', description: 'Generated 20 posts!', icon: Zap },
+  { xp: 500, name: 'AI Maestro 🧑‍🔬', description: 'Mastered 50 generations!', icon: BrainCircuit },
 ];
 
 export function ProfileDialog({
@@ -76,10 +75,8 @@ export function ProfileDialog({
   user,
   initialProfile,
   initialQuota,
-  initialXp, // Receive initial XP
-  initialBadges, // Receive initial badges
   onProfileUpdate,
-  onXpUpdate, // Receive XP update callback
+  // onXpUpdate, // Removed prop
   dbSetupError,
 }: ProfileDialogProps) {
   const supabase = createClient();
@@ -88,19 +85,25 @@ export function ProfileDialog({
   const [isAuthenticating, setIsAuthenticating] = useState<Partial<Record<ComposioApp, boolean>>>({});
   const [profile, setProfile] = useState<Profile | null>(initialProfile);
   const [quota, setQuota] = useState<Quota | null>(initialQuota);
-  const [xp, setXp] = useState(initialXp); // State for XP
-  const [badges, setBadges] = useState<string[]>(initialBadges ?? []); // Initialize with empty array if initialBadges is null/undefined
-  const [showConfetti, setShowConfetti] = useState(false);
+  // XP and Badges are now derived directly from the 'profile' state
+  // const [xp, setXp] = useState(initialProfile?.xp ?? 0); // Removed XP state
+  // const [badges, setBadges] = useState<string[]>(initialProfile?.badges ?? []); // Removed Badges state
+  // const [showConfetti, setShowConfetti] = useState(false); // Keep confetti for visual feedback
   const [localDbSetupError, setLocalDbSetupError] = useState<string | null>(dbSetupError);
+
+  // Derive xp and badges directly from profile state
+  const xp = profile?.xp ?? 0;
+  const badges = profile?.badges ?? [];
+
 
   // Ensure local state updates if initial props change
   useEffect(() => {
     setProfile(initialProfile);
     setQuota(initialQuota);
-    setXp(initialXp);
-    setBadges(initialBadges ?? []); // Ensure badges is always an array
+    // setXp(initialProfile?.xp ?? 0); // Removed XP update
+    // setBadges(initialProfile?.badges ?? []); // Removed Badges update
     setLocalDbSetupError(dbSetupError);
-  }, [initialProfile, initialQuota, initialXp, initialBadges, dbSetupError]);
+  }, [initialProfile, initialQuota, dbSetupError]); // Removed initialXp, initialBadges
 
   // Fetch Quota inside dialog if initialQuota is null and no DB error
    useEffect(() => {
@@ -231,8 +234,11 @@ export function ProfileDialog({
       return;
     }
     const updateData = Object.fromEntries(
-      Object.entries(data).map(([key, value]) => [key, value === '' ? null : value])
+       // Filter out null or empty strings before creating the update object
+       // Only include fields that have a non-empty value
+      Object.entries(data).filter(([_, value]) => value !== null && value !== '')
     );
+
 
     startSavingTransition(async () => {
       try {
@@ -243,8 +249,8 @@ export function ProfileDialog({
             updated_at: new Date().toISOString(),
           })
           .eq('id', user.id)
-           // Ensure all updated columns are selected
-          .select('*, xp, badges') // Select everything + gamification fields
+           // Ensure all updated columns are selected, including xp and badges
+          .select('*, xp, badges')
           .single();
 
         if (error) {
@@ -254,21 +260,21 @@ export function ProfileDialog({
           if (error.message.includes("Could not find the") && error.message.includes("column") && error.message.includes("in the schema cache")) {
               const missingColumnMatch = error.message.match(/'(.*?)'/);
               const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
-              errorMessage = `Database schema mismatch: Column '${missingColumn}' not found in 'profiles' table schema cache. Please run the full 'supabase/schema.sql' script again. See README Step 3.`;
+              errorMessage = `Database schema mismatch: Column '${missingColumn}' not found. Run the latest 'supabase/schema.sql'. See README Step 3.`;
               setLocalDbSetupError(errorMessage); // Set the DB error state
           } else if (error.message.includes("violates row-level security policy")) {
             errorMessage = 'Could not save profile due to database security policy.';
           } else if (error.message.includes("relation \"public.profiles\" does not exist")) {
-            errorMessage = 'The `profiles` table is missing.';
+            errorMessage = 'The `profiles` table is missing. Run the setup script.';
             setLocalDbSetupError(errorMessage);
           } else if (error.message.includes("406")) {
-            errorMessage = `Could not save profile due to a configuration issue (Error 406). Check table/column access. Details: ${error.message}`;
+            errorMessage = `Could not save profile (Error 406). Check table/column access. Details: ${error.message}`;
           }
           toast({ title: 'Save Failed', description: errorMessage, variant: 'destructive', duration: 7000 });
         } else if (updatedProfileData) {
           const completeProfile = updatedProfileData as Profile;
-          setProfile(completeProfile);
-          onProfileUpdate(completeProfile);
+          setProfile(completeProfile); // Update local state
+          onProfileUpdate(completeProfile); // **Crucially, call the callback**
           toast({ title: 'Profile Saved', description: 'Your changes have been saved.' });
           reset(data); // Reset form to make isDirty false
           setLocalDbSetupError(null); // Clear DB error on successful save
@@ -293,7 +299,6 @@ export function ProfileDialog({
      setIsAuthenticating(prev => ({ ...prev, [appName]: true }));
 
      try {
-        // Call the server action/API route to handle authentication
         // We need the specific URL for the app from the profile now
          let targetUrl: string | null | undefined = null;
          switch (appName) {
@@ -326,7 +331,7 @@ export function ProfileDialog({
               if (updateError.message.includes("Could not find the") && updateError.message.includes("column") && updateError.message.includes("in the schema cache")) {
                  const missingColumnMatch = updateError.message.match(/'(.*?)'/);
                  const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
-                 const authErrorMsg = `Database schema mismatch: Authentication column '${missingColumn}' not found for '${appName}'. Please run the full 'supabase/schema.sql' script again. See README Step 3.`;
+                 const authErrorMsg = `Database schema mismatch: Auth column '${missingColumn}' not found. Run 'supabase/schema.sql'. See README Step 3.`;
                  setLocalDbSetupError(authErrorMsg);
                  throw new Error(authErrorMsg); // Throw to be caught below
               }
@@ -349,7 +354,7 @@ export function ProfileDialog({
         console.error(`Error authenticating ${appName}:`, error);
          let errorMsg = `Failed to authenticate ${appName}: ${error.message}`;
          // Check if it's the specific DB setup error we set above
-         if (localDbSetupError && error.message.includes('Authentication column')) {
+         if (localDbSetupError && error.message.includes('Auth column')) {
              errorMsg = localDbSetupError; // Use the specific error message
          }
         toast({ title: "Authentication Error", description: errorMsg, variant: "destructive" });
@@ -370,65 +375,12 @@ export function ProfileDialog({
      return profile?.[key] ?? false;
   }
 
-   // Badge awarding logic
-  useEffect(() => {
-    if (!onXpUpdate) return; // Guard if callback not provided
-
-    // Use profile.xp directly if available, fallback to calculating from quota
-    const currentXp = profile?.xp ?? (quota?.request_count ?? 0) * XP_PER_REQUEST;
-    setXp(currentXp); // Update local XP state
-
-    const newlyAwardedBadges: string[] = [];
-    BADGES.forEach(badge => {
-      // Check against currentXp and if the badge isn't already in the local badges state
-      if (currentXp >= badge.xp && !(badges ?? []).includes(badge.name)) { // Check if badges array exists before calling includes
-        newlyAwardedBadges.push(badge.name);
-      }
-    });
-
-    if (newlyAwardedBadges.length > 0) {
-      const newBadges = [...(badges ?? []), ...newlyAwardedBadges]; // Ensure badges is an array before spreading
-      setBadges(newBadges); // Update local badges state
-
-      // Show confetti and toast for the *first* new badge awarded in this update
-      const firstNewBadge = BADGES.find(b => b.name === newlyAwardedBadges[0]);
-      if (firstNewBadge) {
-         setShowConfetti(true);
-         sonnerToast.success(`Badge Unlocked: ${firstNewBadge.name}!`, {
-           description: firstNewBadge.description,
-           duration: 5000,
-           icon: <BadgeCheck className="text-green-500" />,
-         });
-         onXpUpdate(currentXp, firstNewBadge.name); // Notify parent of XP and the new badge
-         setTimeout(() => setShowConfetti(false), 5000); // Confetti duration
-      } else {
-           onXpUpdate(currentXp); // Notify parent of XP change only
-      }
-
-       // Persist new badges to the database (fire and forget, or handle errors if needed)
-      supabase
-        .from('profiles')
-        .update({ badges: newBadges })
-        .eq('id', user.id)
-        .then(({ error }) => {
-          if (error) {
-            console.error("Error saving new badges to profile:", error);
-            // Optionally notify user or retry
-          } else {
-             console.log("Badges updated in database:", newBadges);
-          }
-        });
-
-    } else {
-       onXpUpdate(currentXp); // Notify parent of XP change only
-    }
-    // Dependencies: Run when profile.xp or quota changes, or when badges state is updated locally
-  }, [profile?.xp, quota?.request_count, badges, onXpUpdate, supabase, user.id]);
+   // Badge awarding logic moved to parent (Dashboard.tsx)
 
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-       {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
+       {/* <Confetti recycle={false} numberOfPieces={200} /> */} {/* Confetti handled in parent */}
        <DialogContent className="sm:max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90vh]">
         <DialogHeader className="px-6 pt-6">
           <DialogTitle>Profile & Settings</DialogTitle>
@@ -503,7 +455,7 @@ export function ProfileDialog({
                        />
                        {errors.gemini_api_key && <p className="text-xs text-destructive mt-1">{errors.gemini_api_key.message}</p>}
                        <p className="text-xs text-muted-foreground mt-1">
-                         Get key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Google AI Studio <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>.
+                         Get key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Google AI Studio <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>. Required for generation.
                        </p>
                      </div>
                    </div>
@@ -521,7 +473,7 @@ export function ProfileDialog({
                       />
                       {errors.composio_mcp_url && <p className="text-xs text-destructive mt-1">{errors.composio_mcp_url.message}</p>}
                       <p className="text-xs text-muted-foreground mt-1">
-                        Find in your <a href="https://mcp.composio.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Composio MCP dashboard <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>.
+                        Find in your <a href="https://mcp.composio.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Composio MCP dashboard <ExternalLink className="inline h-3 w-3 ml-0.5"/></a>. Required for publishing.
                       </p>
                     </div>
                   </div>
@@ -538,7 +490,7 @@ export function ProfileDialog({
                              disabled={!!localDbSetupError}
                           />
                           {errors.linkedin_url && <p className="text-xs text-destructive mt-1">{errors.linkedin_url.message}</p>}
-                          <p className="text-xs text-muted-foreground mt-1">Composio app URL for LinkedIn.</p>
+                          <p className="text-xs text-muted-foreground mt-1">Composio app URL for LinkedIn. Required for publishing.</p>
                        </div>
                     </div>
                      <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
@@ -552,7 +504,7 @@ export function ProfileDialog({
                              disabled={!!localDbSetupError}
                           />
                           {errors.twitter_url && <p className="text-xs text-destructive mt-1">{errors.twitter_url.message}</p>}
-                           <p className="text-xs text-muted-foreground mt-1">Composio app URL for Twitter.</p>
+                           <p className="text-xs text-muted-foreground mt-1">Composio app URL for Twitter. Required for publishing.</p>
                        </div>
                     </div>
                      <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
@@ -566,7 +518,7 @@ export function ProfileDialog({
                              disabled={!!localDbSetupError}
                           />
                           {errors.youtube_url && <p className="text-xs text-destructive mt-1">{errors.youtube_url.message}</p>}
-                           <p className="text-xs text-muted-foreground mt-1">Composio app URL for YouTube.</p>
+                           <p className="text-xs text-muted-foreground mt-1">Composio app URL for YouTube. Required for publishing.</p>
                        </div>
                     </div>
 
@@ -637,32 +589,49 @@ export function ProfileDialog({
                <div className="space-y-4">
                   <div className="flex justify-between items-center text-sm mb-1">
                      <span>Experience Points (XP):</span>
-                      {/* Add null check before calling toLocaleString */}
-                     <span className="font-medium">{typeof xp === 'number' ? xp.toLocaleString() : 0} XP</span>
+                     <span className="font-medium">{xp.toLocaleString()} XP</span>
                   </div>
                    {/* Stylized Fuel Tank */}
-                   <div className="w-full h-4 bg-muted rounded-full overflow-hidden border border-border/50 relative">
-                     <div
-                       className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 ease-out"
-                       style={{ width: `${Math.min(xp / (BADGES[BADGES.length-1]?.xp || 1000) * 100, 100)}%` }} // Width based on XP towards next/last badge
-                     ></div>
-                      <Fuel className="absolute left-1 top-1/2 transform -translate-y-1/2 h-3 w-3 text-white mix-blend-difference" />
-                   </div>
+                   <TooltipProvider>
+                    <Tooltip>
+                       <TooltipTrigger asChild>
+                           <div className="w-full h-4 bg-muted rounded-full overflow-hidden border border-border/50 relative cursor-help">
+                             <div
+                               className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 ease-out"
+                               style={{ width: `${Math.min(xp / (BADGES[BADGES.length - 1]?.xp || 1000) * 100, 100)}%` }}
+                             ></div>
+                             <Fuel className="absolute left-1 top-1/2 transform -translate-y-1/2 h-3 w-3 text-white mix-blend-difference" />
+                           </div>
+                       </TooltipTrigger>
+                       <TooltipContent>
+                         <p>Earn {XP_PER_REQUEST} XP for each successful AI generation or tuning!</p>
+                       </TooltipContent>
+                    </Tooltip>
+                   </TooltipProvider>
 
                   <div className="mt-4">
                       <h4 className="text-sm font-semibold mb-2">Unlocked Badges:</h4>
-                      {(badges ?? []).length > 0 ? ( // Add null check before accessing length
+                      {badges.length > 0 ? (
                          <div className="flex flex-wrap gap-3">
-                           {(badges ?? []).map((badgeName) => { // Add null check before mapping
+                           {badges.map((badgeName) => {
                              const badgeInfo = BADGES.find(b => b.name === badgeName);
+                             const Icon = badgeInfo?.icon || BadgeCheck; // Fallback icon
                              return (
-                               <div key={badgeName} className="flex items-center gap-2 p-2 border border-green-500/30 bg-green-500/10 rounded-md text-xs">
-                                 <BadgeCheck className="h-4 w-4 text-green-500" />
-                                  <div>
-                                    <span className="font-medium text-green-400">{badgeName}</span>
-                                    {badgeInfo && <p className="text-muted-foreground text-[10px]">{badgeInfo.description}</p>}
-                                  </div>
-                               </div>
+                               <TooltipProvider key={badgeName}>
+                                <Tooltip>
+                                   <TooltipTrigger asChild>
+                                        <div className="flex items-center gap-2 p-2 border border-green-500/30 bg-green-500/10 rounded-md text-xs cursor-default">
+                                           <Icon className="h-4 w-4 text-green-500" />
+                                            <span className="font-medium text-green-400">{badgeName}</span>
+                                        </div>
+                                   </TooltipTrigger>
+                                    {badgeInfo && (
+                                       <TooltipContent>
+                                         <p>{badgeInfo.description}</p>
+                                       </TooltipContent>
+                                    )}
+                                </Tooltip>
+                               </TooltipProvider>
                              );
                            })}
                          </div>
@@ -670,7 +639,6 @@ export function ProfileDialog({
                          <p className="text-xs text-muted-foreground italic">Keep generating posts to unlock badges!</p>
                        )}
                     </div>
-
                </div>
             </div>
 

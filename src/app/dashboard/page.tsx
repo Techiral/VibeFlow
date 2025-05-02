@@ -45,11 +45,9 @@ export default async function DashboardPage() {
               errorMessage = "Database setup incomplete: The 'get_user_profile' function is missing. Please run the full SQL script in `supabase/schema.sql` located in the project's `supabase` directory. See README Step 3.";
               isDbSetupError = true;
           } else if (rpcProfileError.message.includes("relation") && rpcProfileError.message.includes("does not exist")) {
-              // This might still happen if profiles table was dropped but function wasn't recreated
-              errorMessage = "Database setup incomplete: The 'profiles' table is missing. Please run the full SQL script in `supabase/schema.sql` located in the project's `supabase` directory. See README Step 3.";
+              errorMessage = "Database setup incomplete: The 'profiles' table or related objects are missing. Please run the full SQL script in `supabase/schema.sql` located in the project's `supabase` directory. See README Step 3.";
               isDbSetupError = true;
           } else if (rpcProfileError.message.includes("Could not find the") && rpcProfileError.message.includes("column") && rpcProfileError.message.includes("in the schema cache")) {
-              // Specific error for schema cache issue after adding columns
               const missingColumnMatch = rpcProfileError.message.match(/'(.*?)'/);
               const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
               errorMessage = `Database schema mismatch: Column '${missingColumn}' not found in schema cache for 'get_user_profile'. Run the latest 'supabase/schema.sql' script to update the function. See README Step 3.`;
@@ -60,7 +58,6 @@ export default async function DashboardPage() {
           } else {
               // General error from RPC
               errorMessage = `Error initializing user profile via RPC: ${rpcProfileError.message}. Check database function and schema (README Step 3).`;
-              // Consider not setting isDbSetupError for generic errors unless confident it's setup-related
           }
           // If any error occurred during RPC, throw to outer catch block
           if (isDbSetupError || errorMessage) throw rpcProfileError;
@@ -68,64 +65,66 @@ export default async function DashboardPage() {
 
       // The RPC function `get_user_profile` returns an array (SETOF).
       if (rpcProfileData && Array.isArray(rpcProfileData) && rpcProfileData.length > 0) {
-         // Ensure the returned object conforms to the Profile type
          const fetchedProfile = rpcProfileData[0] as Profile;
-         // Validate required fields if necessary, though RPC should handle creation
+         // Basic validation: check if required fields like id are present
          if (fetchedProfile && fetchedProfile.id) {
               profile = fetchedProfile;
+               // Initialize gamification data from profile if available
+               xp = profile.xp ?? DEFAULT_XP;
+               badges = profile.badges ?? DEFAULT_BADGES;
          } else {
-             console.warn("get_user_profile RPC returned incomplete data for user:", user.id);
-             errorMessage = "Failed to load or initialize user profile data. Please try logging out and back in.";
-             if (errorMessage) throw new Error(errorMessage); // Throw if profile loading fails
+             console.warn("[DashboardPage] get_user_profile RPC returned incomplete data for user:", user.id, fetchedProfile);
+             errorMessage = "Failed to load or initialize user profile data (incomplete). Please try logging out and back in or check DB schema (README Step 3).";
+             // No need to throw here, let the error display logic handle it
          }
       } else {
         // This might happen if the user exists in auth but profile creation failed silently in RPC
-        console.warn("get_user_profile RPC returned no data for user:", user.id);
-        errorMessage = "Failed to load or initialize user profile. Please try logging out and back in or check DB schema (README Step 3).";
-        if (errorMessage) throw new Error(errorMessage); // Throw if profile loading fails
+        console.warn("[DashboardPage] get_user_profile RPC returned no data for user:", user.id);
+        errorMessage = "Failed to load or initialize user profile data (no record found). Please try logging out and back in or check DB schema (README Step 3).";
+        // No need to throw here, let the error display logic handle it
       }
 
-      // --- Fetch quota ---
-      const { data: quotaData, error: quotaError } = await supabase
-        .from('quotas')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
+      // --- Fetch quota (Only if profile fetch was somewhat successful or no error yet) ---
+      if (!errorMessage && user) {
+         const { data: quotaData, error: quotaError } = await supabase
+           .from('quotas')
+           .select('*')
+           .eq('user_id', user.id)
+           .single();
 
-      if (quotaError) {
-          console.error("Error fetching quota:", quotaError.message); // Log the specific quota error
-          if (quotaError.message.includes("relation \"public.quotas\" does not exist") || quotaError.code === '42P01') {
-            errorMessage = "Database setup incomplete: The 'quotas' table is missing. Please run the full SQL script in `supabase/schema.sql` located in the project's `supabase` directory. See README Step 3.";
-            isDbSetupError = true;
-          } else if (quotaError.message.includes("permission denied for table quotas") || quotaError.code === '42501') {
-            errorMessage = "Database access error: Row Level Security policy for the 'quotas' table might be missing or incorrect. Please verify the policies in `supabase/schema.sql` have been applied. See README Step 3.";
-            isDbSetupError = true;
-          } else if (quotaError.message.includes("violates row-level security policy")) {
-             errorMessage = `Database security error: Could not access 'quotas' table due to security policy. Ensure 'increment_quota'/'get_remaining_quota' have correct SECURITY settings and check RLS. Details: ${quotaError.message}`;
-             isDbSetupError = true;
-          } else if (quotaError.code !== 'PGRST116') { // Ignore 'PGRST116' (no rows found)
-            if (!errorMessage) { // Avoid overwriting a profile error
-              errorMessage = `Error loading usage quota: ${quotaError.message}. Check database schema and policies (README Step 3).`;
-            }
-          }
-           // If it's a DB setup error or another error we want to display, throw to outer catch
-           if (isDbSetupError || (errorMessage && !errorMessage.includes('profile'))) {
-              throw quotaError;
-           }
+         if (quotaError) {
+             console.error("Error fetching quota:", quotaError.message); // Log the specific quota error
+             if (quotaError.message.includes("relation \"public.quotas\" does not exist") || quotaError.code === '42P01') {
+               errorMessage = "Database setup incomplete: The 'quotas' table is missing. Please run the full SQL script in `supabase/schema.sql` located in the project's `supabase` directory. See README Step 3.";
+               isDbSetupError = true;
+             } else if (quotaError.message.includes("permission denied for table quotas") || quotaError.code === '42501') {
+               errorMessage = "Database access error: Row Level Security policy for the 'quotas' table might be missing or incorrect. Please verify the policies in `supabase/schema.sql` have been applied. See README Step 3.";
+               isDbSetupError = true;
+             } else if (quotaError.message.includes("violates row-level security policy")) {
+                errorMessage = `Database security error: Could not access 'quotas' table due to security policy. Ensure 'increment_quota'/'get_remaining_quota' have correct SECURITY settings and check RLS. Details: ${quotaError.message}`;
+                isDbSetupError = true;
+             } else if (quotaError.code !== 'PGRST116') { // Ignore 'PGRST116' (no rows found) - handled below
+               errorMessage = `Error loading usage quota: ${quotaError.message}. Check database schema and policies (README Step 3).`;
+             }
+              // If it's a DB setup error or another error we want to display, throw to outer catch
+              if (isDbSetupError || errorMessage) {
+                 throw quotaError;
+              }
+         }
+          // If no error or just PGRST116, set quota (will be null if no record yet)
+         quota = quotaData;
+
+          // If quota record doesn't exist (PGRST116 or initial null), and profile exists, use default XP/badges
+         if (!quota && profile) {
+             xp = profile.xp ?? DEFAULT_XP;
+             badges = profile.badges ?? DEFAULT_BADGES;
+         } else if (quota && profile) {
+             // If both exist, calculate XP based on quota (or use profile.xp if preferred)
+             // For consistency, let's rely on profile.xp which should be updated by increments
+              xp = profile.xp ?? (quota.request_count || 0) * 10; // Fallback to calculating
+              badges = profile.badges ?? DEFAULT_BADGES;
+         }
       }
-      quota = quotaData; // Will be null if PGRST116 or if setup succeeded but no record yet
-
-      // Calculate initial XP and Badges based on quota (can be expanded later)
-       if (quota) {
-         xp = (quota.request_count || 0) * 10; // Example: 10 XP per request
-         // Logic to determine initial badges based on XP or request count
-         badges = ['Vibe Starter ✨', 'Content Ninja 🥷'] // Example initial badges
-             .filter((_, index) => xp >= [50, 100][index]); // Adjust thresholds as needed
-       } else {
-           // If quota is null (likely first login), initialize XP and badges to default
-           xp = DEFAULT_XP;
-           badges = DEFAULT_BADGES;
-       }
     }
 
   } catch (error: any) {
@@ -160,6 +159,9 @@ export default async function DashboardPage() {
              const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
             errorMessage = `Database schema mismatch: Column '${missingColumn}' not found or incorrect in table/function. Run the latest 'supabase/schema.sql' script. See README Step 3.`;
             isDbSetupError = true;
+        } else if (error.message.includes("Failed to load or initialize user profile data")) {
+            // Use the specific error message already set in the try block
+            errorMessage = error.message;
         } else {
           // Generic fallback error message
           errorMessage = `An unexpected error occurred: ${error.message}. Check configuration, network, and DB setup (README Step 3).`;
@@ -171,6 +173,11 @@ export default async function DashboardPage() {
 
   if (!user) {
     return redirect('/login');
+  }
+
+  // If profile is still null after attempts and no specific DB error, show the profile loading error
+  if (profile === null && !isDbSetupError && !errorMessage) {
+      errorMessage = "Failed to load user profile. The profile might not have been created correctly in the database.";
   }
 
   if (errorMessage) {

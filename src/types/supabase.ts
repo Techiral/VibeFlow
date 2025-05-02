@@ -10,18 +10,23 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      profiles: { // Updated profiles table definition
+      profiles: { // Updated profiles table definition V3
         Row: {
           id: string // UUID, references auth.users.id
           updated_at: string | null
           username: string | null
           full_name: string | null
           phone_number: string | null
-          composio_mcp_url: string | null // Renamed from composio_url
+          composio_mcp_url: string | null
+          linkedin_url: string | null // Added
+          twitter_url: string | null // Added
+          youtube_url: string | null // Added
           gemini_api_key: string | null
-          is_linkedin_authed: boolean | null // Added boolean flag
-          is_twitter_authed: boolean | null // Added boolean flag
-          is_youtube_authed: boolean | null // Added boolean flag
+          is_linkedin_authed: boolean | null
+          is_twitter_authed: boolean | null
+          is_youtube_authed: boolean | null
+          xp: number | null // Added XP
+          badges: string[] | null // Added Badges (array of text)
         }
         Insert: {
           id: string // UUID, references auth.users.id
@@ -29,11 +34,16 @@ export type Database = {
           username?: string | null
           full_name?: string | null
           phone_number?: string | null
-          composio_mcp_url?: string | null // Renamed
+          composio_mcp_url?: string | null
+          linkedin_url?: string | null // Added
+          twitter_url?: string | null // Added
+          youtube_url?: string | null // Added
           gemini_api_key?: string | null
-          is_linkedin_authed?: boolean | null // Added
-          is_twitter_authed?: boolean | null // Added
-          is_youtube_authed?: boolean | null // Added
+          is_linkedin_authed?: boolean | null
+          is_twitter_authed?: boolean | null
+          is_youtube_authed?: boolean | null
+          xp?: number | null // Added
+          badges?: string[] | null // Added
         }
         Update: {
           id?: string // UUID, references auth.users.id
@@ -41,11 +51,16 @@ export type Database = {
           username?: string | null
           full_name?: string | null
           phone_number?: string | null
-          composio_mcp_url?: string | null // Renamed
+          composio_mcp_url?: string | null
+          linkedin_url?: string | null // Added
+          twitter_url?: string | null // Added
+          youtube_url?: string | null // Added
           gemini_api_key?: string | null
-          is_linkedin_authed?: boolean | null // Added
-          is_twitter_authed?: boolean | null // Added
-          is_youtube_authed?: boolean | null // Added
+          is_linkedin_authed?: boolean | null
+          is_twitter_authed?: boolean | null
+          is_youtube_authed?: boolean | null
+          xp?: number | null // Added
+          badges?: string[] | null // Added
         }
         Relationships: [
           {
@@ -92,84 +107,19 @@ export type Database = {
           }
         ]
       }
-      // Keep existing tokens table definition if needed
+      // Optional: Keep other tables if they exist and are needed
       tokens?: {
-        Row: {
-          access_token: string
-          created_at: string
-          expires_at: string | null
-          id: string
-          profile_metadata: Json | null
-          provider: string
-          refresh_token: string | null
-          user_id: string
-        }
-        Insert: {
-          access_token: string
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          profile_metadata?: Json | null
-          provider: string
-          refresh_token?: string | null
-          user_id: string
-        }
-        Update: {
-          access_token?: string
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          profile_metadata?: Json | null
-          provider?: string
-          refresh_token?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tokens_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
+         Row: { access_token: string; created_at: string; expires_at: string | null; id: string; profile_metadata: Json | null; provider: string; refresh_token: string | null; user_id: string }
+         Insert: { access_token: string; created_at?: string; expires_at?: string | null; id?: string; profile_metadata?: Json | null; provider: string; refresh_token?: string | null; user_id: string }
+         Update: { access_token?: string; created_at?: string; expires_at?: string | null; id?: string; profile_metadata?: Json | null; provider?: string; refresh_token?: string | null; user_id?: string }
+         Relationships: [ { foreignKeyName: "tokens_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "users"; referencedColumns: ["id"] } ]
       }
-      // Keep existing failed_requests table definition if needed
       failed_requests?: {
-        Row: {
-          id: string;
-          user_id: string | null;
-          created_at: string;
-          request_type: string;
-          error_message: string;
-          request_payload: Json | null;
-        };
-        Insert: {
-          id?: string;
-          user_id?: string | null;
-          created_at?: string;
-          request_type: string;
-          error_message: string;
-          request_payload?: Json | null;
-        };
-        Update: {
-          id?: string;
-          user_id?: string | null;
-          created_at?: string;
-          request_type?: string;
-          error_message?: string;
-          request_payload?: Json | null;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "failed_requests_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "users";
-            referencedColumns: ["id"];
-          },
-        ];
-      }
+         Row: { id: string; user_id: string | null; created_at: string; request_type: string; error_message: string; request_payload: Json | null }
+         Insert: { id?: string; user_id?: string | null; created_at?: string; request_type: string; error_message: string; request_payload?: Json | null }
+         Update: { id?: string; user_id?: string | null; created_at?: string; request_type?: string; error_message?: string; request_payload?: Json | null }
+         Relationships: [ { foreignKeyName: "failed_requests_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "users"; referencedColumns: ["id"] } ]
+       }
     }
     Views: {
       [_ in never]: never
@@ -192,17 +142,22 @@ export type Database = {
         Args: {
           p_user_id: string
         }
-        Returns: { // Update return type to match updated profiles.Row
+        Returns: { // Update return type to match updated profiles.Row V3
           id: string
           updated_at: string | null
           username: string | null
           full_name: string | null
           phone_number: string | null
-          composio_mcp_url: string | null // Renamed
+          composio_mcp_url: string | null
+          linkedin_url: string | null // Added
+          twitter_url: string | null // Added
+          youtube_url: string | null // Added
           gemini_api_key: string | null
-          is_linkedin_authed: boolean | null // Added
-          is_twitter_authed: boolean | null // Added
-          is_youtube_authed: boolean | null // Added
+          is_linkedin_authed: boolean | null
+          is_twitter_authed: boolean | null
+          is_youtube_authed: boolean | null
+          xp: number | null // Added
+          badges: string[] | null // Added
         }[] // Ensure it returns an array
       }
        handle_profile_update: { // Added definition for the trigger function if needed

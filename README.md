@@ -4,7 +4,7 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 
 ## Getting Started
 
-**🚨 Important:** If you are seeing errors like `relation "public.profiles" does not exist` or `function public.get_user_profile does not exist`, you **must** run the SQL commands in **Step 3** below. This is **not** an optional step.
+**🚨 Important:** If you are seeing errors like `relation "public.profiles" does not exist`, `function public.get_user_profile does not exist`, `column "composio_mcp_url" does not exist`, or other database-related issues, you **must** run the SQL commands in **Step 3** below. This step ensures your database schema is correctly set up and up-to-date.
 
 1.  **Install Dependencies:**
     ```bash
@@ -29,17 +29,22 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 
 3.  **Set Up Supabase Database (MANDATORY):**
 
-    You **must** run SQL commands to set up the necessary tables (`profiles`, `quotas`) and functions (`increment_quota`, `get_remaining_quota`, `get_user_profile`) in your Supabase project. If you skip this step, the application will **not** work correctly and you will see database errors like:
+    You **must** run SQL commands to set up the necessary tables (`profiles`, `quotas`) and functions (`increment_quota`, `get_remaining_quota`, `get_user_profile`) in your Supabase project. If you skip this step or have an outdated schema, the application will **not** work correctly and you will see database errors like:
      * `relation "public.profiles" does not exist`
      * `relation "public.quotas" does not exist`
      * `function public.get_user_profile does not exist`
      * `function public.increment_quota does not exist`
      * `function public.get_remaining_quota does not exist`
-     * `"composio_mcp_url" column does not exist` (or similar column errors)
+     * `"composio_mcp_url" column does not exist` (or similar column missing errors)
+     * `"could not find function ... in schema cache"`
 
     a.  Navigate to the **SQL Editor** in your Supabase project dashboard.
     b.  Click **+ New query**.
-    c.  Paste and run the **entire** content of the SQL file found at `supabase/schema.sql`. This script is **idempotent**, meaning it can be run multiple times safely. It will create tables/functions if they don't exist or update them if they do. **If you have run a previous version of this script, running the latest version will safely update your schema.**
+    c.  Paste and run the **entire** content of the SQL file found at `supabase/schema.sql`.
+
+    **Idempotent Script:** This script is **idempotent**, meaning it can be run multiple times safely. It uses `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, and `ALTER TABLE ADD COLUMN IF NOT EXISTS` to ensure that:
+        * If you are setting up for the first time, all necessary tables and functions will be created.
+        * If you have run a previous version of this script, running the latest version will **safely add missing columns and update functions** without losing your existing data or causing "already exists" errors.
 
 4.  **Run Development Server:**
     ```bash
@@ -102,61 +107,136 @@ This is a NextJS starter project called VibeFlow, built within Firebase Studio. 
 ## Features
 
 -   **Authentication:** Supabase Auth for user login/signup.
--   **Profile Management:** Users can update their name, username, phone, **Composio MCP URL**, and **Google Gemini API Key**.
+-   **Profile Management:** Users can update their name, username, phone, **Composio MCP URL**, **LinkedIn/Twitter/YouTube URLs (optional)**, and **Google Gemini API Key**.
 -   **Content Input:** Accepts URLs or raw text.
 -   **Persona Selection:** Choose an AI writing style (e.g., Tech CEO, Casual Gen Z).
--   **AI Summarization:** Uses Google Gemini via Genkit (user's API key) to summarize input content.
--   **Social Post Generation:** Generates posts for LinkedIn, Twitter, and YouTube based on the summary and selected persona (user's API key).
--   **Post Tuning:** Refine generated posts with AI suggestions ("Make wittier", "More concise", etc.) (user's API key).
--   **AI Advisor:** Analyzes generated posts for tone, clarity, and engagement, providing inline suggestions for improvement (user's API key).
+-   **AI Summarization:** Uses Google Gemini via Genkit (user's API key) to summarize input content. Includes **auto-retry** for temporary API issues.
+-   **Social Post Generation:** Generates posts for LinkedIn, Twitter, and YouTube based on the summary and selected persona (user's API key). Includes **auto-retry**.
+-   **Post Tuning:** Refine generated posts with AI suggestions ("Make wittier", "More concise", etc.) (user's API key). Includes **auto-retry**.
+-   **AI Advisor:** Analyzes generated posts for tone, clarity, and engagement, providing inline suggestions for improvement (user's API key). Includes **auto-retry**.
 -   **Composio App Authentication:** Authenticate LinkedIn, Twitter, and YouTube accounts via Composio for future publishing.
--   **Quota Management:** Tracks user requests against a monthly limit (100 requests/month). Displays usage in the profile. Disables generation/tuning/analysis when quota is exceeded. Includes retry logic for temporary API issues.
--   **Gamification:** XP meter ("AI Fuel Tank") and unlockable badges for reaching generation milestones.
+-   **Quota Management:** Tracks user requests against a monthly limit (100 requests/month). Displays usage in the profile. Disables generation/tuning/analysis when quota is exceeded. Includes retry logic for temporary API issues. Quota is refunded for failed AI operations.
+-   **Gamification:** XP meter ("AI Fuel Tank") and unlockable badges for reaching generation milestones, with toast/confetti notifications.
 -   **Rate Limiting & Queueing:** Handles API rate limits with auto-retry countdowns (future: optional request queueing).
--   **UI:** Built with Next.js App Router, React Server Components, ShadCN UI, and Tailwind CSS.
--   **Database:** Supabase PostgreSQL for user profiles, quotas, etc.
+-   **UI:** Built with Next.js App Router, React Server Components, ShadCN UI, and Tailwind CSS. Includes hover effects and subtle animations.
+-   **Database:** Supabase PostgreSQL for user profiles, quotas, gamification data (XP/badges), etc.
 -   **(Placeholder) Publishing:** UI elements for publishing posts (integration not fully implemented).
 -   **(Placeholder) Billing:** UI elements for upgrading plans (integration not yet implemented).
+-   **(Optional) Onboarding:** A guided walkthrough for first-time users (react-joyride integration).
 
 ## Supabase Schema (`supabase/schema.sql`)
 
-This file (`supabase/schema.sql`) contains the necessary SQL commands to set up your database. **You must execute this script in the Supabase SQL Editor** (see Step 3 in Getting Started). Failure to do so will result in application errors related to missing tables or functions (e.g., `relation "public.profiles" does not exist`).
+This file (`supabase/schema.sql`) contains the necessary SQL commands to set up your database. **You must execute this script in the Supabase SQL Editor** (see Step 3 in Getting Started). Failure to do so will result in application errors related to missing tables, functions, or columns (e.g., `relation "public.profiles" does not exist`, `column "composio_mcp_url" does not exist`).
 
-**Important:** The script is **idempotent**, using `CREATE OR REPLACE FUNCTION`, `DROP TABLE IF EXISTS ... CASCADE`, and other techniques to allow safe re-running if you need to update the schema.
+**Important:** The script is **idempotent** (safe to run multiple times) using `CREATE OR REPLACE FUNCTION`, `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ADD COLUMN IF NOT EXISTS`, etc. Running the latest version will update your schema without data loss.
 
 ```sql
--- Content of supabase/schema.sql:
--- Supabase Schema Setup V2 (Idempotent)
+-- Content of supabase/schema.sql (V3 - Idempotent & Update-Friendly):
+-- Supabase Schema Setup V3 (Idempotent & Update-Friendly)
 -- This script can be run multiple times safely.
 
--- 1. Profiles Table
 -- Drop dependent functions/views first if they might prevent table alterations
 DROP FUNCTION IF EXISTS public.get_user_profile(uuid);
+DROP FUNCTION IF EXISTS public.increment_quota(uuid, integer);
+DROP FUNCTION IF EXISTS public.get_remaining_quota(uuid);
+DROP FUNCTION IF EXISTS public.handle_profile_update();
 
--- Drop existing profiles table and dependent objects if it exists (to recreate with updated constraints/columns if necessary)
--- Using CASCADE ensures dependent objects like policies, triggers are also dropped before recreating.
--- Alternatively, use ALTER TABLE ADD COLUMN IF NOT EXISTS for less destructive updates.
--- For simplicity in this context, DROP/CREATE is used, but ALTER is preferred in production migrations.
-DROP TABLE IF EXISTS public.profiles CASCADE;
 
-CREATE TABLE public.profiles (
+-- 1. Profiles Table
+CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid NOT NULL PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   updated_at timestamp with time zone,
   username text UNIQUE,
   full_name text,
   phone_number text,
-  composio_mcp_url text, -- Renamed from composio_url
+  composio_mcp_url text, -- For general Composio MCP link
+  linkedin_url text, -- Specific URL if needed
+  twitter_url text, -- Specific URL if needed
+  youtube_url text, -- Specific URL if needed
   gemini_api_key text, -- Consider encrypting this column in a real application
   is_linkedin_authed boolean DEFAULT false,
   is_twitter_authed boolean DEFAULT false,
   is_youtube_authed boolean DEFAULT false,
-  -- Add length constraints back
+  xp integer DEFAULT 0, -- Added XP column
+  badges text[] DEFAULT ARRAY[]::text[], -- Added badges column (array of text)
+  -- Add length constraints if they don't exist
   CONSTRAINT username_length CHECK (char_length(username) <= 50),
   CONSTRAINT full_name_length CHECK (char_length(full_name) <= 100),
   CONSTRAINT phone_number_length CHECK (char_length(phone_number) <= 20),
   CONSTRAINT composio_mcp_url_length CHECK (char_length(composio_mcp_url) <= 255),
+  CONSTRAINT linkedin_url_length CHECK (char_length(linkedin_url) <= 255),
+  CONSTRAINT twitter_url_length CHECK (char_length(twitter_url) <= 255),
+  CONSTRAINT youtube_url_length CHECK (char_length(youtube_url) <= 255),
   CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255)
 );
+
+-- Add columns if they don't exist (Safer than dropping/recreating)
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS composio_mcp_url text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS linkedin_url text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS twitter_url text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS youtube_url text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS gemini_api_key text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_linkedin_authed boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_twitter_authed boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_youtube_authed boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS xp integer DEFAULT 0;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS badges text[] DEFAULT ARRAY[]::text[];
+
+
+-- Add constraints if they don't exist (more complex to check existence, ensure they match above)
+-- Example for one constraint (repeat for others if needed, ensuring names are unique or manage drops)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'username_length' AND conrelid = 'public.profiles'::regclass
+  ) THEN
+    ALTER TABLE public.profiles ADD CONSTRAINT username_length CHECK (char_length(username) <= 50);
+  END IF;
+    IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'full_name_length' AND conrelid = 'public.profiles'::regclass
+  ) THEN
+     ALTER TABLE public.profiles ADD CONSTRAINT full_name_length CHECK (char_length(full_name) <= 100);
+  END IF;
+    IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'phone_number_length' AND conrelid = 'public.profiles'::regclass
+  ) THEN
+     ALTER TABLE public.profiles ADD CONSTRAINT phone_number_length CHECK (char_length(phone_number) <= 20);
+  END IF;
+    IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'composio_mcp_url_length' AND conrelid = 'public.profiles'::regclass
+  ) THEN
+     ALTER TABLE public.profiles ADD CONSTRAINT composio_mcp_url_length CHECK (char_length(composio_mcp_url) <= 255);
+  END IF;
+      IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'linkedin_url_length' AND conrelid = 'public.profiles'::regclass
+  ) THEN
+     ALTER TABLE public.profiles ADD CONSTRAINT linkedin_url_length CHECK (char_length(linkedin_url) <= 255);
+  END IF;
+    IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'twitter_url_length' AND conrelid = 'public.profiles'::regclass
+  ) THEN
+     ALTER TABLE public.profiles ADD CONSTRAINT twitter_url_length CHECK (char_length(twitter_url) <= 255);
+  END IF;
+    IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'youtube_url_length' AND conrelid = 'public.profiles'::regclass
+  ) THEN
+     ALTER TABLE public.profiles ADD CONSTRAINT youtube_url_length CHECK (char_length(youtube_url) <= 255);
+  END IF;
+    IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'gemini_api_key_length' AND conrelid = 'public.profiles'::regclass
+  ) THEN
+     ALTER TABLE public.profiles ADD CONSTRAINT gemini_api_key_length CHECK (char_length(gemini_api_key) <= 255);
+  END IF;
+END $$;
+
 
 -- Enable Row Level Security if not already enabled
 DO $$
@@ -170,7 +250,7 @@ BEGIN
 END $$;
 
 
--- Policies for profiles table
+-- Policies for profiles table (Recreate using CREATE OR REPLACE POLICY if supported, or DROP/CREATE)
 DROP POLICY IF EXISTS "Allow authenticated users to view own profile" ON public.profiles;
 CREATE POLICY "Allow authenticated users to view own profile"
   ON public.profiles FOR SELECT
@@ -199,13 +279,7 @@ CREATE TRIGGER on_profile_update
 
 
 -- 2. Quotas Table
--- Drop dependent functions first if needed
-DROP FUNCTION IF EXISTS public.increment_quota(uuid, integer);
-DROP FUNCTION IF EXISTS public.get_remaining_quota(uuid);
-
--- Drop and recreate quotas table (consider ALTER TABLE for production)
-DROP TABLE IF EXISTS public.quotas CASCADE;
-CREATE TABLE public.quotas (
+CREATE TABLE IF NOT EXISTS public.quotas (
   user_id uuid NOT NULL PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   request_count integer NOT NULL DEFAULT 0,
   last_reset_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -213,6 +287,14 @@ CREATE TABLE public.quotas (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   ip_address inet -- Optional: For tracking if needed
 );
+
+-- Add columns if they don't exist
+ALTER TABLE public.quotas ADD COLUMN IF NOT EXISTS request_count integer NOT NULL DEFAULT 0;
+ALTER TABLE public.quotas ADD COLUMN IF NOT EXISTS last_reset_at timestamp with time zone NOT NULL DEFAULT now();
+ALTER TABLE public.quotas ADD COLUMN IF NOT EXISTS quota_limit integer NOT NULL DEFAULT 100;
+ALTER TABLE public.quotas ADD COLUMN IF NOT EXISTS created_at timestamp with time zone NOT NULL DEFAULT now();
+ALTER TABLE public.quotas ADD COLUMN IF NOT EXISTS ip_address inet;
+
 
 -- Enable Row Level Security if not already enabled
 DO $$
@@ -231,57 +313,66 @@ CREATE POLICY "Allow authenticated users to view own quota"
   ON public.quotas FOR SELECT
   USING (auth.uid() = user_id);
 
--- Policies for modification should generally be restricted if using SECURITY DEFINER functions
--- Ensure SECURITY DEFINER functions (like increment_quota) are granted necessary permissions implicitly
--- or explicitly grant update/insert to the function owner role if needed.
+-- Allow modification only through SECURITY DEFINER functions
+-- Drop insert/update policies if they exist and are not needed
+DROP POLICY IF EXISTS "Allow insert for own quota" ON public.quotas;
+DROP POLICY IF EXISTS "Allow update for own quota" ON public.quotas;
 
 
 -- 3. get_user_profile Function (Upsert Logic, returns SETOF)
+-- Improved: Explicitly re-fetch after insert/on conflict to ensure return
 CREATE OR REPLACE FUNCTION public.get_user_profile(p_user_id uuid)
 RETURNS SETOF public.profiles -- Return type matches the table structure
 LANGUAGE plpgsql
-SECURITY DEFINER -- Important: Allows the function to bypass RLS briefly for insert
+SECURITY DEFINER -- Important: Allows the function to bypass RLS briefly for insert/update
 SET search_path = public -- Ensures it uses the public schema
 AS $$
 DECLARE
   profile_record public.profiles;
 BEGIN
-  -- Try to select the profile
+  -- Try to select the profile first
   SELECT * INTO profile_record FROM public.profiles WHERE id = p_user_id;
 
   -- If profile doesn't exist, insert a new one with defaults
   IF NOT FOUND THEN
-    -- Ensure all columns with NOT NULL or default constraints are handled
-    INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed)
-    VALUES (p_user_id, now(), false, false, false)
-    ON CONFLICT (id) DO NOTHING -- Handle potential race conditions if called concurrently
-    RETURNING * INTO profile_record; -- Return the newly inserted row
+    RAISE NOTICE '[get_user_profile] Profile not found for user %, attempting to insert.', p_user_id;
+    BEGIN
+        INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed, xp, badges)
+        VALUES (p_user_id, now(), false, false, false, 0, ARRAY[]::text[])
+        ON CONFLICT (id) DO NOTHING; -- Handle potential race conditions
 
-    -- If ON CONFLICT DO NOTHING occurs, the record might still be null, re-fetch it
-    IF profile_record IS NULL THEN
-       SELECT * INTO profile_record FROM public.profiles WHERE id = p_user_id;
-    END IF;
+        -- After attempting insert (even if conflict occurred), try selecting again
+        SELECT * INTO profile_record FROM public.profiles WHERE id = p_user_id;
 
+        IF NOT FOUND THEN
+             RAISE WARNING '[get_user_profile] CRITICAL: Could not find or create profile for user % after insert attempt. Check permissions and auth triggers.', p_user_id;
+             RETURN; -- Exit if still not found
+        END IF;
+         RAISE NOTICE '[get_user_profile] Profile found/created for user %.', p_user_id;
+
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING '[get_user_profile] Error during insert for user %: %', p_user_id, SQLERRM;
+        -- Attempt to select again even if insert failed, maybe it exists now due to race condition
+         SELECT * INTO profile_record FROM public.profiles WHERE id = p_user_id;
+         IF NOT FOUND THEN
+             RAISE WARNING '[get_user_profile] CRITICAL: Profile still not found for user % after insert error.', p_user_id;
+             RETURN; -- Exit if still not found
+         END IF;
+    END;
   END IF;
 
   -- Return the found or newly created profile record
-  -- Check if a record was actually found or created before returning
-  IF profile_record IS NOT NULL THEN
-      RETURN NEXT profile_record;
-  ELSE
-      -- This case should ideally not happen if the user exists in auth.users
-      -- But handle it just in case by returning nothing or raising an error
-      RAISE WARNING 'Could not find or create profile for user %', p_user_id;
-  END IF;
+  RETURN NEXT profile_record;
 
 END;
 $$;
 
 -- Grant execute permission to authenticated users
+REVOKE EXECUTE ON FUNCTION public.get_user_profile(uuid) FROM PUBLIC; -- Ensure no public access first
 GRANT EXECUTE ON FUNCTION public.get_user_profile(uuid) TO authenticated;
 
 
--- 4. increment_quota Function (Handles Reset and Increment)
+-- 4. increment_quota Function (Handles Reset and Increment, updates XP)
 CREATE OR REPLACE FUNCTION public.increment_quota(p_user_id uuid, p_increment_amount integer)
 RETURNS integer -- Returns the new REMAINING quota
 LANGUAGE plpgsql
@@ -293,18 +384,30 @@ DECLARE
   current_last_reset timestamp with time zone;
   new_count integer;
   remaining_quota integer;
+  xp_gain integer := 0; -- XP gained in this operation
 BEGIN
   -- Upsert quota record: Get current details or initialize if not exists
   INSERT INTO public.quotas (user_id, request_count, quota_limit, last_reset_at)
   VALUES (p_user_id, 0, 100, now())
   ON CONFLICT (user_id)
   DO UPDATE SET
-    -- Only update if necessary, prevent unnecessary writes
-    request_count = public.quotas.request_count, -- No change on conflict here, fetch below
-    quota_limit = public.quotas.quota_limit,
-    last_reset_at = public.quotas.last_reset_at
+    -- This forces fetching the actual current values if conflict occurs
+    request_count = public.quotas.request_count
   RETURNING request_count, quota_limit, last_reset_at
   INTO current_count, current_limit, current_last_reset;
+
+  -- If the INSERT happened (no conflict), fetch the values
+   IF current_count IS NULL THEN
+       SELECT q.request_count, q.quota_limit, q.last_reset_at
+       INTO current_count, current_limit, current_last_reset
+       FROM public.quotas q WHERE q.user_id = p_user_id;
+
+       -- Handle case where user might have been deleted between checks (unlikely but safe)
+       IF NOT FOUND THEN
+          RAISE WARNING '[increment_quota] User % not found after insert/conflict.', p_user_id;
+          RETURN -1; -- Indicate error
+       END IF;
+   END IF;
 
   -- Check if a month has passed since the last reset
   IF current_last_reset < (now() - interval '1 month') THEN
@@ -324,15 +427,24 @@ BEGIN
   -- Ensure count doesn't go below zero on correction (negative increments)
   IF new_count < 0 THEN
      new_count := 0;
+     xp_gain := 0; -- No XP gain if decrementing/correcting
+  ELSIF p_increment_amount > 0 THEN
+      xp_gain := p_increment_amount * 10; -- Calculate XP gain (10 per request)
   END IF;
 
   -- Update the quota record with the potentially reset/incremented values
   UPDATE public.quotas
   SET
     request_count = new_count,
-    last_reset_at = current_last_reset,
-    quota_limit = current_limit -- Keep limit consistent, could be updated elsewhere
+    last_reset_at = current_last_reset -- Update reset time if it changed
   WHERE user_id = p_user_id;
+
+   -- Update XP in the profiles table if XP was gained
+   IF xp_gain > 0 THEN
+       UPDATE public.profiles
+       SET xp = COALESCE(xp, 0) + xp_gain
+       WHERE id = p_user_id;
+   END IF;
 
   -- Calculate remaining quota
   remaining_quota := current_limit - new_count;
@@ -356,7 +468,7 @@ GRANT EXECUTE ON FUNCTION public.increment_quota(uuid, integer) TO authenticated
 CREATE OR REPLACE FUNCTION public.get_remaining_quota(p_user_id uuid)
 RETURNS integer
 LANGUAGE plpgsql
-SECURITY DEFINER -- Important: Allows bypassing RLS to potentially reset quota
+SECURITY DEFINER -- Allows bypassing RLS to potentially reset quota
 AS $$
 DECLARE
   current_count integer;
@@ -365,22 +477,23 @@ DECLARE
   remaining_quota integer;
   reset_occurred boolean := false;
 BEGIN
-  -- Get current quota details
-  SELECT
-    COALESCE(q.request_count, 0),
-    COALESCE(q.quota_limit, 100),
-    COALESCE(q.last_reset_at, now())
-  INTO
-    current_count,
-    current_limit,
-    current_last_reset
+  -- Get current quota details, initializing if necessary using the upsert logic from increment_quota
+  INSERT INTO public.quotas (user_id, request_count, quota_limit, last_reset_at)
+  VALUES (p_user_id, 0, 100, now())
+  ON CONFLICT (user_id)
+  DO NOTHING; -- Just ensure the row exists
+
+  -- Fetch the current values after ensuring the row exists
+  SELECT q.request_count, q.quota_limit, q.last_reset_at
+  INTO current_count, current_limit, current_last_reset
   FROM public.quotas q
   WHERE q.user_id = p_user_id;
 
-   -- If no record exists, assume full quota (this implies user hasn't used any yet)
-   IF NOT FOUND THEN
-     RETURN 100; -- Return default limit
-   END IF;
+  -- Handle case where user might not exist (should be rare if auth is working)
+  IF NOT FOUND THEN
+      RAISE WARNING '[get_remaining_quota] Could not find quota record for user % even after insert attempt.', p_user_id;
+      RETURN -1; -- Indicate error
+  END IF;
 
   -- Check if a month has passed
   IF current_last_reset < (now() - interval '1 month') THEN
@@ -392,16 +505,10 @@ BEGIN
     -- Set the values used for calculation to the reset state
     current_count := 0;
     reset_occurred := true;
-    -- The limit remains the same
   END IF;
 
   -- Calculate remaining quota based on current (potentially reset) count
   remaining_quota := current_limit - current_count;
-
-  -- Optionally log if reset occurred
-  -- IF reset_occurred THEN
-  --   RAISE NOTICE '[get_remaining_quota] Quota reset performed for user %', p_user_id;
-  -- END IF;
 
   RETURN GREATEST(0, remaining_quota); -- Ensure it doesn't return negative
 
@@ -418,8 +525,8 @@ GRANT EXECUTE ON FUNCTION public.get_remaining_quota(uuid) TO authenticated;
 -- 6. Optional Seed Steps (Commented out - Run manually if needed after initial setup)
 /*
 -- Seed initial profiles for existing users (run once after table creation)
-INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed)
-SELECT id, NOW(), false, false, false FROM auth.users
+INSERT INTO public.profiles (id, updated_at, is_linkedin_authed, is_twitter_authed, is_youtube_authed, xp, badges)
+SELECT id, NOW(), false, false, false, 0, ARRAY[]::text[] FROM auth.users
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed initial quotas for existing users (run once after table creation)
@@ -428,7 +535,4 @@ SELECT id, 0, NOW(), 100, NOW() FROM auth.users
 ON CONFLICT (user_id) DO NOTHING;
 */
 
-RAISE NOTICE 'VibeFlow schema setup/update script completed.';
-```
-
-**Security Note:** Storing API keys directly in the database (`profiles.gemini_api_key`) is generally **not recommended for production environments** without proper security measures like encryption at rest or using a secrets management service. For this hackathon project, it's a simplification.
+RAISE NOTICE 'VibeFlow schema setup/update script completed (V3).';

@@ -27,7 +27,7 @@ import { Info, Loader2, Save, ExternalLink, CreditCard, Database, Settings2, Wif
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { handleDeauthenticateApp } from '@/services/composio-service'; // Corrected import
-// Removed import for startComposioLogin as it no longer exists
+// Removed startComposioLogin import as it's handled via API route now
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { App as ComposioAppEnum } from "composio-core"; // Import Composio App enum
 import { toast as sonnerToast } from 'sonner';
@@ -92,8 +92,7 @@ export function ProfileDialog({
   const [badges, setBadges] = useState<string[]>(initialBadges ?? []);
   const [localDbSetupError, setLocalDbSetupError] = useState<string | null>(dbSetupError);
   const [isComposioAuthenticating, setIsComposioAuthenticating] = useState<Partial<Record<ComposioApp, boolean>>>({});
-  // Removed state related to fetching key as it's user-provided now
-  // const [composioStatus, setComposioStatus] = useState({ loading: false, success: false, errorMessage: null, apiKey: null });
+
 
    useEffect(() => {
     setProfile(initialProfile);
@@ -107,7 +106,6 @@ export function ProfileDialog({
     register,
     handleSubmit,
     reset,
-    // Removed setValue as it's not needed for this field anymore
     formState: { errors, isDirty },
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -307,8 +305,6 @@ export function ProfileDialog({
     });
   };
 
- // Removed handleGetComposioKey function
-
 
  const handleAuthenticateApp = useCallback(async (appName: ComposioApp) => {
     console.log(`Starting authentication for ${appName}...`);
@@ -365,12 +361,13 @@ export function ProfileDialog({
                 description = `Composio SDK configuration error: Could not find 'getEntity'. Please check the server logs and ensure 'composio-core' is correctly installed/initialized on the backend.`;
              }
             toast({ title: `${appName} Auth Failed`, description, variant: "destructive", duration: 10000 }); // Longer duration for important errors
-            setIsComposioAuthenticating(prev => ({...prev, [appName]: false}));
+
         }
     } catch (error: any) {
         console.error(`Error in handleAuthenticateApp for ${appName}:`, error);
         toast({ title: `${appName} Auth Error`, description: error.message || 'Unknown error during authentication.', variant: 'destructive' });
-        setIsComposioAuthenticating(prev => ({...prev, [appName]: false}));
+    } finally {
+         setIsComposioAuthenticating(prev => ({...prev, [appName]: false}));
     }
  }, [user.id, toast, localDbSetupError, profile?.composio_mcp_url, profile?.composio_api_key]); // Add composio_api_key dependency
 
@@ -441,8 +438,8 @@ export function ProfileDialog({
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Settings2 className="h-5 w-5"/> User Information</h3>
                 <div className="space-y-4">
                    <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-x-4 gap-y-2">
-                     <Label htmlFor="email" className="sm:text-right sm:col-span-1">Email</Label>
-                     <Input id="email" value={user?.email || 'N/A'} readOnly disabled className="col-span-1 sm:col-span-2 bg-muted/50"/>
+                     <Label htmlFor="email-profile" className="sm:text-right sm:col-span-1">Email</Label> {/* Added ID */}
+                     <Input id="email-profile" value={user?.email || 'N/A'} readOnly disabled className="col-span-1 sm:col-span-2 bg-muted/50"/> {/* Added ID */}
                    </div>
                    <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-x-4 gap-y-2">
                      <Label htmlFor="full_name" className="sm:text-right sm:col-span-1">Full Name</Label>
@@ -586,8 +583,8 @@ export function ProfileDialog({
 
                       {/* App Authentication Section */}
                        <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2 pt-2">
-                          <Label className="sm:text-right sm:col-span-1 mt-1">App Connections</Label>
-                          <div className="col-span-1 sm:col-span-2 space-y-3">
+                          <Label className="sm:text-right sm:col-span-1 mt-1" id="app-connections-label">App Connections</Label> {/* Added ID */}
+                          <div className="col-span-1 sm:col-span-2 space-y-3" aria-labelledby="app-connections-label"> {/* Added aria-labelledby */}
                              {(['linkedin', 'twitter', 'youtube'] as ComposioApp[]).map((appName) => {
                                 const isAuthenticated = getAuthStatus(appName);
                                 const isAuthenticating = isComposioAuthenticating[appName];
@@ -613,6 +610,7 @@ export function ProfileDialog({
                                                               onClick={() => handleAuthenticateApp(appName)}
                                                               disabled={isAuthenticated || isAuthenticating || !!localDbSetupError || !profile?.composio_mcp_url || !profile?.composio_api_key} // Disable if already authenticated or missing pre-reqs
                                                               loading={isAuthenticating}
+                                                              aria-label={isAuthenticated ? `${appName} connected` : `Authenticate ${appName}`} // Added aria-label
                                                           >
                                                               {isAuthenticated ? "Connected" : "Authenticate"}
                                                           </Button>
@@ -636,6 +634,7 @@ export function ProfileDialog({
                                                                onClick={() => handleDeauthenticateAppAction(appName)}
                                                                disabled={isComposioAuthenticating[appName] || !!localDbSetupError} // Disable during auth/deauth
                                                                // loading={isDeauthenticating[appName]} // Add loading state if deauth is async
+                                                               aria-label={`Disconnect ${appName}`} // Added aria-label
                                                            >
                                                                Disconnect
                                                            </Button>
@@ -669,7 +668,7 @@ export function ProfileDialog({
                        <span className="text-sm font-medium">Experience Points (XP):</span>
                        <span className="font-bold text-primary">{xp?.toLocaleString() ?? 0} XP</span>
                     </div>
-                     <Progress value={xp % 100} className="h-2"/>
+                     <Progress value={xp % 100} className="h-2" aria-label={`Experience points progress: ${xp % 100}% towards next level`} /> {/* Added aria-label */}
 
                     <div className="mt-4">
                         <h4 className="text-sm font-semibold mb-2">Unlocked Badges:</h4>
@@ -720,7 +719,7 @@ export function ProfileDialog({
                        <span className="text-sm font-medium">Monthly Requests Used:</span>
                        <span className="font-semibold">{quotaUsed} / {quotaLimit}</span>
                     </div>
-                     <Progress value={quotaPercentage > 100 ? 100 : quotaPercentage} className={`h-2 ${quotaExceeded ? ' [&>*]:bg-destructive' : ''}`} />
+                     <Progress value={quotaPercentage > 100 ? 100 : quotaPercentage} className={`h-2 ${quotaExceeded ? ' [&>*]:bg-destructive' : ''}`} aria-label={`Quota usage: ${quotaUsed} of ${quotaLimit} requests used (${quotaPercentage.toFixed(0)}%)`} /> {/* Added aria-label */}
                     {quotaExceeded && (
                       <Alert variant="destructive" className="mt-2">
                         <Info className="h-4 w-4" />
@@ -773,5 +772,3 @@ export function ProfileDialog({
       </Dialog>
     );
 }
-
-    

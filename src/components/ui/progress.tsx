@@ -7,10 +7,14 @@ import { cn } from "@/lib/utils"
 
 const Progress = React.forwardRef<
   React.ElementRef<typeof ProgressPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof ProgressPrimitive.Root>
->(({ className, value, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof ProgressPrimitive.Root> & {
+    "aria-label"?: string; // Add aria-label prop
+  }
+>(({ className, value, "aria-label": ariaLabel, ...props }, ref) => ( // Destructure aria-label
   <ProgressPrimitive.Root
     ref={ref}
+    aria-label={ariaLabel} // Assign aria-label
+    aria-valuenow={value} // Add aria-valuenow for screen readers
     className={cn(
       "relative h-4 w-full overflow-hidden rounded-full bg-secondary",
       className

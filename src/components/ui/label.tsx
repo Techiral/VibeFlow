@@ -14,9 +14,10 @@ const Label = React.forwardRef<
   React.ElementRef<typeof LabelPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root> &
     VariantProps<typeof labelVariants>
->(({ className, ...props }, ref) => (
+>(({ className, htmlFor, ...props }, ref) => ( // Added htmlFor explicitly
   <LabelPrimitive.Root
     ref={ref}
+    htmlFor={htmlFor} // Use htmlFor prop
     className={cn(labelVariants(), className)}
     {...props}
   />

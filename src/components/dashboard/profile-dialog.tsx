@@ -1,3 +1,4 @@
+
 // components/dashboard/profile-dialog.tsx
 'use client';
 
@@ -39,7 +40,8 @@ interface ProfileDialogProps {
   initialProfile: Profile | null;
   initialQuota: Quota | null;
   onProfileUpdate: (profile: Profile) => void; // Callback to update parent state
-  // onXpUpdate: (xp: number, newBadge?: string) => void; // Callback removed, parent will derive from profile
+  initialXp: number; // Receive initial XP
+  initialBadges: string[]; // Receive initial badges
   dbSetupError: string | null;
 }
 
@@ -59,9 +61,9 @@ const profileSchema = z.object({
 type ProfileFormData = z.infer<typeof profileSchema>;
 
 const DEFAULT_QUOTA_LIMIT = 100;
-// const XP_PER_REQUEST = 10; // Removed, XP is now read directly from profile
+const XP_PER_REQUEST = 10; // Moved definition here
 
-// Badge definitions - moved to dashboard.tsx for consistency, but keep here for reference if needed
+// Badge definitions - keep for display logic in dialog
 const BADGES = [
   { xp: 50, name: 'Vibe Starter ✨', description: 'Generated 5 posts!', icon: Star },
   { xp: 100, name: 'Content Ninja 🥷', description: 'Generated 10 posts!', icon: Trophy },
@@ -76,7 +78,8 @@ export function ProfileDialog({
   initialProfile,
   initialQuota,
   onProfileUpdate,
-  // onXpUpdate, // Removed prop
+  initialXp, // Use initial props
+  initialBadges, // Use initial props
   dbSetupError,
 }: ProfileDialogProps) {
   const supabase = createClient();
@@ -85,25 +88,19 @@ export function ProfileDialog({
   const [isAuthenticating, setIsAuthenticating] = useState<Partial<Record<ComposioApp, boolean>>>({});
   const [profile, setProfile] = useState<Profile | null>(initialProfile);
   const [quota, setQuota] = useState<Quota | null>(initialQuota);
-  // XP and Badges are now derived directly from the 'profile' state
-  // const [xp, setXp] = useState(initialProfile?.xp ?? 0); // Removed XP state
-  // const [badges, setBadges] = useState<string[]>(initialProfile?.badges ?? []); // Removed Badges state
-  // const [showConfetti, setShowConfetti] = useState(false); // Keep confetti for visual feedback
+  // Use initial props directly for display
+  const xp = initialXp ?? 0;
+  const badges = initialBadges ?? [];
   const [localDbSetupError, setLocalDbSetupError] = useState<string | null>(dbSetupError);
-
-  // Derive xp and badges directly from profile state
-  const xp = profile?.xp ?? 0;
-  const badges = profile?.badges ?? [];
-
 
   // Ensure local state updates if initial props change
   useEffect(() => {
     setProfile(initialProfile);
     setQuota(initialQuota);
-    // setXp(initialProfile?.xp ?? 0); // Removed XP update
-    // setBadges(initialProfile?.badges ?? []); // Removed Badges update
+    // No need to update local xp/badges state here, just use props directly
     setLocalDbSetupError(dbSetupError);
-  }, [initialProfile, initialQuota, dbSetupError]); // Removed initialXp, initialBadges
+  }, [initialProfile, initialQuota, dbSetupError]); // Removed initialXp, initialBadges deps
+
 
   // Fetch Quota inside dialog if initialQuota is null and no DB error
    useEffect(() => {
@@ -589,7 +586,7 @@ export function ProfileDialog({
                <div className="space-y-4">
                   <div className="flex justify-between items-center text-sm mb-1">
                      <span>Experience Points (XP):</span>
-                     <span className="font-medium">{xp.toLocaleString()} XP</span>
+                     <span className="font-medium">{(xp ?? 0).toLocaleString()} XP</span>
                   </div>
                    {/* Stylized Fuel Tank */}
                    <TooltipProvider>
@@ -598,7 +595,7 @@ export function ProfileDialog({
                            <div className="w-full h-4 bg-muted rounded-full overflow-hidden border border-border/50 relative cursor-help">
                              <div
                                className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 ease-out"
-                               style={{ width: `${Math.min(xp / (BADGES[BADGES.length - 1]?.xp || 1000) * 100, 100)}%` }}
+                               style={{ width: `${Math.min((xp ?? 0) / (BADGES[BADGES.length - 1]?.xp || 1000) * 100, 100)}%` }}
                              ></div>
                              <Fuel className="absolute left-1 top-1/2 transform -translate-y-1/2 h-3 w-3 text-white mix-blend-difference" />
                            </div>
@@ -611,7 +608,7 @@ export function ProfileDialog({
 
                   <div className="mt-4">
                       <h4 className="text-sm font-semibold mb-2">Unlocked Badges:</h4>
-                      {badges.length > 0 ? (
+                      {badges && badges.length > 0 ? (
                          <div className="flex flex-wrap gap-3">
                            {badges.map((badgeName) => {
                              const badgeInfo = BADGES.find(b => b.name === badgeName);

@@ -1,3 +1,4 @@
+
 // dashboard.tsx
 'use client';
 
@@ -18,13 +19,13 @@ import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, In
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
-import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post'; // Added analyzePost
+import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post'; // Corrected import path
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
 import { ProfileDialog } from './profile-dialog'; // Import the profile dialog
 import { Progress } from "@/components/ui/progress"; // Import Progress component
-import AiAdvisorPanel from './ai-advisor-panel'; // Import AI Advisor Panel
+import AiAdvisorPanel from '@/components/dashboard/ai-advisor-panel'; // Corrected import path
 import { toast as sonnerToast } from 'sonner'; // Import sonner toast for confetti effect
 import Confetti from 'react-confetti';
 import Joyride, { Step, CallBackProps } from 'react-joyride'; // Import react-joyride
@@ -49,8 +50,8 @@ interface DashboardProps {
   user: User;
   initialProfile: Profile | null;
   initialQuota: Quota | null;
-  initialXp?: number; // Made optional as it will be derived from profile
-  initialBadges?: string[]; // Made optional as it will be derived from profile
+  initialXp: number; // Added initial XP
+  initialBadges: string[]; // Added initial badges
 }
 
 type SocialPlatform = 'linkedin' | 'twitter' | 'youtube';
@@ -117,7 +118,7 @@ const ONBOARDING_STEPS: Step[] = [
 ];
 
 
-export default function Dashboard({ user, initialProfile, initialQuota }: DashboardProps) {
+export default function Dashboard({ user, initialProfile, initialQuota, initialXp, initialBadges }: DashboardProps) {
   const router = useRouter();
   const supabase = createClient();
   const { toast } = useToast();
@@ -140,10 +141,13 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
   const [showConfetti, setShowConfetti] = useState(false);
   const [runOnboarding, setRunOnboarding] = useState(false);
   const [lastAwardedBadge, setLastAwardedBadge] = useState<string | null>(null); // Track last badge for notification
+  // Use initial values for XP and badges directly
+  const [xp, setXp] = useState<number>(initialXp);
+  const [badges, setBadges] = useState<string[]>(initialBadges);
 
    // --- Calculate Derived State ---
-   const xp = profile?.xp ?? 0; // Default to 0 if profile or xp is null/undefined
-   const badges = profile?.badges ?? []; // Default to empty array
+   // const xp = profile?.xp ?? 0; // Use state variable instead
+   // const badges = profile?.badges ?? []; // Use state variable instead
    const quotaUsed = quota?.request_count ?? 0;
    const quotaLimit = quota?.quota_limit ?? DEFAULT_QUOTA_LIMIT;
    const quotaRemaining = Math.max(0, quotaLimit - quotaUsed);
@@ -162,6 +166,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
       // --- Ensure Profile ---
       if (!currentProfile) {
          try {
+            // Use RPC function which handles upsert logic
             const { data, error } = await supabase
               .rpc('get_user_profile', { p_user_id: user.id });
 
@@ -184,6 +189,10 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
              } else if (data && Array.isArray(data) && data.length > 0) {
                  currentProfile = data[0] as Profile;
                  setProfile(currentProfile);
+                 // Also update local XP/Badges state from fetched profile
+                 setXp(currentProfile.xp ?? initialXp);
+                 setBadges(currentProfile.badges ?? initialBadges);
+
                   // Check if onboarding needs to run for this profile
                   if (currentProfile && !currentProfile.badges?.includes('onboarded')) { // Example: Use a badge or a dedicated field
                       setRunOnboarding(true);
@@ -203,68 +212,96 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
          if (!profile.badges?.includes('onboarded')) {
              setRunOnboarding(true);
          }
+         // Ensure local XP/Badge state matches initial profile if profile exists
+         setXp(profile.xp ?? initialXp);
+         setBadges(profile.badges ?? initialBadges);
       }
 
 
       // --- Ensure Quota ---
       if (!currentQuota) {
         try {
-          const { data, error } = await supabase
-            .from('quotas')
-            .select('user_id, request_count, quota_limit, last_reset_at')
-            .eq('user_id', user.id)
-            .maybeSingle();
+          // Use RPC function to get remaining quota (handles reset logic)
+          const { data: remainingQuota, error: rpcError } = await supabase
+             .rpc('get_remaining_quota', { p_user_id: user.id });
 
-          if (error && error.code === 'PGRST116') {
-             if (currentProfile && !setupErrorMsg) setDbSetupError(null);
-          } else if (error) {
-              console.error("Error fetching/creating quota on client:", error.message);
-              if (error.message.includes("relation \"public.quotas\" does not exist")) {
-                  setupErrorMsg = "Database setup incomplete: Missing 'quotas' table. Please run the SQL script from `supabase/schema.sql`. See README Step 3.";
-              } else if (error.message.includes("permission denied for table quotas")) {
-                  setupErrorMsg = "Database access error: Permission denied for 'quotas' table. Check Row Level Security policies. See README Step 3.";
-              } else if (error.code === '42501') {
-                  setupErrorMsg = "Database access error: Permission denied for 'quotas' table (Code: 42501). Verify RLS policies. See README Step 3.";
-              } else if (error.message.includes("406")) {
-                  setupErrorMsg = `Database configuration issue: Could not fetch quota (Error 406 - Not Acceptable). Please check table/column access and RLS policies. See README Step 3. Details: ${error.message}`;
-                  toast({ title: "Quota Load Error", description: "Could not retrieve usage data due to a configuration issue (406).", variant: "destructive" });
-              } else {
-                  toast({ title: "Quota Error", description: `Could not load usage data: ${error.message}`, variant: "destructive" });
-                  if (!setupErrorMsg) setupErrorMsg = `Error loading quota data. Details: ${error.message}`;
-              }
-              if (setupErrorMsg) setDbSetupError(setupErrorMsg);
-          } else {
-              if (data && 'user_id' in data && 'request_count' in data && 'quota_limit' in data && 'last_reset_at' in data) {
-                 currentQuota = data as Quota;
-                 setQuota(currentQuota);
-                 if (currentProfile) setDbSetupError(null);
-              } else if (data) { // Data received but incomplete
-                  console.warn("Fetched quota data is missing expected fields:", data);
-                  if (!setupErrorMsg) setupErrorMsg = `Incomplete quota data received from database.`;
-                   setDbSetupError(setupErrorMsg);
-              } else { // No data and no error (maybeSingle returned null)
-                  // This is okay, quota might not exist yet.
+           if (rpcError) {
+             console.error('Error calling get_remaining_quota RPC:', rpcError.message);
+             let errorMsg = `Failed to load usage data: ${rpcError.message}`;
+             if (rpcError.message.includes("function public.get_remaining_quota") && rpcError.message.includes("does not exist")) {
+                 errorMsg = "Database setup incomplete: Missing 'get_remaining_quota' function. Run setup script.";
+             } else if (rpcError.message.includes("relation \"public.quotas\" does not exist")) { // Check if function itself reports missing table
+                 errorMsg = "Database setup incomplete: Missing 'quotas' table. Run setup script.";
+             } else if (rpcError.message.includes("permission denied")) {
+                 errorMsg = "Database access error: Permission denied for 'get_remaining_quota'. Check RLS/function security.";
+             }
+             setupErrorMsg = errorMsg; // Overwrite previous profile error if quota fails more specifically
+             toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
+           } else {
+              // RPC succeeded, now fetch the full quota details for display
+               const { data: quotaDetails, error: selectError } = await supabase
+                 .from('quotas')
+                 .select('user_id, request_count, quota_limit, last_reset_at')
+                 .eq('user_id', user.id)
+                 .maybeSingle(); // Handle no row found gracefully
+
+               if (selectError && selectError.code !== 'PGRST116') { // Handle errors other than "No rows found"
+                   console.error('Error fetching quota details after RPC:', selectError.message);
+                   let errorMsg = `Failed to load full usage details: ${selectError.message}`;
+                   if (selectError.message.includes("relation \"public.quotas\" does not exist")) {
+                     errorMsg = "Database setup incomplete: Missing 'quotas' table. Run setup script.";
+                   } else if (selectError.message.includes("permission denied")) {
+                     errorMsg = "Database access error: Permission denied for 'quotas' table. Check RLS.";
+                   } else if (selectError.message.includes("406")) {
+                       errorMsg = `Config issue: Could not fetch quota details (406). Check RLS/table access.`;
+                       toast({ title: "Quota Load Error", description: "Could not retrieve usage details (406).", variant: "destructive" });
+                   }
+                   if (!setupErrorMsg) setupErrorMsg = errorMsg;
+                   toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
+               } else if (quotaDetails) {
+                   currentQuota = quotaDetails as Quota;
+                   setQuota(currentQuota);
+                   if (currentProfile && !setupErrorMsg) setDbSetupError(null); // Clear setup error if profile loaded and quota now loaded
+               } else if (typeof remainingQuota === 'number') {
+                  // If select found no row but RPC worked, initialize local state
+                  console.log("Quota record not found yet for user:", user.id);
+                  const limit = DEFAULT_QUOTA_LIMIT; // Assume default limit
+                  const used = Math.max(0, limit - remainingQuota);
+                  const nowISO = new Date().toISOString();
+                  currentQuota = {
+                      user_id: user.id,
+                      request_count: used,
+                      quota_limit: limit,
+                      last_reset_at: nowISO, // Use current time as placeholder reset
+                      created_at: nowISO, // Placeholder
+                      ip_address: null // Placeholder
+                  };
+                  setQuota(currentQuota);
                   if (currentProfile && !setupErrorMsg) setDbSetupError(null);
-              }
-          }
-        } catch (error: any) {
-          console.error("Unexpected client error fetching quota:", error.message);
-          toast({ title: "Quota Error", description: `Unexpected error: ${error.message}`, variant: "destructive" });
-           if (!setupErrorMsg) setupErrorMsg = `Unexpected error loading quota data. Check console. Details: ${error.message}`;
-           setDbSetupError(setupErrorMsg);
+               } else {
+                   if (!setupErrorMsg) setupErrorMsg = "Could not determine initial quota state.";
+                   toast({ title: 'Quota Error', description: setupErrorMsg, variant: 'destructive' });
+               }
+           }
+        } catch (err: any) {
+          console.error('Unexpected error fetching quota:', err.message);
+          if (!setupErrorMsg) setupErrorMsg = `Unexpected error loading usage data: ${err.message}`;
+          toast({ title: 'Quota Error', description: setupErrorMsg, variant: 'destructive' });
         }
       } else {
+         // Quota was loaded initially, ensure no latent DB error remains displayed
          if (currentProfile && !setupErrorMsg) {
              setDbSetupError(null);
          }
       }
 
-      if (setupErrorMsg) {
+      // Finally, set the derived DB setup error state
+       if (setupErrorMsg) {
          setDbSetupError(setupErrorMsg);
        }
     };
     ensureData();
-  }, [user.id, supabase, toast, profile, quota]); // Dependencies
+  }, [user.id, supabase, toast, profile, quota, dbSetupError, initialBadges, initialXp]); // Added initial props as deps
 
 
   // --- Callbacks and Event Handlers ---
@@ -272,30 +309,74 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
   // Function to handle profile updates from the dialog
   const handleProfileUpdate = useCallback((updatedProfile: Profile) => {
     setProfile(updatedProfile);
-    // Quota limit might be updated via profile - handle if applicable
-    // setQuota(prev => prev ? { ...prev, quota_limit: updatedProfile.some_new_limit_field ?? DEFAULT_QUOTA_LIMIT } : null);
+    // Update local state for XP and badges based on the updated profile
+    const newXp = updatedProfile.xp ?? initialXp;
+    const newBadges = updatedProfile.badges ?? initialBadges;
+    setXp(newXp);
+    setBadges(newBadges);
+    // Check for new badges earned due to XP update
+    checkAndAwardBadges(newXp, newBadges);
     toast({ title: "Profile Updated", description: "Your profile information has been saved." });
-  }, [toast]); // Added dependencies
+  }, [toast, initialBadges, initialXp]); // Include initial props in dependency array
 
-  // Callback for XP and badge updates from ProfileDialog
-  const handleXpBadgeUpdate = useCallback((newXp: number, newBadgeName?: string) => {
-     // Update profile state locally - this might be redundant if profileDialog already updated it, but ensures consistency
-     setProfile(prev => prev ? { ...prev, xp: newXp, badges: newBadgeName ? [...(prev.badges ?? []), newBadgeName] : prev.badges } : null);
 
-     if (newBadgeName && newBadgeName !== lastAwardedBadge) {
-         const badgeInfo = BADGES.find(b => b.name === newBadgeName);
-         if (badgeInfo) {
-             setShowConfetti(true);
-             sonnerToast.success(`Badge Unlocked: ${badgeInfo.name}!`, {
-               description: badgeInfo.description,
-               duration: 5000,
-               icon: <badgeInfo.icon className="text-green-500" />,
-             });
-             setLastAwardedBadge(newBadgeName); // Avoid re-notifying for the same badge
-             setTimeout(() => setShowConfetti(false), 5000);
-         }
-     }
-  }, [lastAwardedBadge]); // Added dependencies
+  // Check for badge awards whenever XP or badges change
+  useEffect(() => {
+    checkAndAwardBadges(xp, badges);
+  }, [xp, badges]); // Depends on state variables
+
+
+   // Function to check and award badges
+   const checkAndAwardBadges = useCallback((currentXp: number, currentBadges: string[]) => {
+        let newlyAwardedBadge: string | null = null;
+
+        BADGES.forEach(badge => {
+            // Check if XP threshold is met AND the badge hasn't been awarded yet
+            if (currentXp >= badge.xp && !currentBadges.includes(badge.name)) {
+                 console.log(`Badge condition met: ${badge.name}`);
+                 newlyAwardedBadge = badge.name; // Store the latest badge to award
+
+                 // Update badge state immediately (optimistic UI)
+                 const updatedBadges = [...currentBadges, badge.name];
+                 setBadges(updatedBadges);
+
+
+                 // Update badge in the database (fire and forget for now, error handled below)
+                 supabase
+                   .from('profiles')
+                   .update({ badges: updatedBadges }) // Use the updated badges array
+                   .eq('id', user.id)
+                   .then(({ error }) => {
+                       if (error) {
+                           console.error(`Failed to save badge "${badge.name}" to database:`, error);
+                           toast({ title: "Badge Save Error", description: `Could not save badge: ${badge.name}`, variant: "destructive"});
+                           // Revert optimistic UI update if needed
+                           setBadges(currentBadges); // Revert to previous state
+                       } else {
+                          console.log(`Badge "${badge.name}" saved to DB.`);
+                          // Update the main profile state as well after DB success
+                           setProfile(prev => prev ? { ...prev, badges: updatedBadges } : null);
+                       }
+                   });
+            }
+        });
+
+        // Notify about the *last* newly awarded badge in this check
+        if (newlyAwardedBadge && newlyAwardedBadge !== lastAwardedBadge) {
+            const badgeInfo = BADGES.find(b => b.name === newlyAwardedBadge);
+             if (badgeInfo) {
+                 setShowConfetti(true);
+                 sonnerToast.success(`Badge Unlocked: ${badgeInfo.name}!`, {
+                   description: badgeInfo.description,
+                   duration: 5000,
+                   icon: <badgeInfo.icon className="text-green-500" />,
+                 });
+                 setLastAwardedBadge(newlyAwardedBadge); // Avoid re-notifying for the same badge immediately
+                 setTimeout(() => setShowConfetti(false), 5000);
+             }
+        }
+
+   }, [supabase, user.id, toast, lastAwardedBadge]); // Removed profile?.badges dependency
 
 
    // Function to check quota and increment if allowed
@@ -308,13 +389,13 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
      let currentRemaining = quotaRemaining;
      // If quota is not loaded, attempt to fetch remaining via RPC
      if (quota === null) {
+         console.log("Quota is null, attempting to fetch remaining via RPC...");
          try {
               const { data: fetchedQuotaRemaining, error: fetchError } = await supabase
                   .rpc('get_remaining_quota', { p_user_id: user.id });
 
               if (fetchError) {
                   console.error("RPC Error checking remaining quota:", fetchError.message);
-                   // Handle specific setup errors
                    if (fetchError.message.includes("function public.get_remaining_quota") && fetchError.message.includes("does not exist")) {
                        setDbSetupError("Database function 'get_remaining_quota' missing. Run setup script.");
                        toast({ title: "Database Error", description: "Missing function to check usage.", variant: "destructive" });
@@ -325,6 +406,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
               }
               if (typeof fetchedQuotaRemaining === 'number') {
                   currentRemaining = fetchedQuotaRemaining;
+                  console.log("Fetched remaining quota via RPC:", currentRemaining);
               } else {
                   console.warn("get_remaining_quota RPC did not return a number:", fetchedQuotaRemaining);
                   toast({ title: "Quota Check Error", description: "Could not determine remaining usage.", variant: "destructive" });
@@ -344,20 +426,32 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
      }
 
      // Optimistic UI update for quota count
-     const optimisticQuota = quota ? { ...quota, request_count: (quota.request_count ?? 0) + incrementAmount } : null;
+     const optimisticQuotaUsed = quotaUsed + incrementAmount;
+     const optimisticQuotaRemaining = quotaLimit - optimisticQuotaUsed;
+     const optimisticQuotaPercentage = quotaLimit > 0 ? (optimisticQuotaUsed / quotaLimit) * 100 : 0;
+     const optimisticQuota = quota ? { ...quota, request_count: optimisticQuotaUsed } : null;
      if (optimisticQuota) setQuota(optimisticQuota);
+     // Optimistic UI update for XP
+     const optimisticXp = xp + (incrementAmount * XP_PER_REQUEST);
+     setXp(optimisticXp); // Update XP state
+
 
     try {
-        const { data: newRemaining, error } = await supabase.rpc('increment_quota', {
+        console.log(`Attempting to increment quota by ${incrementAmount} for user ${user.id}`);
+        const { data: newRemainingRpc, error } = await supabase.rpc('increment_quota', {
            p_user_id: user.id,
            p_increment_amount: incrementAmount
         });
 
        if (error) {
-          if (optimisticQuota) setQuota(quota); // Revert optimistic update
+          // Revert optimistic updates
+          setQuota(quota);
+          setXp(xp); // Revert XP state
+
           console.error("Error incrementing quota RPC:", error.message);
           if (error.message.includes("quota_exceeded")) {
              toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
+             // Ensure UI reflects the limit being hit
              if(quota) setQuota(prev => prev ? {...prev, request_count: prev.quota_limit ?? DEFAULT_QUOTA_LIMIT} : null);
           } else if (error.message.includes("function public.increment_quota") && error.message.includes("does not exist")) {
              setDbSetupError("Database function 'increment_quota' missing. Run setup script.");
@@ -371,7 +465,8 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
           return false;
        }
 
-       // --- Success: Refetch BOTH quota and profile ---
+       // --- Success: Refetch BOTH quota and profile (including XP/badges) ---
+        console.log("Quota increment RPC successful, refetching data...");
        const [{ data: updatedQuotaData, error: fetchQuotaError }, { data: updatedProfileData, error: fetchProfileError }] = await Promise.all([
             supabase
                 .from('quotas')
@@ -389,34 +484,45 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
         if (fetchQuotaError){
            console.error("Error fetching quota after increment:", fetchQuotaError.message);
            toast({ title: "Quota Update Warning", description: "Usage updated, but failed to refresh details.", variant: "default" });
-            if (typeof newRemaining === 'number' && newRemaining >= 0 && quota) { // Update locally if possible
-                 setQuota(prev => prev ? {...prev, request_count: (prev.quota_limit ?? DEFAULT_QUOTA_LIMIT) - newRemaining } : null );
-             }
+            // Keep optimistic update if refetch fails
         } else if (updatedQuotaData) {
+            console.log("Refetched quota data:", updatedQuotaData);
             setQuota(updatedQuotaData as Quota);
         }
 
         if (fetchProfileError) {
             console.error("Error fetching profile after increment:", fetchProfileError.message);
              toast({ title: "Profile Update Warning", description: "Usage updated, but failed to refresh profile data (XP/badges).", variant: "default" });
+            // Keep optimistic update if refetch fails
         } else if (updatedProfileData) {
-            setProfile(updatedProfileData as Profile); // Update profile state with new XP/badges
+            console.log("Refetched profile data:", updatedProfileData);
+            const completeProfile = updatedProfileData as Profile;
+            setProfile(completeProfile); // Update profile state with new XP/badges
+            // Update local state for XP and badges
+            const newXp = completeProfile.xp ?? initialXp;
+            const newBadges = completeProfile.badges ?? initialBadges;
+            setXp(newXp);
+            setBadges(newBadges);
+             // Explicitly trigger badge check after profile update from DB
+            checkAndAwardBadges(newXp, newBadges);
         }
 
 
-       if (typeof newRemaining === 'number' && newRemaining < 0) {
+       if (typeof newRemainingRpc === 'number' && newRemainingRpc < 0) {
            toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
            return false;
        }
 
       return true; // Increment successful
     } catch (rpcError: any) {
-        if (optimisticQuota) setQuota(quota); // Revert optimistic update
-      console.error("Unexpected Error calling increment_quota RPC:", rpcError.message);
-      toast({ title: "Quota Error", description: `An unexpected error occurred updating usage: ${rpcError.message}`, variant: "destructive" });
-      return false;
+        // Revert optimistic updates on unexpected error
+        setQuota(quota);
+        setXp(xp); // Revert XP state
+        console.error("Unexpected Error calling increment_quota RPC:", rpcError.message);
+        toast({ title: "Quota Error", description: `An unexpected error occurred updating usage: ${rpcError.message}`, variant: "destructive" });
+        return false;
     }
-  }, [dbSetupError, quota, quotaRemaining, supabase, user.id, toast]); // Added dependencies
+  }, [dbSetupError, quota, quotaRemaining, quotaUsed, quotaLimit, xp, supabase, user.id, toast, checkAndAwardBadges, initialXp, initialBadges]); // Added dependencies
 
 
   const handleSignOut = async () => {
@@ -426,6 +532,8 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
     } else {
       setProfile(null);
       setQuota(null);
+      setXp(0); // Reset XP
+      setBadges([]); // Reset badges
       setContentInput('');
       setSummary(null);
       setPostDrafts({});
@@ -469,7 +577,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
         let summaryResult: SummarizeContentOutput | null = null;
         try {
             // 1. Summarize Content (includes retry logic)
-            summaryResult = await summarizeContent({ content: contentInput, persona: persona }, { apiKey });
+            summaryResult = await summarizeContent({ content: contentInput }, { apiKey });
             if (summaryResult?.summary) {
                 setSummary(summaryResult.summary);
                 summarySuccess = true;
@@ -502,7 +610,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
         if (summarySuccess && summaryResult) {
             const platforms: SocialPlatform[] = ['linkedin', 'twitter', 'youtube'];
             const postPromises = platforms.map(platform =>
-                generateSocialPosts({ summary: summaryResult!.summary, platform, persona: persona }, { apiKey })
+                generateSocialPosts({ summary: summaryResult!.summary, platform }, { apiKey })
                 .then(result => {
                     if (result?.post) {
                         postsSuccessCount++;
@@ -557,7 +665,16 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                          supabase.from('profiles').select('*, xp, badges').eq('id', user.id).single()
                     ]);
                     if (!refreshQuotaError && refreshedQuota) setQuota(refreshedQuota as Quota);
-                     if (!refreshProfileError && refreshedProfile) setProfile(refreshedProfile as Profile);
+                     if (!refreshProfileError && refreshedProfile) {
+                         const completeProfile = refreshedProfile as Profile;
+                         setProfile(completeProfile);
+                          // Update local state for XP and badges
+                          const newXp = completeProfile.xp ?? initialXp;
+                          const newBadges = completeProfile.badges ?? initialBadges;
+                          setXp(newXp);
+                          setBadges(newBadges);
+                         checkAndAwardBadges(newXp, newBadges); // Recheck badges after profile refresh
+                     }
                  }
             } catch (refundCatchError: any) {
                  console.error("Unexpected Error during quota refund attempt:", refundCatchError.message);
@@ -597,7 +714,7 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
     startTransition(async () => {
         try {
             // Pass platform context to the tuning function (includes retry logic)
-            const tunedResult = await tuneSocialPosts({ originalPost, feedback, platform, persona: persona }, { apiKey });
+            const tunedResult = await tuneSocialPosts({ originalPost, feedback, platform }, { apiKey });
             if (tunedResult?.tunedPost) {
                 setPostDrafts(prev => ({ ...prev, [platform]: tunedResult.tunedPost }));
                 toast({ title: "Post Tuned!", description: `Applied feedback: "${feedback}"`, variant: "default" });
@@ -638,7 +755,16 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                            supabase.from('profiles').select('*, xp, badges').eq('id', user.id).single()
                        ]);
                        if (!refreshQuotaError && refreshedQuota) setQuota(refreshedQuota as Quota);
-                       if (!refreshProfileError && refreshedProfile) setProfile(refreshedProfile as Profile);
+                       if (!refreshProfileError && refreshedProfile) {
+                           const completeProfile = refreshedProfile as Profile;
+                           setProfile(completeProfile);
+                           // Update local state for XP and badges
+                            const newXp = completeProfile.xp ?? initialXp;
+                            const newBadges = completeProfile.badges ?? initialBadges;
+                            setXp(newXp);
+                            setBadges(newBadges);
+                            checkAndAwardBadges(newXp, newBadges);
+                       }
                      }
                  } catch (refundCatchError: any) {
                      console.error("Unexpected Error during tuning quota refund attempt:", refundCatchError.message);
@@ -721,7 +847,16 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                        supabase.from('profiles').select('*, xp, badges').eq('id', user.id).single()
                    ]);
                    if (!refreshQuotaError && refreshedQuota) setQuota(refreshedQuota as Quota);
-                   if (!refreshProfileError && refreshedProfile) setProfile(refreshedProfile as Profile);
+                   if (!refreshProfileError && refreshedProfile) {
+                       const completeProfile = refreshedProfile as Profile;
+                       setProfile(completeProfile);
+                       // Update local state for XP and badges
+                        const newXp = completeProfile.xp ?? initialXp;
+                        const newBadges = completeProfile.badges ?? initialBadges;
+                        setXp(newXp);
+                        setBadges(newBadges);
+                       checkAndAwardBadges(newXp, newBadges);
+                   }
                 }
             } catch (refundCatchError: any) {
                 console.error("Unexpected Error during analysis quota refund attempt:", refundCatchError.message);
@@ -817,7 +952,16 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                          supabase.from('profiles').select('*, xp, badges').eq('id', user.id).single()
                      ]);
                      if (!refreshQuotaError && refreshedQuota) setQuota(refreshedQuota as Quota);
-                     if (!refreshProfileError && refreshedProfile) setProfile(refreshedProfile as Profile);
+                     if (!refreshProfileError && refreshedProfile) {
+                          const completeProfile = refreshedProfile as Profile;
+                         setProfile(completeProfile);
+                           // Update local state for XP and badges
+                           const newXp = completeProfile.xp ?? initialXp;
+                           const newBadges = completeProfile.badges ?? initialBadges;
+                           setXp(newXp);
+                           setBadges(newBadges);
+                         checkAndAwardBadges(newXp, newBadges);
+                     }
                  }
              } catch (refundCatchError: any) {
                  console.error("Unexpected Error during publishing quota refund attempt:", refundCatchError.message);
@@ -853,7 +997,10 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
                      if (error) console.error("Failed to mark onboarding complete:", error);
                      else {
                          // Update local profile state as well
-                          setProfile(prev => prev ? { ...prev, badges: updatedBadges } : null);
+                          const completeProfile = {...profile, badges: updatedBadges};
+                          setProfile(completeProfile);
+                          setBadges(updatedBadges); // Update local badge state
+                          checkAndAwardBadges(completeProfile.xp ?? 0, updatedBadges); // Recheck badges immediately
                      }
                  });
          }
@@ -1190,10 +1337,13 @@ export default function Dashboard({ user, initialProfile, initialQuota }: Dashbo
           initialProfile={profile}
           initialQuota={quota}
           onProfileUpdate={handleProfileUpdate}
-          onXpUpdate={handleXpBadgeUpdate} // Pass the callback
+          // Pass current XP and badges to dialog for display consistency
+          initialXp={xp}
+          initialBadges={badges}
           dbSetupError={dbSetupError}
         />
     </div>
     </TooltipProvider>
   );
 }
+

@@ -1,9 +1,10 @@
-// src/services/composio-service.ts
+/**
+ * @fileOverview Composio service for handling authentication. (Largely removed)
+ *
+ */
 'use server';
 
-// All Composio related functions (handleDeauthenticateApp, authenticateComposioApp) are removed
-// as the Composio integration is being removed from the application.
+// Removed authentication and deauthentication functions as Composio integration is removed.
 
-console.log("composio-service.ts: Composio functions removed.");
+export { }; // Ensure the file is treated as a module
 
-// This file can be deleted if no other non-Composio services are planned.

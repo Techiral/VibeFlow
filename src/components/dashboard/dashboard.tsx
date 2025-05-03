@@ -33,6 +33,7 @@ import BoostPanel from './boost-panel';
 import ToneTunerSheet from './tone-tuner-sheet';
 import HelpModal from './help-modal';
 import PreviewMockup from './preview-mockup';
+import { cn } from "@/lib/utils"; // Import cn utility function
 
 
 // Persona types and mapping (updated with optgroups)
@@ -1241,7 +1242,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              <div className="w-full sm:w-2/3 md:w-1/2">
                 <Label htmlFor="persona-select">AI Persona</Label>
                  <Select value={persona} onValueChange={(value) => setPersona(value as Persona)}>
-                   <SelectTrigger id="persona-select-trigger" className="w-full" disabled={isDisabled} aria-label="Select AI Persona">
+                   <SelectTrigger id="persona-select-trigger" className="w-full" disabled={isDisabled} aria-label="Select AI Persona" textValue={PERSONAS[persona]?.label}>
                      <SelectValue placeholder="Select Persona" />
                    </SelectTrigger>
                    <SelectContent>
@@ -1271,6 +1272,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
               disabled={isDisabled}
               suppressHydrationWarning
               spellCheck={true} // Enable spellcheck
+              aria-label="Content Input"
             />
           </CardContent>
           <CardFooter>
@@ -1349,6 +1351,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                                       suppressHydrationWarning
                                       spellCheck={true}
                                       disabled={isDisabled || isTuning[platform]}
+                                      aria-label={`${platform} post draft`}
                                     />
                                  )}
                                 {/* Preview Mockup */}

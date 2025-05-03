@@ -15,11 +15,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Keep original imports for now, but use CustomTooltip exported as Tooltip
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, User as UserIcon, LogOut, Copy, Bot, Palette, Lightbulb, AlertCircle, X, Loader2, Check, Sparkles, Settings2, BookOpen, Info, ChevronRight, Hash, Smile } from 'lucide-react'; // Added missing icons
+import { Zap, User as UserIcon, LogOut, Copy, Bot, Palette, Lightbulb, AlertCircle, X, Loader2, Check, Sparkles, Settings2, BookOpen, Info, ChevronRight, Hash, Smile } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ProfileDialog } from './profile-dialog';
 import { Progress } from "@/components/ui/progress";
@@ -158,7 +158,7 @@ export default function Dashboard({
     analyzing: null,
   });
   const [rateLimitState, setRateLimitState] = useState<RateLimitState>({});
-  const rateLimitTimers = useRef<{[key in RateLimitOperation]?: NodeJS.Timeout}>({});
+  const rateLimitTimers = useRef<{ [key in RateLimitOperation]?: NodeJS.Timeout }>({});
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(serverErrorMessage);
   const [isAiAdvisorOpen, setIsAiAdvisorOpen] = useState(false);
@@ -187,7 +187,7 @@ export default function Dashboard({
 
 
   // --- Badge Awarding ---
-   const checkAndAwardBadges = useCallback(async (currentXp: number, achievedBadges: string[]) => {
+  const checkAndAwardBadges = useCallback(async (currentXp: number, achievedBadges: string[]) => {
     const newlyAwardedBadges: typeof BADGES[number][] = [];
     BADGES.forEach(badge => {
       if (!badge.hidden && currentXp >= badge.xp && !achievedBadges.includes(badge.name)) {
@@ -213,15 +213,15 @@ export default function Dashboard({
 
         // Show confetti and toast for each new badge
         newlyAwardedBadges.forEach((badge, index) => {
-           setTimeout(() => {
-             setShowConfetti(true);
-             setConfettiPieces(200 + index * 50); // Vary confetti slightly
-             sonnerToast.success(`🏆 Badge Unlocked: ${badge.name}`, {
-                 description: badge.description,
-                 duration: 5000,
-             });
-             // Hide confetti after a delay
-             setTimeout(() => setShowConfetti(false), 4000);
+          setTimeout(() => {
+            setShowConfetti(true);
+            setConfettiPieces(200 + index * 50); // Vary confetti slightly
+            sonnerToast.success(`🏆 Badge Unlocked: ${badge.name}`, {
+              description: badge.description,
+              duration: 5000,
+            });
+            // Hide confetti after a delay
+            setTimeout(() => setShowConfetti(false), 4000);
           }, index * 500); // Stagger notifications slightly
         });
 
@@ -242,8 +242,8 @@ export default function Dashboard({
     setIsClient(true);
     // Start tour if user hasn't completed it and profile exists
     if (profile && !badges.includes('onboarded') && !dbSetupError && !errorMessage) {
-       const timer = setTimeout(() => setRunTour(true), 500);
-       return () => clearTimeout(timer);
+      const timer = setTimeout(() => setRunTour(true), 500);
+      return () => clearTimeout(timer);
     }
   }, [profile, badges, dbSetupError, errorMessage]);
 
@@ -254,20 +254,20 @@ export default function Dashboard({
     if (FINISHED_STATUSES.includes(status)) {
       setRunTour(false);
       if (status === 'finished' && profile && !badges.includes('onboarded')) {
-         try {
-           const { error: updateError } = await supabase
-             .from('profiles')
-             .update({ badges: [...badges, 'onboarded'] })
-             .eq('id', user.id);
+        try {
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ badges: [...badges, 'onboarded'] })
+            .eq('id', user.id);
 
-           if (updateError) {
-             throw updateError;
-           }
-           setBadges(prev => [...prev, 'onboarded']);
-           console.log("Onboarding badge awarded.");
-         } catch (error: any) {
-           console.error("Failed to save onboarding completion:", error.message);
-         }
+          if (updateError) {
+            throw updateError;
+          }
+          setBadges(prev => [...prev, 'onboarded']);
+          console.log("Onboarding badge awarded.");
+        } catch (error: any) {
+          console.error("Failed to save onboarding completion:", error.message);
+        }
       }
     }
   }, [supabase, user.id, profile, badges]);
@@ -289,9 +289,8 @@ export default function Dashboard({
               return newState;
             });
           } else {
-            const remainingSeconds = Math.ceil((state.retryAfter - now) / 1000);
-            // Update state for display if needed, or just log
-            console.log(`Rate limit ${operationKey}: ${remainingSeconds}s remaining`);
+            // This forces a re-render to update the displayed time
+            setRateLimitState(prev => ({ ...prev }));
             const timer = setTimeout(updateTimer, 1000);
             timers.push(timer);
           }
@@ -303,17 +302,17 @@ export default function Dashboard({
     return () => {
       timers.forEach(clearTimeout);
     };
-  }, [rateLimitState]);
+  }, [rateLimitState]); // Rerun effect when rateLimitState changes
 
 
- // --- Data Fetching and Initialization ---
+  // --- Data Fetching and Initialization ---
   useEffect(() => {
     const ensureData = async () => {
-       let currentProfile = profile;
-       let currentQuota = quota;
-       let currentBadges = badges;
-       let profileErrorOccurred = false;
-       let quotaErrorOccurred = false;
+      let currentProfile = profile;
+      let currentQuota = quota;
+      let currentBadges = badges;
+      let profileErrorOccurred = false;
+      let quotaErrorOccurred = false;
 
       // 1. Ensure Profile Exists
       if (!currentProfile) {
@@ -337,75 +336,75 @@ export default function Dashboard({
 
         } catch (error: any) {
           console.error("Error fetching/creating profile on client:", error.message);
-           setErrorMessage(prev => prev ? `${prev}\nProfile Error: ${error.message}` : `Profile Error: ${error.message}`);
-           profileErrorOccurred = true;
+          setErrorMessage(prev => prev ? `${prev}\nProfile Error: ${error.message}` : `Profile Error: ${error.message}`);
+          profileErrorOccurred = true;
         }
       } else {
-         if (badges !== currentProfile.badges) setBadges(currentProfile.badges ?? []);
-         if (xp !== currentProfile.xp) setXp(currentProfile.xp ?? 0);
+        if (badges !== currentProfile.badges) setBadges(currentProfile.badges ?? []);
+        if (xp !== currentProfile.xp) setXp(currentProfile.xp ?? 0);
       }
 
       // 2. Ensure Quota Exists (only if profile is ok)
       if (!currentQuota && !profileErrorOccurred) {
         console.log("Quota missing, attempting to fetch/create...");
         try {
-           const { data: quotaData, error: quotaFetchError } = await supabase
-             .from('quotas')
-             .select('*')
-             .eq('user_id', user.id)
-             .maybeSingle();
+          const { data: quotaData, error: quotaFetchError } = await supabase
+            .from('quotas')
+            .select('*')
+            .eq('user_id', user.id)
+            .maybeSingle();
 
-           if (quotaFetchError) throw quotaFetchError;
+          if (quotaFetchError) throw quotaFetchError;
 
-           if (!quotaData) {
-               console.warn("Quota record missing. Attempting to create default.");
-                const { data: insertedQuota, error: insertError } = await supabase
-                    .from('quotas')
-                    .insert({ user_id: user.id })
-                    .select()
-                    .single();
+          if (!quotaData) {
+            console.warn("Quota record missing. Attempting to create default.");
+            const { data: insertedQuota, error: insertError } = await supabase
+              .from('quotas')
+              .insert({ user_id: user.id }) // Let DB handle defaults
+              .select()
+              .single();
 
-                if (insertError) {
-                   console.error("Error inserting default quota:", insertError.message);
-                    // Check for RLS violation specifically
-                   if (insertError.message.includes("violates row-level security policy")) {
-                       setErrorMessage(prev => prev ? `${prev}\nQuota Error: Database permissions error (RLS). Check Supabase policies.` : `Quota Error: Database permissions error (RLS). Check Supabase policies.`);
-                   } else {
-                       throw insertError; // Propagate other insert errors
-                   }
-                   currentQuota = null; // Indicate quota is still missing/error state
-                } else {
-                   currentQuota = insertedQuota;
-                }
-
-           } else {
-             currentQuota = quotaData;
-           }
-
-           setQuota(currentQuota);
-            if (currentQuota) {
-                console.log("Quota fetched/created successfully:", currentQuota.request_count, "/", currentQuota.quota_limit);
+            if (insertError) {
+              console.error("Error inserting default quota:", insertError.message);
+              // Check for RLS violation specifically
+              if (insertError.message.includes("violates row-level security policy")) {
+                setErrorMessage(prev => prev ? `${prev}\nQuota Error: Database permissions error (RLS). Check Supabase policies.` : `Quota Error: Database permissions error (RLS). Check Supabase policies.`);
+              } else {
+                throw insertError; // Propagate other insert errors
+              }
+              currentQuota = null; // Indicate quota is still missing/error state
+            } else {
+              currentQuota = insertedQuota;
             }
 
+          } else {
+            currentQuota = quotaData;
+          }
+
+          setQuota(currentQuota);
+          if (currentQuota) {
+            console.log("Quota fetched/created successfully:", currentQuota.request_count, "/", currentQuota.quota_limit);
+          }
+
         } catch (error: any) {
-           console.error("Error fetching/creating quota on client:", error.message);
-           setErrorMessage(prev => prev ? `${prev}\nQuota Error: ${error.message}` : `Quota Error: ${error.message}`);
-           quotaErrorOccurred = true;
+          console.error("Error fetching/creating quota on client:", error.message);
+          setErrorMessage(prev => prev ? `${prev}\nQuota Error: ${error.message}` : `Quota Error: ${error.message}`);
+          quotaErrorOccurred = true;
         }
       }
 
-       // 3. Check for badges after ensuring profile exists
-        if (currentProfile && !profileErrorOccurred) {
-             checkAndAwardBadges(currentProfile.xp ?? 0, currentBadges);
-        }
+      // 3. Check for badges after ensuring profile exists
+      if (currentProfile && !profileErrorOccurred) {
+        checkAndAwardBadges(currentProfile.xp ?? 0, currentBadges);
+      }
 
     };
 
     if (!dbSetupError) {
       ensureData();
     } else {
-        setProfile(null);
-        setQuota(null);
+      setProfile(null);
+      setQuota(null);
     }
 
   }, [user.id, supabase, dbSetupError, checkAndAwardBadges, profile, quota, badges, xp]);
@@ -429,211 +428,222 @@ export default function Dashboard({
 
 
   // --- Helper for AI Calls with Quota Check, Error Handling, and Retry ---
-   const callAiWithRetry = async <T>(
-     aiFunction: () => Promise<T>,
-     cost: number,
-     operationKey: RateLimitOperation
-    ): Promise<{ data: T | null; error: Error | null; rateLimited?: boolean; retryAfter?: number }> => {
-        const currentLimitState = rateLimitState[operationKey];
-        if (currentLimitState?.active && Date.now() < currentLimitState.retryAfter) {
-            const retryTime = new Date(currentLimitState.retryAfter).toLocaleTimeString();
-            console.warn(`Operation ${operationKey} is rate-limited. Try again after ${retryTime}`);
-            return { data: null, error: new Error("Rate limit active"), rateLimited: true, retryAfter: currentLimitState.retryAfter };
+  const callAiWithRetry = async <T>(
+    aiFunction: () => Promise<T>,
+    cost: number,
+    operationKey: RateLimitOperation
+  ): Promise<{ data: T | null; error: Error | null; rateLimited?: boolean; retryAfter?: number }> => {
+    const currentLimitState = rateLimitState[operationKey];
+    if (currentLimitState?.active && Date.now() < currentLimitState.retryAfter) {
+      const retryTime = new Date(currentLimitState.retryAfter).toLocaleTimeString();
+      console.warn(`Operation ${operationKey} is rate-limited. Try again after ${retryTime}`);
+      return { data: null, error: new Error("Rate limit active"), rateLimited: true, retryAfter: currentLimitState.retryAfter };
+    }
+
+    if (rateLimitState[operationKey]?.active && Date.now() >= rateLimitState[operationKey]!.retryAfter) {
+      setRateLimitState(prev => {
+        const newState = { ...prev };
+        delete newState[operationKey];
+        return newState;
+      });
+    }
+
+
+    // Check Quota
+    // Ensure quota is loaded before checking
+    if (quota === null || quota === undefined) {
+      // Fetch quota if not loaded yet. This might happen on initial load.
+      try {
+        const { data: fetchedQuota, error: fetchError } = await supabase
+          .from('quotas')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (fetchError) throw fetchError;
+        if (!fetchedQuota) {
+          console.warn("Quota record missing during check. Attempting to create.");
+          // Attempt to create quota if missing
+          const { data: insertedQuota, error: insertError } = await supabase
+            .from('quotas')
+            .insert({ user_id: user.id })
+            .select()
+            .single();
+          if (insertError) throw insertError;
+          setQuota(insertedQuota);
+        } else {
+          setQuota(fetchedQuota);
         }
+      } catch (error: any) {
+        console.error("Error fetching/creating quota during pre-check:", error.message);
+        toast({ title: "Quota Check Failed", description: "Could not verify or initialize quota.", variant: "destructive" });
+        return { data: null, error: new Error("Could not verify quota.") };
+      }
+    }
 
-         if (rateLimitState[operationKey]?.active && Date.now() >= rateLimitState[operationKey]!.retryAfter) {
-            setRateLimitState(prev => {
-                const newState = { ...prev };
-                delete newState[operationKey];
-                return newState;
-            });
-        }
+    // Now quota should be non-null, but check again just in case insert failed silently earlier
+    if (quota === null || quota === undefined) {
+      toast({ title: "Quota Check Failed", description: "Quota information is unavailable.", variant: "destructive" });
+      return { data: null, error: new Error("Quota unavailable.") };
+    }
+
+    // Perform the actual quota check using the now guaranteed non-null quota state
+    const currentRequestCount = quota.request_count ?? 0; // Use 0 if null/undefined
+    const currentQuotaLimit = quota.quota_limit ?? 100; // Use default limit if null/undefined
+    if (currentRequestCount + cost > currentQuotaLimit) {
+      console.warn("Quota exceeded. Required:", cost, "Used:", currentRequestCount, "Limit:", currentQuotaLimit);
+      setErrorMessage("Quota exceeded. Upgrade your plan or wait for reset.");
+      setQuota(prev => prev ? { ...prev, request_count: currentQuotaLimit } : null);
+      return { data: null, error: new Error("Quota exceeded.") };
+    }
 
 
-        // Check Quota
-        // Ensure quota is loaded before checking
-        if (quota === null || quota === undefined) {
-            // Fetch quota if not loaded yet. This might happen on initial load.
-            try {
-                 const { data: fetchedQuota, error: fetchError } = await supabase
-                    .from('quotas')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .maybeSingle();
-                 if (fetchError) throw fetchError;
-                 if (!fetchedQuota) {
-                      console.warn("Quota record missing during check. Attempting to create.");
-                     // Attempt to create quota if missing
-                     const { data: insertedQuota, error: insertError } = await supabase
-                         .from('quotas')
-                         .insert({ user_id: user.id })
-                         .select()
-                         .single();
-                     if (insertError) throw insertError;
-                     setQuota(insertedQuota);
-                 } else {
-                    setQuota(fetchedQuota);
-                 }
-            } catch (error: any) {
-                 console.error("Error fetching/creating quota during pre-check:", error.message);
-                 toast({ title: "Quota Check Failed", description: "Could not verify or initialize quota.", variant: "destructive" });
-                 return { data: null, error: new Error("Could not verify quota.") };
-            }
-        }
+    // Check API Key
+    if (!profile?.gemini_api_key) {
+      setErrorMessage("Google Gemini API Key is missing. Please add it in your profile settings.");
+      setIsProfileDialogOpen(true);
+      return { data: null, error: new Error("Missing Gemini API Key") };
+    }
 
-        // Now quota should be non-null, but check again just in case insert failed silently earlier
-        if (quota === null || quota === undefined) {
-            toast({ title: "Quota Check Failed", description: "Quota information is unavailable.", variant: "destructive" });
-            return { data: null, error: new Error("Quota unavailable.") };
-        }
+    let result: T | null = null;
+    let error: Error | null = null;
+    let shouldRefund = false;
+    let isRateLimitError = false;
+    let apiRetryAfter = 0;
 
-        // Perform the actual quota check using the now guaranteed non-null quota state
-        const currentRequestCount = quota.request_count ?? 0; // Use 0 if null/undefined
-        const currentQuotaLimit = quota.quota_limit ?? 100; // Use default limit if null/undefined
-        if (currentRequestCount + cost > currentQuotaLimit) {
-          console.warn("Quota exceeded. Required:", cost, "Used:", currentRequestCount, "Limit:", currentQuotaLimit);
+
+    try {
+      console.log(`Attempting to increment quota by ${cost} for user ${user.id}`);
+      const { data: newRemainingQuota, error: incrementError } = await supabase.rpc('increment_quota', {
+        p_user_id: user.id,
+        p_increment_amount: cost,
+      });
+
+      if (incrementError) {
+        if (incrementError.message.includes('quota_exceeded')) {
+          console.warn("Quota exceeded (checked during increment).");
           setErrorMessage("Quota exceeded. Upgrade your plan or wait for reset.");
-          setQuota(prev => prev ? { ...prev, request_count: currentQuotaLimit } : null);
+          setQuota(prev => prev ? { ...prev, request_count: prev.quota_limit } : null);
           return { data: null, error: new Error("Quota exceeded.") };
+        } else {
+          console.error("Error incrementing quota:", incrementError);
+          throw new Error(`Failed to update quota: ${incrementError.message}`);
         }
+      }
+      console.log("Quota increment RPC successful, refetching data...");
+
+      // No need to await here, just update state after AI call if successful
+      const { data: postIncrementQuota, error: qError } = await supabase
+        .from('quotas')
+        .select('*')
+        .eq('user_id', user.id)
+        .single(); // Changed from maybeSingle
+
+      if (qError) {
+        console.error("Error refetching quota post-increment:", qError);
+      } else if (postIncrementQuota) { // Check if data is not null
+        setQuota(postIncrementQuota);
+        console.log("Refetched quota data:", postIncrementQuota);
+      } else {
+        console.warn("Quota refetch post-increment returned null data.");
+        setQuota(null); // Set to null if data is null
+      }
+
+      const { data: postIncrementProfile, error: pError } = await supabase
+        .rpc('get_user_profile', { p_user_id: user.id });
+
+      if (pError) {
+        console.error("Error refetching profile post-increment:", pError);
+      } else if (postIncrementProfile && postIncrementProfile.length > 0) {
+        const fetchedProfile = postIncrementProfile[0];
+        setProfile(fetchedProfile);
+        setXp(fetchedProfile.xp ?? 0);
+        setBadges(fetchedProfile.badges ?? []);
+        console.log("Refetched profile data:", fetchedProfile);
+        checkAndAwardBadges(fetchedProfile.xp ?? 0, fetchedProfile.badges ?? []);
+      } else {
+        console.warn("Profile refetch post-increment returned no data.");
+      }
 
 
-        // Check API Key
-         if (!profile?.gemini_api_key) {
-             setErrorMessage("Google Gemini API Key is missing. Please add it in your profile settings.");
-             setIsProfileDialogOpen(true);
-             return { data: null, error: new Error("Missing Gemini API Key") };
-         }
+      result = await aiFunction();
 
-         let result: T | null = null;
-         let error: Error | null = null;
-         let shouldRefund = false;
-         let isRateLimitError = false;
-         let apiRetryAfter = 0;
+    } catch (err: any) {
+      error = err instanceof Error ? err : new Error(String(err));
+      shouldRefund = true;
+      console.error(`Error during AI operation (${operationKey}) or quota handling:`, error.message);
+
+      const messageLower = error.message?.toLowerCase() || '';
+      const status = (err as any).status;
+
+      if (status === 'RESOURCE_EXHAUSTED' || messageLower.includes('rate limit') || messageLower.includes('429')) {
+        isRateLimitError = true;
+        // Attempt to parse retry-after header (example, adjust based on actual header)
+        const retryHeader = (err as any).headers?.['retry-after'];
+        const retrySeconds = retryHeader ? parseInt(retryHeader, 10) : 60; // Default to 60s
+        apiRetryAfter = Date.now() + (retrySeconds * 1000);
+
+        setRateLimitState(prev => ({
+          ...prev,
+          [operationKey]: { active: true, retryAfter: apiRetryAfter }
+        }));
+        console.warn(`API Rate limit hit for ${operationKey}. Retrying after ${new Date(apiRetryAfter).toLocaleTimeString()}`);
+      } else if (status === 'UNAVAILABLE' || messageLower.includes('503') || messageLower.includes('unavailable') || messageLower.includes('overloaded')) {
+        isRateLimitError = true;
+        apiRetryAfter = Date.now() + 30 * 1000; // 30s backoff for general unavailability
+        setRateLimitState(prev => ({
+          ...prev,
+          [operationKey]: { active: true, retryAfter: apiRetryAfter }
+        }));
+        console.warn(`API Service unavailable (503/UNAVAILABLE) for ${operationKey}. Retrying after ${new Date(apiRetryAfter).toLocaleTimeString()}`);
+      } else if (status === 'INVALID_ARGUMENT') {
+        console.error(`Invalid argument for ${operationKey}:`, error.message);
+        setErrorMessage(`Error: Invalid input or configuration for ${operationKey}. Please check your input and API key.`);
+      } else if (status === 'UNAUTHENTICATED' || messageLower.includes('api key not valid')) {
+        console.error(`Authentication error for ${operationKey}: Invalid API Key.`);
+        setErrorMessage("Invalid Gemini API Key. Please check your profile settings.");
+        setIsProfileDialogOpen(true);
+      } else {
+        // Generic internal error
+        console.error(`Internal error during ${operationKey}:`, error.message);
+        setErrorMessage(`An internal error occurred during ${operationKey}. Please try again later.`);
+      }
 
 
+    } finally {
+      if (shouldRefund && cost > 0) {
+        console.log(`Refunding ${cost} quota points due to errors.`);
         try {
-            console.log(`Attempting to increment quota by ${cost} for user ${user.id}`);
-            const { data: newRemainingQuota, error: incrementError } = await supabase.rpc('increment_quota', {
-              p_user_id: user.id,
-              p_increment_amount: cost,
-            });
-
-             if (incrementError) {
-                if (incrementError.message.includes('quota_exceeded')) {
-                   console.warn("Quota exceeded (checked during increment).");
-                   setErrorMessage("Quota exceeded. Upgrade your plan or wait for reset.");
-                   setQuota(prev => prev ? { ...prev, request_count: prev.quota_limit } : null);
-                   return { data: null, error: new Error("Quota exceeded.") };
-                } else {
-                    console.error("Error incrementing quota:", incrementError);
-                    throw new Error(`Failed to update quota: ${incrementError.message}`);
-                }
-             }
-            console.log("Quota increment RPC successful, refetching data...");
-
-             await Promise.all([
-                 supabase.from('quotas').select('*').eq('user_id', user.id).single().then(({ data, error: qError }) => {
-                     if (qError) console.error("Error refetching quota post-increment:", qError);
-                     else if (data) { // Check if data is not null
-                         setQuota(data);
-                         console.log("Refetched quota data:", data);
-                     } else {
-                         console.warn("Quota refetch post-increment returned null data.");
-                         setQuota(null); // Set to null if data is null
-                     }
-                 }),
-                 supabase.rpc('get_user_profile', { p_user_id: user.id }).then(({ data, error: pError }) => {
-                      if (pError) console.error("Error refetching profile post-increment:", pError);
-                      else if (data && data.length > 0) {
-                          const fetchedProfile = data[0];
-                          setProfile(fetchedProfile);
-                          setXp(fetchedProfile.xp ?? 0);
-                           setBadges(fetchedProfile.badges ?? []);
-                           console.log("Refetched profile data:", fetchedProfile);
-                           checkAndAwardBadges(fetchedProfile.xp ?? 0, fetchedProfile.badges ?? []);
-                     } else {
-                          console.warn("Profile refetch post-increment returned no data.");
-                      }
-                 })
-             ]);
-
-
-             result = await aiFunction();
-
-        } catch (err: any) {
-            error = err instanceof Error ? err : new Error(String(err));
-            shouldRefund = true;
-             console.error(`Error during AI operation (${operationKey}) or quota handling:`, error.message);
-
-            const messageLower = error.message?.toLowerCase() || '';
-             const status = (err as any).status;
-
-            if (status === 'RESOURCE_EXHAUSTED' || messageLower.includes('rate limit') || messageLower.includes('429')) {
-                 isRateLimitError = true;
-                 const retryAfterSeconds = parseInt((err as any).headers?.['retry-after'] || '60', 10);
-                 apiRetryAfter = Date.now() + retryAfterSeconds * 1000;
-
-                setRateLimitState(prev => ({
-                    ...prev,
-                    [operationKey]: { active: true, retryAfter: apiRetryAfter }
-                }));
-                 console.warn(`API Rate limit hit for ${operationKey}. Retrying after ${new Date(apiRetryAfter).toLocaleTimeString()}`);
-            } else if (status === 'UNAVAILABLE' || messageLower.includes('503') || messageLower.includes('unavailable') || messageLower.includes('overloaded')) {
-                 isRateLimitError = true;
-                 apiRetryAfter = Date.now() + 30 * 1000;
-                 setRateLimitState(prev => ({
-                    ...prev,
-                    [operationKey]: { active: true, retryAfter: apiRetryAfter }
-                 }));
-                console.warn(`API Service unavailable (503/UNAVAILABLE) for ${operationKey}. Retrying after ${new Date(apiRetryAfter).toLocaleTimeString()}`);
-            } else if (status === 'INVALID_ARGUMENT') {
-                 console.error(`Invalid argument for ${operationKey}:`, error.message);
-                 setErrorMessage(`Error: Invalid input or configuration for ${operationKey}. Please check your input and API key.`);
-            } else if (status === 'UNAUTHENTICATED' || messageLower.includes('api key not valid')) {
-                console.error(`Authentication error for ${operationKey}: Invalid API Key.`);
-                 setErrorMessage("Invalid Gemini API Key. Please check your profile settings.");
-                 setIsProfileDialogOpen(true);
-            } else {
-                 console.error(`Internal error during ${operationKey}:`, error.message);
-                 setErrorMessage(`An internal error occurred during ${operationKey}. Please try again later.`);
+          const { error: decrementError } = await supabase.rpc('increment_quota', {
+            p_user_id: user.id,
+            p_increment_amount: -cost, // Refund the cost
+          });
+          if (decrementError) {
+            console.error("Error refunding quota:", decrementError);
+          } else {
+            // Refetch quota after refund
+            const { data: refundedQuotaData, error: fetchError } = await supabase
+              .from('quotas')
+              .select('*')
+              .eq('user_id', user.id)
+              .single();
+            if (!fetchError && refundedQuotaData) {
+              setQuota(refundedQuotaData);
+              console.log("Quota refunded and updated:", refundedQuotaData);
             }
-
-
-        } finally {
-            if (shouldRefund && cost > 0) {
-                console.log(`Refunding ${cost} quota points due to errors.`);
-                try {
-                     const { error: decrementError } = await supabase.rpc('increment_quota', {
-                         p_user_id: user.id,
-                         p_increment_amount: -cost,
-                     });
-                     if (decrementError) {
-                         console.error("Error refunding quota:", decrementError);
-                     } else {
-                         const { data: refundedQuotaData, error: fetchError } = await supabase
-                             .from('quotas')
-                             .select('*')
-                             .eq('user_id', user.id)
-                             .single();
-                         if (!fetchError && refundedQuotaData) {
-                             setQuota(refundedQuotaData);
-                             console.log("Quota refunded and updated:", refundedQuotaData);
-                         }
-                     }
-                } catch (refundError: any) {
-                    console.error("Exception during quota refund:", refundError.message);
-                }
-            }
+          }
+        } catch (refundError: any) {
+          console.error("Exception during quota refund:", refundError.message);
         }
+      }
+    }
 
-       return {
-         data: result,
-         error,
-         rateLimited: isRateLimitError,
-         retryAfter: isRateLimitError ? apiRetryAfter : undefined,
-       };
+    return {
+      data: result,
+      error,
+      rateLimited: isRateLimitError,
+      retryAfter: isRateLimitError ? apiRetryAfter : undefined,
     };
+  };
 
 
   // --- Summarization and Generation ---
@@ -648,24 +658,26 @@ export default function Dashboard({
 
     const summaryCost = 1; // Define cost for summary
     const generationCostPerPlatform = 1; // Define cost per platform
+    const totalCost = summaryCost + (PLATFORMS.length * generationCostPerPlatform); // Total upfront cost
 
-     // 1. Summarization
+    // 1. Summarization
     const summaryResult = await callAiWithRetry(
       async () => {
         if (!profile?.gemini_api_key) throw new Error("Missing Gemini API Key");
         return await summarizeContent({ content }, { apiKey: profile.gemini_api_key });
       },
-      summaryCost,
-       'summarize'
+      totalCost, // Charge total cost upfront for the entire operation
+      'summarize' // Associate cost with the initial step
     );
 
-     if (summaryResult.error || !summaryResult.data) {
-       setLoadingState(prev => ({ ...prev, summarizing: false, generating: null }));
-        if (!summaryResult.rateLimited) {
-             toast({ title: "Summarization Failed", description: summaryResult.error?.message || "Unknown error during summarization.", variant: "destructive" });
-        }
-       return;
-     }
+    if (summaryResult.error || !summaryResult.data) {
+      setLoadingState(prev => ({ ...prev, summarizing: false, generating: null }));
+      if (!summaryResult.rateLimited) {
+        toast({ title: "Summarization Failed", description: summaryResult.error?.message || "Unknown error during summarization.", variant: "destructive" });
+      }
+      // Note: Quota was already refunded in callAiWithRetry if an error occurred
+      return;
+    }
 
     const currentSummary = summaryResult.data.summary;
     setSummary(currentSummary);
@@ -674,54 +686,57 @@ export default function Dashboard({
     toast({ title: "Summarization Complete", description: "Now generating posts..." });
 
 
-    // 2. Post Generation
+    // 2. Post Generation (No additional cost here, charged upfront)
     let generationError: string | null = null;
     let anyRateLimited = false;
 
     const generationPromises = PLATFORMS.map(async (platform) => {
-        setLoadingState(prev => ({ ...prev, generating: platform }));
-        const personaPrompt = PERSONAS.find(p => p.value === selectedPersona)?.prompt || '';
+      setLoadingState(prev => ({ ...prev, generating: platform }));
+      const personaPrompt = PERSONAS.find(p => p.value === selectedPersona)?.prompt || '';
 
-        const result = await callAiWithRetry(
-             async () => {
-                if (!profile?.gemini_api_key) throw new Error("Missing Gemini API Key");
-                return await generateSocialPosts(
-                   { summary: currentSummary, platform, personaPrompt },
-                   { apiKey: profile.gemini_api_key }
-                );
-             },
-            generationCostPerPlatform,
-            'generate'
-         );
+      // Use a separate 'generate' operation key for rate limiting, but cost is 0
+      const result = await callAiWithRetry(
+        async () => {
+          if (!profile?.gemini_api_key) throw new Error("Missing Gemini API Key");
+          return await generateSocialPosts(
+            { summary: currentSummary, platform, personaPrompt },
+            { apiKey: profile.gemini_api_key }
+          );
+        },
+        0, // Cost is 0 as it was charged during summarization
+        'generate' // Separate rate limiting key
+      );
 
-       setLoadingState(prev => ({ ...prev, generating: null }));
-        return { platform, result };
+      setLoadingState(prev => ({ ...prev, generating: null }));
+      return { platform, result };
     });
 
-     const generationResults = await Promise.allSettled(generationPromises);
+    const generationResults = await Promise.allSettled(generationPromises);
 
-     generationResults.forEach(promiseResult => {
-        if (promiseResult.status === 'fulfilled') {
-            const { platform, result } = promiseResult.value;
-            if (result.error || !result.data) {
-                 if (result.rateLimited) {
-                    anyRateLimited = true;
-                 } else {
-                    const errorMsg = result.error?.message || `Unknown error generating ${platform} post.`;
-                    console.error(`Error generating ${platform} post:`, errorMsg);
-                    generationError = (generationError ? generationError + "\n" : "") + `Failed to generate post for ${platform}: ${errorMsg}`;
-                    setGeneratedPosts(prev => ({ ...prev, [platform]: `Error: ${errorMsg}` }));
-                 }
-            } else {
-                console.log(`${platform} post generated:`, result.data.post);
-                setGeneratedPosts(prev => ({ ...prev, [platform]: result.data.post }));
-            }
+    generationResults.forEach(promiseResult => {
+      if (promiseResult.status === 'fulfilled') {
+        const { platform, result } = promiseResult.value;
+        if (result.error || !result.data) {
+          if (result.rateLimited) {
+            anyRateLimited = true;
+            // Optionally show a specific rate limit message for this platform
+          } else {
+            const errorMsg = result.error?.message || `Unknown error generating ${platform} post.`;
+            console.error(`Error generating ${platform} post:`, errorMsg);
+            generationError = (generationError ? generationError + "\n" : "") + `Failed to generate post for ${platform}: ${errorMsg}`;
+            setGeneratedPosts(prev => ({ ...prev, [platform]: `Error: ${errorMsg}` }));
+          }
         } else {
-            const errorMsg = promiseResult.reason?.message || 'Unexpected generation error';
-            console.error("Unexpected error during post generation promise:", errorMsg);
-            generationError = (generationError ? generationError + "\n" : "") + `Unexpected error: ${errorMsg}`;
+          console.log(`${platform} post generated:`, result.data.post);
+          setGeneratedPosts(prev => ({ ...prev, [platform]: result.data.post }));
         }
-     });
+      } else {
+        // Handle unexpected promise rejection
+        const errorMsg = promiseResult.reason?.message || 'Unexpected generation error';
+        console.error("Unexpected error during post generation promise:", errorMsg);
+        generationError = (generationError ? generationError + "\n" : "") + `Unexpected error: ${errorMsg}`;
+      }
+    });
 
 
     setLoadingState(prev => ({ ...prev, generating: null }));
@@ -739,188 +754,208 @@ export default function Dashboard({
 
 
   // --- Tuning ---
-   const handleTunePost = async (platform: SocialPlatform, instruction: string) => {
-     const currentPost = generatedPosts[platform];
-     if (!currentPost || currentPost.startsWith("Error:") || loadingState.tuning[platform]) return;
+  const handleTunePost = async (platform: SocialPlatform, instruction: string) => {
+    const currentPost = generatedPosts[platform];
+    if (!currentPost || currentPost.startsWith("Error:") || loadingState.tuning[platform]) return;
 
-     setLoadingState(prev => ({ ...prev, tuning: { ...prev.tuning, [platform]: instruction } }));
-     setErrorMessage(null);
-     setAdvisorAnalysis(null);
+    setLoadingState(prev => ({ ...prev, tuning: { ...prev.tuning, [platform]: instruction } }));
+    setErrorMessage(null);
+    setAdvisorAnalysis(null); // Clear advisor when tuning
 
-     const personaPrompt = PERSONAS.find(p => p.value === selectedPersona)?.prompt || '';
-     const tuningCost = 1; // Define cost for tuning
+    const personaPrompt = PERSONAS.find(p => p.value === selectedPersona)?.prompt || '';
+    const tuningCost = 1; // Define cost for tuning
 
-     const tuneResult = await callAiWithRetry(
-       async () => {
-         if (!profile?.gemini_api_key) throw new Error("Missing Gemini API Key");
-         return await tuneSocialPosts(
-             { postContent: currentPost, platform, instruction, personaPrompt },
-             { apiKey: profile.gemini_api_key }
-          );
-       },
-        tuningCost,
-        'tune'
-     );
-
-
-     setLoadingState(prev => ({ ...prev, tuning: { ...prev.tuning, [platform]: null } }));
-
-     if (tuneResult.error || !tuneResult.data) {
-        if (!tuneResult.rateLimited) {
-            const errorMsg = tuneResult.error?.message || `Unknown error tuning ${platform} post.`;
-            console.error(`Tuning ${platform} post failed:`, errorMsg);
-            toast({ title: `Tuning Failed (${platform})`, description: errorMsg, variant: "destructive" });
-        } else {
-            console.warn(`Tuning for ${platform} rate-limited. Try again later.`);
-        }
-     } else {
-       console.log(`Tuning ${platform} post successful:`, tuneResult.data.tunedPost);
-       setGeneratedPosts(prev => ({ ...prev, [platform]: tuneResult.data.tunedPost }));
-       toast({ title: `Post Tuned (${platform})`, description: `Applied instruction: "${instruction}"` });
-     }
-   };
+    const tuneResult = await callAiWithRetry(
+      async () => {
+        if (!profile?.gemini_api_key) throw new Error("Missing Gemini API Key");
+        return await tuneSocialPosts(
+          { postContent: currentPost, platform, instruction, personaPrompt }, // Pass persona prompt
+          { apiKey: profile.gemini_api_key }
+        );
+      },
+      tuningCost,
+      'tune'
+    );
 
 
-    // --- AI Advisor Analysis ---
-  const handleAnalyzePost = async (platform: SocialPlatform) => {
-      const postContent = generatedPosts[platform];
-      if (!postContent || postContent.startsWith("Error:") || loadingState.analyzing === platform) return;
+    setLoadingState(prev => ({ ...prev, tuning: { ...prev.tuning, [platform]: null } }));
 
-      setLoadingState(prev => ({ ...prev, analyzing: platform }));
-      setIsAiAdvisorOpen(true);
-      setAdvisorAnalysis(null);
-      setAnalyzingPlatform(platform);
-      setErrorMessage(null);
-
-       const analysisCost = 1; // Define cost for analysis
-
-       const analysisResult = await callAiWithRetry(
-           async () => {
-               if (!profile?.gemini_api_key) throw new Error("Missing Gemini API Key");
-               return await analyzePost({ postContent, platform }, { apiKey: profile.gemini_api_key });
-           },
-           analysisCost,
-           'analyze'
-       );
-
-       setLoadingState(prev => ({ ...prev, analyzing: null }));
-
-       if (analysisResult.error || !analysisResult.data) {
-           if (!analysisResult.rateLimited) {
-                const errorMsg = analysisResult.error?.message || `Unknown error analyzing ${platform} post.`;
-                console.error(`Analysis for ${platform} post failed:`, errorMsg);
-                toast({ title: `Analysis Failed (${platform})`, description: errorMsg, variant: "destructive" });
-                setAdvisorAnalysis({ analysis: `Error: ${errorMsg}`, flags: [] });
-            } else {
-                 console.warn(`Analysis for ${platform} rate-limited. Try again later.`);
-                 setAdvisorAnalysis({ analysis: `Analysis is temporarily rate-limited. Please wait.`, flags: [] });
-            }
-       } else {
-            console.log(`Analysis for ${platform} post successful:`, analysisResult.data);
-            setAdvisorAnalysis(analysisResult.data);
-            toast({ title: `Analysis Complete (${platform})`, description: "Review the suggestions." });
-       }
+    if (tuneResult.error || !tuneResult.data) {
+      if (!tuneResult.rateLimited) {
+        const errorMsg = tuneResult.error?.message || `Unknown error tuning ${platform} post.`;
+        console.error(`Tuning ${platform} post failed:`, errorMsg);
+        toast({ title: `Tuning Failed (${platform})`, description: errorMsg, variant: "destructive" });
+      } else {
+        console.warn(`Tuning for ${platform} rate-limited. Try again later.`);
+        // Error message is handled by the rate limit display logic
+      }
+      // Quota refund handled in callAiWithRetry
+    } else {
+      console.log(`Tuning ${platform} post successful:`, tuneResult.data.tunedPost);
+      setGeneratedPosts(prev => ({ ...prev, [platform]: tuneResult.data.tunedPost }));
+      toast({ title: `Post Tuned (${platform})`, description: `Applied instruction: "${instruction}"` });
+    }
   };
 
-   // --- Apply AI Advisor Suggestion ---
-   const handleApplySuggestion = (start: number, end: number, suggestion: string) => {
-     if (!analyzingPlatform) return;
-     const currentContent = generatedPosts[analyzingPlatform];
-     const newContent = currentContent.substring(0, start) + suggestion + currentContent.substring(end);
-     setGeneratedPosts(prev => ({ ...prev, [analyzingPlatform!]: newContent }));
-     toast({ title: "Suggestion Applied", description: "Post updated with AI suggestion." });
-     setAdvisorAnalysis(null);
-     setIsAiAdvisorOpen(false);
-     setAnalyzingPlatform(null);
-   };
 
-   // --- Tone Tuner ---
-    const openToneTuner = (platform: SocialPlatform) => {
-        setTuningPlatform(platform);
-        setIsToneTunerOpen(true);
-    };
+  // --- AI Advisor Analysis ---
+  const handleAnalyzePost = async (platform: SocialPlatform) => {
+    const postContent = generatedPosts[platform];
+    if (!postContent || postContent.startsWith("Error:") || loadingState.analyzing === platform) return;
 
-    const handleApplyTone = (newToneValue: string) => {
-        if (!tuningPlatform) return;
-        const newPersona = PERSONAS.find(p => p.value === newToneValue);
-        if (!newPersona) return;
+    setLoadingState(prev => ({ ...prev, analyzing: platform }));
+    setIsAiAdvisorOpen(true);
+    setAdvisorAnalysis(null);
+    setAnalyzingPlatform(platform);
+    setErrorMessage(null);
 
-        setSelectedPersona(newToneValue);
-        handleTunePost(tuningPlatform, `Rewrite this post in the style of: ${newPersona.label}`);
-        setIsToneTunerOpen(false);
-        setTuningPlatform(null);
-    };
+    const analysisCost = 1; // Define cost for analysis
 
-     // --- Boost Panel ---
-   const handleToggleBoostPanel = () => {
-      setIsBoostPanelOpen(prev => !prev);
-    };
+    const analysisResult = await callAiWithRetry(
+      async () => {
+        if (!profile?.gemini_api_key) throw new Error("Missing Gemini API Key");
+        return await analyzePost({ postContent, platform }, { apiKey: profile.gemini_api_key });
+      },
+      analysisCost,
+      'analyze'
+    );
 
-    const handleInsertText = (textToInsert: string) => {
-      const textarea = outputTextareaRefs[activeOutputTab]?.current;
-      if (!textarea) return;
+    setLoadingState(prev => ({ ...prev, analyzing: null }));
 
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const currentText = generatedPosts[activeOutputTab];
-      const newText = currentText.substring(0, start) + textToInsert + currentText.substring(end);
+    if (analysisResult.error || !analysisResult.data) {
+      if (!analysisResult.rateLimited) {
+        const errorMsg = analysisResult.error?.message || `Unknown error analyzing ${platform} post.`;
+        console.error(`Analysis for ${platform} post failed:`, errorMsg);
+        toast({ title: `Analysis Failed (${platform})`, description: errorMsg, variant: "destructive" });
+        setAdvisorAnalysis({ analysis: `Error: ${errorMsg}`, flags: [] });
+      } else {
+        console.warn(`Analysis for ${platform} rate-limited. Try again later.`);
+        setAdvisorAnalysis({ analysis: `Analysis is temporarily rate-limited. Please wait.`, flags: [] });
+        // Error message handled by rate limit display
+      }
+      // Quota refund handled in callAiWithRetry
+    } else {
+      console.log(`Analysis for ${platform} post successful:`, analysisResult.data);
+      setAdvisorAnalysis(analysisResult.data);
+      toast({ title: `Analysis Complete (${platform})`, description: "Review the suggestions." });
+    }
+  };
 
-      setGeneratedPosts(prev => ({ ...prev, [activeOutputTab]: newText }));
+  // --- Apply AI Advisor Suggestion ---
+  const handleApplySuggestion = (start: number, end: number, suggestion: string) => {
+    if (!analyzingPlatform) return;
+    const currentContent = generatedPosts[analyzingPlatform];
+    const newContent = currentContent.substring(0, start) + suggestion + currentContent.substring(end);
+    setGeneratedPosts(prev => ({ ...prev, [analyzingPlatform!]: newContent }));
+    toast({ title: "Suggestion Applied", description: "Post updated with AI suggestion." });
+    // Optionally keep advisor open or close it
+    // setIsAiAdvisorOpen(false);
+    // setAnalyzingPlatform(null);
+    // Clear analysis after applying to avoid re-applying
+    setAdvisorAnalysis(prev => prev ? { ...prev, flags: prev.flags.filter(f => !(f.start === start && f.end === end)) } : null);
+  };
 
-      textarea.focus();
-        requestAnimationFrame(() => {
-          textarea.selectionStart = start + textToInsert.length;
-          textarea.selectionEnd = start + textToInsert.length;
-        });
-    };
+  // --- Tone Tuner ---
+  const openToneTuner = (platform: SocialPlatform) => {
+    setTuningPlatform(platform);
+    setIsToneTunerOpen(true);
+  };
+
+  // Updated handleApplyTone to use handleTunePost
+  const handleApplyTone = (newToneValue: string) => {
+    if (!tuningPlatform) return;
+    const newPersona = PERSONAS.find(p => p.value === newToneValue);
+    if (!newPersona) return;
+
+    // Set the *global* selected persona state
+    setSelectedPersona(newToneValue);
+
+    // Call handleTunePost with a specific instruction to rewrite in the new style
+    // This ensures quota and rate limiting are handled correctly.
+    const instruction = `Rewrite this post in the style of: ${newPersona.label || 'Default'}`;
+    handleTunePost(tuningPlatform, instruction); // Use the existing tuning flow
+
+    setIsToneTunerOpen(false);
+    setTuningPlatform(null);
+  };
 
 
-    // --- Copy to Clipboard ---
-   const handleCopyToClipboard = async (platform: SocialPlatform) => {
-     try {
-       await navigator.clipboard.writeText(generatedPosts[platform]);
-       toast({ title: "Copied to Clipboard!", description: `${platform.charAt(0).toUpperCase() + platform.slice(1)} post copied.` });
-     } catch (err) {
-       console.error("Failed to copy text: ", err);
-       toast({ title: "Copy Failed", description: "Could not copy text to clipboard.", variant: "destructive" });
-     }
-   };
+  // --- Boost Panel ---
+  const handleToggleBoostPanel = () => {
+    setIsBoostPanelOpen(prev => !prev);
+  };
 
+  const handleInsertText = (textToInsert: string) => {
+    const textarea = outputTextareaRefs[activeOutputTab]?.current;
+    if (!textarea) return;
 
-   // --- Handle Input Change ---
-   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-     setContent(e.target.value);
-   };
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentText = generatedPosts[activeOutputTab];
+    const newText = currentText.substring(0, start) + textToInsert + currentText.substring(end);
 
-    // --- Handle Output Textarea Change ---
-    const handleOutputChange = (platform: SocialPlatform, value: string) => {
-        setGeneratedPosts(prev => ({ ...prev, [platform]: value }));
-        if (platform === analyzingPlatform) {
-            setAdvisorAnalysis(null);
+    setGeneratedPosts(prev => ({ ...prev, [activeOutputTab]: newText }));
+
+    // Ensure focus and cursor position after state update
+    // Use requestAnimationFrame to wait for the next render cycle
+    requestAnimationFrame(() => {
+        if (outputTextareaRefs[activeOutputTab]?.current) {
+            outputTextareaRefs[activeOutputTab].current!.focus();
+            outputTextareaRefs[activeOutputTab].current!.selectionStart = start + textToInsert.length;
+            outputTextareaRefs[activeOutputTab].current!.selectionEnd = start + textToInsert.length;
         }
+    });
+  };
+
+
+  // --- Copy to Clipboard ---
+  const handleCopyToClipboard = async (platform: SocialPlatform) => {
+    try {
+      await navigator.clipboard.writeText(generatedPosts[platform]);
+      toast({ title: "Copied to Clipboard!", description: `${platform.charAt(0).toUpperCase() + platform.slice(1)} post copied.` });
+    } catch (err) {
+      console.error("Failed to copy text: ", err);
+      toast({ title: "Copy Failed", description: "Could not copy text to clipboard.", variant: "destructive" });
+    }
+  };
+
+
+  // --- Handle Input Change ---
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setContent(e.target.value);
+  };
+
+  // --- Handle Output Textarea Change ---
+  const handleOutputChange = (platform: SocialPlatform, value: string) => {
+    setGeneratedPosts(prev => ({ ...prev, [platform]: value }));
+    // If the user manually edits the post while the advisor panel is open for that platform,
+    // clear the analysis to avoid applying suggestions to outdated content.
+    if (platform === analyzingPlatform) {
+      setAdvisorAnalysis(null);
+    }
+  };
+
+  // --- Keyboard Shortcuts ---
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'h') {
+        event.preventDefault();
+        setIsHelpModalOpen(prev => !prev);
+      }
+      if (event.key === 'Escape') {
+        if (isProfileDialogOpen) setIsProfileDialogOpen(false);
+        if (isAiAdvisorOpen) setIsAiAdvisorOpen(false);
+        if (isToneTunerOpen) setIsToneTunerOpen(false);
+        if (isBoostPanelOpen) setIsBoostPanelOpen(false);
+        if (isHelpModalOpen) setIsHelpModalOpen(false);
+      }
     };
 
-     // --- Keyboard Shortcuts ---
-     useEffect(() => {
-       const handleKeyDown = (event: KeyboardEvent) => {
-         if ((event.ctrlKey || event.metaKey) && event.key === 'h') {
-           event.preventDefault();
-           setIsHelpModalOpen(prev => !prev);
-         }
-         if (event.key === 'Escape') {
-             if (isProfileDialogOpen) setIsProfileDialogOpen(false);
-             if (isAiAdvisorOpen) setIsAiAdvisorOpen(false);
-             if (isToneTunerOpen) setIsToneTunerOpen(false);
-             if (isBoostPanelOpen) setIsBoostPanelOpen(false);
-             if (isHelpModalOpen) setIsHelpModalOpen(false);
-         }
-       };
-
-       window.addEventListener('keydown', handleKeyDown);
-       return () => {
-         window.removeEventListener('keydown', handleKeyDown);
-       };
-     }, [isProfileDialogOpen, isAiAdvisorOpen, isToneTunerOpen, isBoostPanelOpen, isHelpModalOpen]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isProfileDialogOpen, isAiAdvisorOpen, isToneTunerOpen, isBoostPanelOpen, isHelpModalOpen]);
 
 
   // --- Calculate Quota Percentage ---
@@ -935,94 +970,94 @@ export default function Dashboard({
 
 
   // --- Calculate XP Percentage for next level ---
-   const getCurrentLevelInfo = (currentXp: number) => {
-        let currentLevel = 0;
-        let nextLevelXp = BADGES.find(b => !b.hidden)?.xp || 50;
-        let currentLevelXpThreshold = 0;
-        const sortedVisibleBadges = BADGES.filter(b => !b.hidden).sort((a, b) => a.xp - b.xp);
+  const getCurrentLevelInfo = (currentXp: number) => {
+    let currentLevel = 0;
+    let nextLevelXp = BADGES.find(b => !b.hidden)?.xp || 50;
+    let currentLevelXpThreshold = 0;
+    const sortedVisibleBadges = BADGES.filter(b => !b.hidden).sort((a, b) => a.xp - b.xp);
 
-        for (let i = 0; i < sortedVisibleBadges.length; i++) {
-            if (currentXp >= sortedVisibleBadges[i].xp) {
-                currentLevel = i + 1;
-                currentLevelXpThreshold = sortedVisibleBadges[i].xp;
-                if (i + 1 < sortedVisibleBadges.length) {
-                     nextLevelXp = sortedVisibleBadges[i+1].xp;
-                 } else {
-                     nextLevelXp = currentLevelXpThreshold * 2;
-                 }
-            } else {
-                nextLevelXp = sortedVisibleBadges[i].xp;
-                break;
-            }
+    for (let i = 0; i < sortedVisibleBadges.length; i++) {
+      if (currentXp >= sortedVisibleBadges[i].xp) {
+        currentLevel = i + 1;
+        currentLevelXpThreshold = sortedVisibleBadges[i].xp;
+        if (i + 1 < sortedVisibleBadges.length) {
+          nextLevelXp = sortedVisibleBadges[i + 1].xp;
+        } else {
+          nextLevelXp = currentLevelXpThreshold * 2;
         }
+      } else {
+        nextLevelXp = sortedVisibleBadges[i].xp;
+        break;
+      }
+    }
 
-         const xpTowardsNext = Math.max(0, currentXp - currentLevelXpThreshold);
-         const xpNeededForNext = Math.max(1, nextLevelXp - currentLevelXpThreshold);
-         const percentage = Math.min(100, (xpTowardsNext / xpNeededForNext) * 100);
-        return {
-            level: currentLevel,
-            xpForNextLevel: nextLevelXp,
-            percentage: isNaN(percentage) ? 0 : percentage,
-            xpTowardsNext: xpTowardsNext,
-             xpNeededForNext: xpNeededForNext
-        };
+    const xpTowardsNext = Math.max(0, currentXp - currentLevelXpThreshold);
+    const xpNeededForNext = Math.max(1, nextLevelXp - currentLevelXpThreshold);
+    const percentage = Math.min(100, (xpTowardsNext / xpNeededForNext) * 100);
+    return {
+      level: currentLevel,
+      xpForNextLevel: nextLevelXp,
+      percentage: isNaN(percentage) ? 0 : percentage,
+      xpTowardsNext: xpTowardsNext,
+      xpNeededForNext: xpNeededForNext
     };
+  };
 
-    const xpInfo = getCurrentLevelInfo(xp);
-    const xpTooltipContent = `Level ${xpInfo.level} | ${xp} XP (${xpInfo.xpTowardsNext}/${xpInfo.xpNeededForNext} towards Lvl ${xpInfo.level + 1} @ ${xpInfo.xpForNextLevel} XP)`;
+  const xpInfo = getCurrentLevelInfo(xp);
+  const xpTooltipContent = `Level ${xpInfo.level} | ${xp} XP (${xpInfo.xpTowardsNext}/${xpInfo.xpNeededForNext} towards Lvl ${xpInfo.level + 1} @ ${xpInfo.xpForNextLevel} XP)`;
 
-   const isApiKeyMissing = !profile?.gemini_api_key;
-   const isQuotaExceeded = quota ? (quota.request_count ?? 0) >= (quota.quota_limit ?? 100) : false; // Handle potentially null values
+  const isApiKeyMissing = !profile?.gemini_api_key;
+  const isQuotaExceeded = quota ? (quota.request_count ?? 0) >= (quota.quota_limit ?? 100) : false; // Handle potentially null values
 
-   const getRateLimitRemainingTime = (operationKey: RateLimitOperation): number => {
-        const state = rateLimitState[operationKey];
-        if (state?.active && state.retryAfter > Date.now()) {
-            return Math.ceil((state.retryAfter - Date.now()) / 1000);
-        }
-        return 0;
-    };
+  const getRateLimitRemainingTime = (operationKey: RateLimitOperation): number => {
+    const state = rateLimitState[operationKey];
+    if (state?.active && state.retryAfter > Date.now()) {
+      return Math.ceil((state.retryAfter - Date.now()) / 1000);
+    }
+    return 0;
+  };
 
 
   if (profile === undefined || quota === undefined) {
-     return (
-       <div className="flex min-h-screen w-full items-center justify-center p-4">
-         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-         <span className="ml-2">Loading dashboard...</span>
-       </div>
-     );
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center p-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2">Loading dashboard...</span>
+      </div>
+    );
   }
 
-   if (dbSetupError) {
-     return (
-       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-         <Alert variant="destructive" className="max-w-2xl">
-           <AlertCircle className="h-4 w-4" />
-           <AlertTitle>Database Setup Required</AlertTitle>
-           <AlertDescription>
-             <p className="mb-4">{errorMessage || "Database setup is incomplete. Please follow the README instructions."}</p>
-             <p className="text-sm text-muted-foreground">
-               Go to the Supabase SQL Editor in your project and run the script from <code>supabase/schema.sql</code>. See README Step 3.
-             </p>
-             <div className="mt-4">
-                <Button variant="outline" size="sm" onClick={handleSignOut}>Go to Login</Button>
-             </div>
-           </AlertDescription>
-         </Alert>
-       </div>
-     );
-   }
+  if (dbSetupError) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+        <Alert variant="destructive" className="max-w-2xl">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Database Setup Required</AlertTitle>
+          <AlertDescription>
+            <p className="mb-4">{errorMessage || "Database setup is incomplete. Please follow the README instructions."}</p>
+            <p className="text-sm text-muted-foreground">
+              Go to the Supabase SQL Editor in your project and run the script from <code>supabase/schema.sql</code>. See README Step 3.
+            </p>
+            <div className="mt-4">
+              <Button variant="outline" size="sm" onClick={handleSignOut}>Go to Login</Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
-   const getRateLimitTooltip = (operationKey: RateLimitOperation): React.ReactNode | undefined => {
-        const remainingTime = getRateLimitRemainingTime(operationKey);
-        if (remainingTime > 0) {
-            return `Rate limit active. Wait ${remainingTime}s.`;
-        }
-        return undefined;
-    };
+  const getRateLimitTooltip = (operationKey: RateLimitOperation): React.ReactNode | undefined => {
+    const remainingTime = getRateLimitRemainingTime(operationKey);
+    if (remainingTime > 0) {
+      return `Rate limit active. Wait ${remainingTime}s.`;
+    }
+    return undefined;
+  };
 
   return (
     <TooltipProvider>
-     {isClient && (
+      {isClient && (
         <Joyride
           steps={ONBOARDING_STEPS}
           run={runTour}
@@ -1031,348 +1066,356 @@ export default function Dashboard({
           showSkipButton={true}
           callback={handleJoyrideCallback}
           styles={{
-              options: {
-                zIndex: 10000,
-                primaryColor: '#6D28D9',
-                arrowColor: '#0A0A0A',
-                backgroundColor: '#0A0A0A',
-                textColor: '#F1F5F9',
-              },
-               tooltip: {
-                   borderRadius: '0.5rem',
-                   padding: '1rem',
-              },
-               buttonNext: {
-                  backgroundColor: '#6D28D9',
-                  borderRadius: '0.375rem',
-              },
-               buttonBack: {
-                  color: '#A0AEC0',
-              },
-               buttonSkip: {
-                  color: '#A0AEC0',
-              },
-           }}
-         />
+            options: {
+              zIndex: 10000,
+              primaryColor: '#6D28D9',
+              arrowColor: '#0A0A0A',
+              backgroundColor: '#0A0A0A',
+              textColor: '#F1F5F9',
+            },
+            tooltip: {
+              borderRadius: '0.5rem',
+              padding: '1rem',
+            },
+            buttonNext: {
+              backgroundColor: '#6D28D9',
+              borderRadius: '0.375rem',
+            },
+            buttonBack: {
+              color: '#A0AEC0',
+            },
+            buttonSkip: {
+              color: '#A0AEC0',
+            },
+          }}
+        />
       )}
-     {isClient && showConfetti && (
-         <Confetti
-             width={typeof window !== 'undefined' ? window.innerWidth : 0}
-             height={typeof window !== 'undefined' ? window.innerHeight : 0}
-             numberOfPieces={confettiPieces}
-             recycle={false}
-             onConfettiComplete={() => setShowConfetti(false)}
-             className="!fixed !top-0 !left-0 !w-full !h-full !z-[10001]"
-           />
+      {isClient && showConfetti && (
+        <Confetti
+          width={typeof window !== 'undefined' ? window.innerWidth : 0}
+          height={typeof window !== 'undefined' ? window.innerHeight : 0}
+          numberOfPieces={confettiPieces}
+          recycle={false}
+          onConfettiComplete={() => setShowConfetti(false)}
+          className="!fixed !top-0 !left-0 !w-full !h-full !z-[10001]"
+        />
       )}
-    <div className={cn(
-      "flex flex-col min-h-screen bg-background text-foreground p-4 md:p-8 relative",
-      runTour && "joyride-active-step-fix"
+      <div className={cn(
+        "flex flex-col min-h-screen bg-background text-foreground p-4 md:p-8 relative",
+        runTour && "joyride-active-step-fix" // Optional class for potential Joyride styling fixes
       )}>
-      <header className="flex justify-between items-center mb-6 md:mb-8">
-        <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
-          <Zap className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold text-gradient">VibeFlow</h1>
-        </Link>
-        <div className="flex items-center gap-4 md:gap-6">
-           {/* Quota and XP Display */}
-             <Tooltip content={<><p>{quotaTooltipContent}</p><p>{xpTooltipContent}</p></>} side="bottom" align="end">
-               <div id="quota-display" className="flex flex-col items-end w-32 md:w-48 cursor-default">
-                   <div className="w-full flex justify-between items-center mb-1">
-                      <span className="text-xs font-medium text-muted-foreground">Usage</span>
-                      {quota ? (
-                         <span className="text-xs font-semibold">{quota.request_count ?? 0}/{quota.quota_limit ?? 100}</span>
-                      ) : (
-                         <Skeleton className="h-3 w-10" />
-                      )}
+        <header className="flex justify-between items-center mb-6 md:mb-8">
+          <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
+            <Zap className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold text-gradient">VibeFlow</h1>
+          </Link>
+          <div className="flex items-center gap-4 md:gap-6">
+            {/* Quota and XP Display */}
+            <Tooltip content={<><p>{quotaTooltipContent}</p><p>{xpTooltipContent}</p></>} side="bottom" align="end">
+                <div id="quota-display" className="flex flex-col items-end w-32 md:w-48 cursor-default">
+                  <div className="w-full flex justify-between items-center mb-1">
+                    <span className="text-xs font-medium text-muted-foreground">Usage</span>
+                    {quota ? (
+                      <span className="text-xs font-semibold">{quota.request_count ?? 0}/{quota.quota_limit ?? 100}</span>
+                    ) : (
+                      <Skeleton className="h-3 w-10" />
+                    )}
                   </div>
                   <Progress
-                      value={quotaPercentage}
-                      className="h-1.5 w-full"
-                      aria-label="Monthly Usage Quota"
-                      indicatorClassName={isQuotaExceeded ? "bg-destructive" : "bg-primary"}
+                    value={quotaPercentage}
+                    className="h-1.5 w-full"
+                    aria-label="Monthly Usage Quota"
+                    indicatorClassName={isQuotaExceeded ? "bg-destructive" : "bg-primary"}
                   />
-                   {/* XP Bar */}
+                  {/* XP Bar */}
                   <div className="w-full flex justify-between items-center mt-1.5 mb-1">
-                      <span className="text-xs font-medium text-muted-foreground">XP</span>
-                      <span className="text-xs font-semibold">{xp}</span>
-                   </div>
-                   <Progress
-                       value={xpInfo.percentage}
-                       className="h-1.5 w-full"
-                       aria-label={xpTooltipContent}
-                       indicatorClassName="bg-gradient-to-r from-purple-500 to-cyan-400"
-                   />
-               </div>
+                    <span className="text-xs font-medium text-muted-foreground">XP</span>
+                    <span className="text-xs font-semibold">{xp}</span>
+                  </div>
+                  <Progress
+                    value={xpInfo.percentage}
+                    className="h-1.5 w-full"
+                    aria-label={xpTooltipContent}
+                    indicatorClassName="bg-gradient-to-r from-purple-500 to-cyan-400"
+                  />
+                </div>
             </Tooltip>
 
-           <Tooltip content="Profile & Settings">
-               <Button variant="ghost" size="icon" onClick={() => setIsProfileDialogOpen(true)} id="profile-button">
+            <Tooltip content="Profile & Settings">
+              {/* Wrap trigger in div for Tooltip */}
+                <Button variant="ghost" size="icon" onClick={() => setIsProfileDialogOpen(true)} id="profile-button">
                   <UserIcon className="h-5 w-5" />
-                   <span className="sr-only">Profile & Settings</span>
-               </Button>
-          </Tooltip>
-           <Tooltip content="Help & Shortcuts (Ctrl+H)">
-               <Button variant="ghost" size="icon" onClick={() => setIsHelpModalOpen(true)} aria-label="Help & Shortcuts">
-                    <BookOpen className="h-5 w-5" />
-                    <span className="sr-only">Help & Shortcuts</span>
-               </Button>
-          </Tooltip>
+                  <span className="sr-only">Profile & Settings</span>
+                </Button>
+            </Tooltip>
+            <Tooltip content="Help & Shortcuts (Ctrl+H)">
+              {/* Wrap trigger in div for Tooltip */}
+                <Button variant="ghost" size="icon" onClick={() => setIsHelpModalOpen(true)} aria-label="Help & Shortcuts">
+                  <BookOpen className="h-5 w-5" />
+                  <span className="sr-only">Help & Shortcuts</span>
+                </Button>
+            </Tooltip>
 
-          <Button onClick={handleSignOut} variant="outline" size="sm">
-            <LogOut className="mr-1 h-4 w-4" /> Sign Out
-          </Button>
-        </div>
-      </header>
+            <Button onClick={handleSignOut} variant="outline" size="sm">
+              <LogOut className="mr-1 h-4 w-4" /> Sign Out
+            </Button>
+          </div>
+        </header>
 
-      {/* General Error Display */}
-      {errorMessage && !dbSetupError && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>
-            <div className="flex justify-between items-start">
-              <span style={{ whiteSpace: 'pre-wrap' }}>{errorMessage}</span>
-              <Button variant="ghost" size="icon" onClick={() => setErrorMessage(null)} className="h-6 w-6 ml-2 flex-shrink-0">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-             {errorMessage.includes("Quota exceeded") && (
-               <Button size="sm" className="mt-2" onClick={() => setIsProfileDialogOpen(true)}>Upgrade Plan</Button>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-       {/* Rate Limit Alerts */}
-      {Object.entries(rateLimitState).map(([key, state]) => {
-        const operationKey = key as RateLimitOperation;
-        const remainingTime = getRateLimitRemainingTime(operationKey);
-        return state?.active && remainingTime > 0 && (
-          <Alert variant="default" className="mb-4 bg-yellow-900/20 border-yellow-700/50" key={key}>
-            <Info className="h-4 w-4 text-yellow-500" />
-            <AlertTitle className="text-yellow-300">Rate Limit Active for {key}</AlertTitle>
-            <AlertDescription className="text-yellow-400">
-              Please wait {remainingTime} seconds to perform this action again.
+        {/* General Error Display */}
+        {errorMessage && !dbSetupError && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>
+              <div className="flex justify-between items-start">
+                <span style={{ whiteSpace: 'pre-wrap' }}>{errorMessage}</span>
+                <Button variant="ghost" size="icon" onClick={() => setErrorMessage(null)} className="h-6 w-6 ml-2 flex-shrink-0">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              {errorMessage.includes("Quota exceeded") && (
+                <Button size="sm" className="mt-2" onClick={() => setIsProfileDialogOpen(true)}>Upgrade Plan</Button>
+              )}
             </AlertDescription>
           </Alert>
-        );
-      })}
+        )}
+        {/* Rate Limit Alerts */}
+        {Object.entries(rateLimitState).map(([key, state]) => {
+          const operationKey = key as RateLimitOperation;
+          const remainingTime = getRateLimitRemainingTime(operationKey);
+          return state?.active && remainingTime > 0 && (
+            <Alert variant="default" className="mb-4 bg-yellow-900/20 border-yellow-700/50" key={key}>
+              <Info className="h-4 w-4 text-yellow-500" />
+              <AlertTitle className="text-yellow-300">Rate Limit Active for {key}</AlertTitle>
+              <AlertDescription className="text-yellow-400">
+                Please wait {remainingTime} seconds to perform this action again.
+              </AlertDescription>
+            </Alert>
+          );
+        })}
 
-      <main className="flex-grow grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 md:gap-8">
+        <main className="flex-grow grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 md:gap-8">
           <div className="flex flex-col gap-6 md:gap-8">
-              <Card id="content-input-section" className="shadow-md border-border/30">
-                 <CardHeader>
-                    <CardTitle>1. Input Your Content</CardTitle>
-                    <CardDescription>Paste your text, article URL, or video link below.</CardDescription>
-                 </CardHeader>
-                 <CardContent className="space-y-4">
-                     <Textarea
-                         placeholder="Paste your content or URL here..."
-                         value={content}
-                         onChange={handleContentChange}
-                         rows={6}
-                         className="text-base md:text-sm"
-                         disabled={loadingState.summarizing || !!loadingState.generating}
-                         aria-label="Content Input"
-                         />
-                       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                          <div id="persona-selector" className="w-full sm:w-auto flex-grow sm:flex-grow-0">
-                               <Label htmlFor="persona" className="text-xs font-medium text-muted-foreground mb-1 block">AI Persona</Label>
-                               <Select
-                                   value={selectedPersona}
-                                   onValueChange={setSelectedPersona}
-                                   disabled={loadingState.summarizing || !!loadingState.generating}
-                                   aria-label="Select AI Persona"
-                               >
-                                  <SelectTrigger className="w-full sm:w-[200px] h-9 text-xs" id="persona">
-                                     <SelectValue placeholder="Select Persona" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {PERSONAS.map(persona => (
-                                       <SelectItem key={persona.value} value={persona.value} textValue={persona.label} className="text-xs">
-                                           {persona.label}
-                                       </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                               </Select>
-                          </div>
-                           <Tooltip content={getRateLimitTooltip('summarize') ?? getRateLimitTooltip('generate') ?? (isApiKeyMissing ? 'Please add your Gemini API Key in Profile Settings.' : (isQuotaExceeded ? 'Quota exceeded for this month.' : (!content.trim() ? 'Enter content or URL to generate posts.' : undefined)))}>
-                              <div className="w-full sm:w-auto">
-                                 <Button
-                                     id="generate-posts-button"
-                                     onClick={handleGeneratePosts}
-                                     disabled={!content.trim() || loadingState.summarizing || !!loadingState.generating || isApiKeyMissing || isQuotaExceeded || !!rateLimitState.summarize?.active || !!rateLimitState.generate?.active}
-                                     loading={loadingState.summarizing || !!loadingState.generating}
-                                     className="w-full sm:w-auto"
-                                    >
-                                      <Sparkles className="mr-2 h-4 w-4" />
-                                      {loadingState.summarizing ? 'Summarizing...' : (loadingState.generating ? `Generating ${loadingState.generating}...` : 'Generate Posts')}
-                                 </Button>
-                              </div>
-                           </Tooltip>
-                       </div>
-                 </CardContent>
-              </Card>
-
-              <Card className="shadow-md border-border/30 flex-grow flex flex-col">
-                 <CardHeader>
-                    <CardTitle>2. Generated Drafts</CardTitle>
-                    <CardDescription>Review, tune, and copy the AI-generated posts for each platform.</CardDescription>
-                 </CardHeader>
-                  <CardContent className="flex-grow flex flex-col">
-                     {summary || Object.values(generatedPosts).some(p => p) ? (
-                        <Tabs defaultValue="linkedin" className="flex-grow flex flex-col" onValueChange={(value) => setActiveOutputTab(value as SocialPlatform)} id="output-tabs">
-                           <div className="flex justify-between items-center mb-4">
-                             <TabsList className="grid w-full grid-cols-3 sm:w-auto">
-                               {PLATFORMS.map(platform => (
-                                   <TabsTrigger key={platform} value={platform} className="capitalize text-xs sm:text-sm tabs-trigger-underline">
-                                       {platform}
-                                   </TabsTrigger>
-                               ))}
-                              </TabsList>
-                               <Tooltip content="Hashtags & Emojis">
-                                   <Button variant="ghost" size="icon" onClick={handleToggleBoostPanel} className={cn("transition-colors", isBoostPanelOpen && "bg-accent")}>
-                                       <Settings2 className="h-5 w-5"/>
-                                       <span className="sr-only">Toggle Boost Panel</span>
-                                   </Button>
-                               </Tooltip>
-                            </div>
-                            {PLATFORMS.map(platform => (
-                              <TabsContent key={platform} value={platform} className="flex-grow mt-0">
-                                  <div className="flex flex-col h-full gap-4">
-                                     <div className="relative flex-grow">
-                                         <Textarea
-                                             ref={outputTextareaRefs[platform]}
-                                             value={generatedPosts[platform]}
-                                             onChange={(e) => handleOutputChange(platform, e.target.value)}
-                                             rows={8}
-                                             className="text-base md:text-sm h-full resize-none pr-12"
-                                             disabled={!!loadingState.tuning[platform]}
-                                             placeholder={`Generated ${platform} post will appear here...`}
-                                             aria-label={`${platform} Post Output`}
-                                            />
-                                         <div className="absolute top-2 right-2 flex flex-col gap-1.5">
-                                              <Tooltip content={getRateLimitTooltip('analyze') ?? "AI Advisor"}>
-                                                   <Button
-                                                        id={`ai-advisor-button-${platform}`}
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-7 w-7"
-                                                        onClick={() => handleAnalyzePost(platform)}
-                                                        disabled={loadingState.analyzing === platform || !generatedPosts[platform] || generatedPosts[platform].startsWith("Error:") || !!rateLimitState.analyze?.active}
-                                                        aria-label="Analyze post with AI Advisor"
-                                                      >
-                                                         {loadingState.analyzing === platform ? <Loader2 className="animate-spin h-4 w-4"/> : <Sparkles className="h-4 w-4 text-purple-400"/>}
-                                                      </Button>
-                                               </Tooltip>
-                                              <Tooltip content="Tune Tone & Style">
-                                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openToneTuner(platform)} disabled={!generatedPosts[platform] || generatedPosts[platform].startsWith("Error:")}>
-                                                     <Palette className="h-4 w-4 text-cyan-400" />
-                                                 </Button>
-                                              </Tooltip>
-                                               <Tooltip content="Copy to Clipboard">
-                                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCopyToClipboard(platform)} disabled={!generatedPosts[platform] || generatedPosts[platform].startsWith("Error:")}>
-                                                     <Copy className="h-4 w-4"/>
-                                                  </Button>
-                                               </Tooltip>
-                                           </div>
-                                       </div>
-                                     <div id={`tune-buttons-${platform}`} className="flex flex-wrap gap-2">
-                                       {['Make Wittier', 'More Concise', 'Add Emojis', 'More Formal', 'Add Hashtags'].map(instr => (
-                                           <Tooltip key={instr} content={getRateLimitTooltip('tune')}>
-                                               <div className="inline-block">
-                                                  <Button
-                                                      variant="outline"
-                                                      size="sm"
-                                                      onClick={() => handleTunePost(platform, instr)}
-                                                      disabled={!!loadingState.tuning[platform] || !generatedPosts[platform] || generatedPosts[platform].startsWith("Error:") || !!rateLimitState.tune?.active}
-                                                      loading={loadingState.tuning[platform] === instr}
-                                                       className="text-xs"
-                                                   >
-                                                       {instr}
-                                                   </Button>
-                                                </div>
-                                            </Tooltip>
-                                       ))}
-                                     </div>
-                                       <PreviewMockup platform={platform} content={generatedPosts[platform]} />
-                                   </div>
-                              </TabsContent>
-                            ))}
-                        </Tabs>
-                      ) : (
-                        <div className="text-center text-muted-foreground py-10">
-                          {loadingState.summarizing || loadingState.generating ? (
-                            <div className="flex items-center justify-center">
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              <span>{loadingState.summarizing ? 'Summarizing...' : `Generating ${loadingState.generating}...`}</span>
-                            </div>
-                          ) : (
-                             'Enter content above and click "Generate Posts" to see your drafts.'
-                          )}
-                        </div>
-                      )}
-                  </CardContent>
-              </Card>
-           </div>
-
-           <div className="relative flex flex-col gap-6 md:gap-8 lg:w-80 xl:w-96">
-                <div className={cn("absolute top-0 right-0 h-full w-full transition-transform duration-300 ease-in-out", isBoostPanelOpen ? "translate-x-0" : "translate-x-full pointer-events-none")}>
-                    <BoostPanel
-                        isOpen={isBoostPanelOpen}
-                        onToggle={handleToggleBoostPanel}
-                        onInsertText={handleInsertText}
-                       />
+            <Card id="content-input-section" className="shadow-md border-border/30">
+              <CardHeader>
+                <CardTitle>1. Input Your Content</CardTitle>
+                <CardDescription>Paste your text, article URL, or video link below.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Textarea
+                  placeholder="Paste your content or URL here..."
+                  value={content}
+                  onChange={handleContentChange}
+                  rows={6}
+                  className="text-base md:text-sm"
+                  disabled={loadingState.summarizing || !!loadingState.generating}
+                  aria-label="Content Input"
+                  spellCheck={false} // Added spellCheck false
+                />
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div id="persona-selector" className="w-full sm:w-auto flex-grow sm:flex-grow-0">
+                    <Label htmlFor="persona" className="text-xs font-medium text-muted-foreground mb-1 block">AI Persona</Label>
+                    <Select
+                      value={selectedPersona}
+                      onValueChange={setSelectedPersona}
+                      disabled={loadingState.summarizing || !!loadingState.generating}
+                    >
+                      <SelectTrigger className="w-full sm:w-[200px] h-9 text-xs" id="persona" aria-label="Select AI Persona">
+                        <SelectValue placeholder="Select Persona" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PERSONAS.map(persona => (
+                          <SelectItem key={persona.value} value={persona.value} textValue={persona.label}>
+                            {persona.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Tooltip content={getRateLimitTooltip('summarize') ?? getRateLimitTooltip('generate') ?? (isApiKeyMissing ? 'Please add your Gemini API Key in Profile Settings.' : (isQuotaExceeded ? 'Quota exceeded for this month.' : (!content.trim() ? 'Enter content or URL to generate posts.' : undefined)))}>
+                    <div className="w-full sm:w-auto">
+                      <Button
+                        id="generate-posts-button"
+                        onClick={handleGeneratePosts}
+                        disabled={!content.trim() || loadingState.summarizing || !!loadingState.generating || isApiKeyMissing || isQuotaExceeded || !!rateLimitState.summarize?.active || !!rateLimitState.generate?.active}
+                        loading={loadingState.summarizing || !!loadingState.generating}
+                        className="w-full sm:w-auto"
+                      >
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        {loadingState.summarizing ? 'Summarizing...' : (loadingState.generating ? `Generating ${loadingState.generating}...` : 'Generate Posts')}
+                      </Button>
+                    </div>
+                  </Tooltip>
                 </div>
+              </CardContent>
+            </Card>
 
-              <div className={cn(
-                  "absolute top-0 right-0 h-full w-full transition-transform duration-300 ease-in-out",
-                  (isAiAdvisorOpen && !isBoostPanelOpen) ? "translate-x-0 z-10" : "translate-x-full pointer-events-none",
-                  isBoostPanelOpen && "translate-x-full pointer-events-none"
-              )}>
-                 <AiAdvisorPanel
-                     isOpen={isAiAdvisorOpen}
-                     isLoading={!!loadingState.analyzing}
-                     analysis={advisorAnalysis}
-                     onApplySuggestion={handleApplySuggestion}
-                     onClose={() => setIsAiAdvisorOpen(false)}
-                   />
-              </div>
+            <Card className="shadow-md border-border/30 flex-grow flex flex-col">
+              <CardHeader>
+                <CardTitle>2. Generated Drafts</CardTitle>
+                <CardDescription>Review, tune, and copy the AI-generated posts for each platform.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow flex flex-col">
+                {summary || Object.values(generatedPosts).some(p => p) ? (
+                  <Tabs defaultValue="linkedin" className="flex-grow flex flex-col" onValueChange={(value) => setActiveOutputTab(value as SocialPlatform)} id="output-tabs">
+                    <div className="flex justify-between items-center mb-4">
+                      <TabsList className="grid w-full grid-cols-3 sm:w-auto">
+                        {PLATFORMS.map(platform => (
+                          <TabsTrigger key={platform} value={platform} className="capitalize text-xs sm:text-sm tabs-trigger-underline">
+                            {platform}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                      <Tooltip content="Hashtags & Emojis">
+                          <Button variant="ghost" size="icon" onClick={handleToggleBoostPanel} className={cn("transition-colors", isBoostPanelOpen && "bg-accent")}>
+                            <Settings2 className="h-5 w-5" />
+                            <span className="sr-only">Toggle Boost Panel</span>
+                          </Button>
+                      </Tooltip>
+                    </div>
+                    {PLATFORMS.map(platform => (
+                      <TabsContent key={platform} value={platform} className="flex-grow mt-0">
+                        <div className="flex flex-col h-full gap-4">
+                          <div className="relative flex-grow">
+                            <Textarea
+                              ref={outputTextareaRefs[platform]}
+                              value={generatedPosts[platform]}
+                              onChange={(e) => handleOutputChange(platform, e.target.value)}
+                              rows={8}
+                              className="text-base md:text-sm h-full resize-none pr-12"
+                              disabled={!!loadingState.tuning[platform]}
+                              placeholder={`Generated ${platform} post will appear here...`}
+                              aria-label={`${platform} Post Output`}
+                            />
+                            <div className="absolute top-2 right-2 flex flex-col gap-1.5">
+                              <Tooltip content={getRateLimitTooltip('analyze') ?? "AI Advisor"}>
+                                  <Button
+                                    id={`ai-advisor-button-${platform}`}
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => handleAnalyzePost(platform)}
+                                    disabled={loadingState.analyzing === platform || !generatedPosts[platform] || generatedPosts[platform].startsWith("Error:") || !!rateLimitState.analyze?.active}
+                                    aria-label="Analyze post with AI Advisor"
+                                  >
+                                    {loadingState.analyzing === platform ? <Loader2 className="animate-spin h-4 w-4" /> : <Sparkles className="h-4 w-4 text-purple-400" />}
+                                  </Button>
+                              </Tooltip>
+                              <Tooltip content="Tune Tone & Style">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openToneTuner(platform)} disabled={!generatedPosts[platform] || generatedPosts[platform].startsWith("Error:") || !!loadingState.tuning[platform]}>
+                                    <Palette className="h-4 w-4 text-cyan-400" />
+                                  </Button>
+                              </Tooltip>
+                              <Tooltip content="Copy to Clipboard">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCopyToClipboard(platform)} disabled={!generatedPosts[platform] || generatedPosts[platform].startsWith("Error:")}>
+                                    <Copy className="h-4 w-4" />
+                                  </Button>
+                              </Tooltip>
+                            </div>
+                          </div>
+                          <div id={`tune-buttons-${platform}`} className="flex flex-wrap gap-2">
+                            {['Make Wittier', 'More Concise', 'Add Emojis', 'More Formal', 'Add Hashtags'].map(instr => (
+                              <Tooltip key={instr} content={getRateLimitTooltip('tune')}>
+                                <div className="inline-block">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleTunePost(platform, instr)}
+                                    disabled={!!loadingState.tuning[platform] || !generatedPosts[platform] || generatedPosts[platform].startsWith("Error:") || !!rateLimitState.tune?.active}
+                                    loading={loadingState.tuning[platform] === instr}
+                                    className="text-xs"
+                                  >
+                                    {instr}
+                                  </Button>
+                                </div>
+                              </Tooltip>
+                            ))}
+                          </div>
+                          <PreviewMockup platform={platform} content={generatedPosts[platform]} />
+                        </div>
+                      </TabsContent>
+                    ))}
+                  </Tabs>
+                ) : (
+                  <div className="text-center text-muted-foreground py-10">
+                    {loadingState.summarizing || loadingState.generating ? (
+                      <div className="flex items-center justify-center">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <span>{loadingState.summarizing ? 'Summarizing...' : `Generating ${loadingState.generating}...`}</span>
+                      </div>
+                    ) : (
+                      'Enter content above and click "Generate Posts" to see your drafts.'
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
-               <div className={cn(
-                 "w-full h-full bg-muted/20 rounded-lg border border-dashed border-border/30 flex items-center justify-center text-muted-foreground text-sm",
-                  (isAiAdvisorOpen || isBoostPanelOpen) && "opacity-0 pointer-events-none"
-              )}>
-                 AI Advisor & Boost Tools appear here
-               </div>
+          {/* Right Panel: Boost Panel / AI Advisor */}
+          <div className="relative flex flex-col gap-6 md:gap-8 lg:w-80 xl:w-96">
+            {/* Boost Panel - Always rendered for transition */}
+            <div className={cn(
+              "absolute top-0 right-0 h-full w-full transition-transform duration-300 ease-in-out",
+              isBoostPanelOpen ? "translate-x-0 opacity-100 z-10" : "translate-x-full opacity-0 pointer-events-none"
+            )}>
+              <BoostPanel
+                isOpen={isBoostPanelOpen}
+                onToggle={handleToggleBoostPanel}
+                onInsertText={handleInsertText}
+              />
+            </div>
 
-           </div>
+            {/* AI Advisor Panel - Always rendered for transition */}
+            <div className={cn(
+              "absolute top-0 right-0 h-full w-full transition-transform duration-300 ease-in-out",
+               isAiAdvisorOpen ? "translate-x-0 opacity-100 z-20" : "translate-x-full opacity-0 pointer-events-none" // Higher z-index when open
+             )}>
+              <AiAdvisorPanel
+                isOpen={isAiAdvisorOpen}
+                isLoading={!!loadingState.analyzing}
+                analysis={advisorAnalysis}
+                onApplySuggestion={handleApplySuggestion}
+                onClose={() => setIsAiAdvisorOpen(false)}
+              />
+            </div>
 
-      </main>
+            {/* Placeholder when both panels are closed */}
+            <div className={cn(
+              "w-full h-full bg-muted/20 rounded-lg border border-dashed border-border/30 flex items-center justify-center text-muted-foreground text-sm transition-opacity duration-300",
+              (isAiAdvisorOpen || isBoostPanelOpen) ? "opacity-0 pointer-events-none" : "opacity-100"
+            )}>
+              AI Advisor & Boost Tools appear here
+            </div>
 
-      <footer className="text-center mt-8 text-xs text-muted-foreground">
-         Built with Next.js, Supabase, Genkit & ShadCN UI for the Gemini Hackathon.
-      </footer>
+          </div>
 
-      <ProfileDialog
-        isOpen={isProfileDialogOpen}
-        onOpenChange={setIsProfileDialogOpen}
-        user={user}
-        initialProfile={profile}
-        initialQuota={quota}
-        onProfileUpdate={handleProfileUpdate}
-        initialXp={xp}
-        initialBadges={badges}
-        dbSetupError={dbSetupError}
-      />
-       <ToneTunerSheet
-            isOpen={isToneTunerOpen}
-            onOpenChange={setIsToneTunerOpen}
-            currentTone={selectedPersona}
-            onApplyTone={handleApplyTone}
+        </main>
+
+        <footer className="text-center mt-8 text-xs text-muted-foreground">
+          Built with Next.js, Supabase, Genkit & ShadCN UI for the Gemini Hackathon.
+        </footer>
+
+        <ProfileDialog
+          isOpen={isProfileDialogOpen}
+          onOpenChange={setIsProfileDialogOpen}
+          user={user}
+          initialProfile={profile}
+          initialQuota={quota}
+          onProfileUpdate={handleProfileUpdate}
+          initialXp={xp}
+          initialBadges={badges}
+          dbSetupError={dbSetupError}
+        />
+        <ToneTunerSheet
+          isOpen={isToneTunerOpen}
+          onOpenChange={setIsToneTunerOpen}
+          currentTone={selectedPersona}
+          onApplyTone={handleApplyTone}
         />
         <HelpModal isOpen={isHelpModalOpen} onOpenChange={setIsHelpModalOpen} />
-    </div>
-  </TooltipProvider>
+      </div>
+    </TooltipProvider>
   );
 }

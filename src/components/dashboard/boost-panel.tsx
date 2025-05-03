@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Hash, Smile, ChevronRight } from 'lucide-react'; // Import ChevronRight
+import { Hash, Smile, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { cn } from '@/lib/utils'; // Import cn
 
 interface BoostPanelProps {
   isOpen: boolean;
@@ -52,7 +53,7 @@ const BoostPanel: React.FC<BoostPanelProps> = ({ isOpen, onToggle, onInsertText 
   }, {} as typeof TRENDING_HASHTAGS);
 
   return (
-    <Card className={ `w-full max-w-xs lg:max-w-sm border-l border-border/50 rounded-l-none flex flex-col h-full bg-card/90 backdrop-blur-sm shadow-lg transition-all duration-300 ease-in-out ${isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 absolute right-0 top-0 pointer-events-none'}` }>
+    <Card className={ cn( `w-full max-w-xs lg:max-w-sm border-l border-border/50 rounded-l-none flex flex-col h-full bg-card/90 backdrop-blur-sm shadow-lg transition-all duration-300 ease-in-out ${isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 absolute right-0 top-0 pointer-events-none'}` )}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-base font-semibold flex items-center gap-2">
           <Hash className="h-5 w-5 text-cyan-400" /> / <Smile className="h-5 w-5 text-yellow-400" />

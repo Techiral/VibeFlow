@@ -7,14 +7,14 @@ import { cn } from "@/lib/utils"
 
 const TooltipProvider = TooltipPrimitive.Provider
 
-const TooltipRoot = TooltipPrimitive.Root // Rename original Tooltip to avoid conflict
+const Tooltip = TooltipPrimitive.Root // Export original Radix Root as Tooltip
 
 const TooltipTrigger = TooltipPrimitive.Trigger
 
 const TooltipContent = React.forwardRef<
   React.ElementRef<typeof TooltipPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content> & { content?: React.ReactNode } // Allow ReactNode content
->(({ className, sideOffset = 4, content, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
+>(({ className, sideOffset = 4, children, ...props }, ref) => ( // Removed content prop, use children
   <TooltipPrimitive.Portal>
     <TooltipPrimitive.Content
       ref={ref}
@@ -25,45 +25,44 @@ const TooltipContent = React.forwardRef<
       )}
       {...props}
     >
-      {content || children} {/* Render content prop if provided, otherwise children */}
+      {children} {/* Render children */}
     </TooltipPrimitive.Content>
   </TooltipPrimitive.Portal>
 ))
 TooltipContent.displayName = TooltipPrimitive.Content.displayName
 
-// Custom Tooltip component that accepts content prop directly
-interface CustomTooltipProps extends React.ComponentPropsWithoutRef<typeof TooltipRoot> { // Use TooltipRoot
+// Keep the custom component definition if needed elsewhere, but rename it
+interface SimpleTooltipProps extends React.ComponentPropsWithoutRef<typeof Tooltip> {
   content?: React.ReactNode;
   children: React.ReactNode; // Trigger element
   side?: TooltipPrimitive.TooltipContentProps['side'];
   align?: TooltipPrimitive.TooltipContentProps['align'];
   sideOffset?: TooltipPrimitive.TooltipContentProps['sideOffset'];
-  className?: string; // Allow classname for TooltipContent
+  className?: string;
 }
 
-const CustomTooltip: React.FC<CustomTooltipProps> = ({
+const SimpleTooltip: React.FC<SimpleTooltipProps> = ({
   content,
   children,
   side = 'top',
   align = 'center',
   sideOffset = 4,
-  className, // Pass className to TooltipContent
-  ...props // Pass remaining props to Tooltip root
+  className,
+  ...props
 }) => {
    if (!content) {
-     // If no content is provided, just render the children (trigger) without a tooltip
      return <>{children}</>;
    }
 
   return (
-    <TooltipRoot {...props}> {/* Use TooltipRoot */}
+    <Tooltip {...props}> {/* Use the original Tooltip (Radix Root) */}
       <TooltipTrigger asChild>{children}</TooltipTrigger>
       <TooltipContent side={side} align={align} sideOffset={sideOffset} className={className}>
         {content}
       </TooltipContent>
-    </TooltipRoot>
+    </Tooltip>
   );
 };
 
 
-export { TooltipTrigger, TooltipContent, TooltipProvider, CustomTooltip as Tooltip }; // Remove direct Tooltip export, keep re-export
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, SimpleTooltip }; // Export SimpleTooltip if needed, keep original Tooltip export

@@ -189,6 +189,57 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
   }, [searchParams, toast, router]);
 
 
+   // Function to check and award badges (Defined earlier)
+   const checkAndAwardBadges = useCallback(async (currentXp: number, currentBadges: string[]) => {
+        let newlyAwardedBadge: string | null = null;
+        let updatedBadges = [...currentBadges]; // Start with current badges
+
+        for (const badge of BADGES) {
+            // Check if XP threshold is met AND the badge hasn't been awarded yet
+            if (currentXp >= badge.xp && !updatedBadges.includes(badge.name)) {
+                 console.log(`Badge condition met: ${badge.name}`);
+                 newlyAwardedBadge = badge.name; // Store the latest badge to award
+                 updatedBadges.push(badge.name); // Add to the array we will update with
+            }
+        }
+
+        // If new badges were found, update state and DB
+        if (newlyAwardedBadge && user?.id) { // Check if user.id exists
+             setBadges(updatedBadges); // Optimistic UI update
+
+             const { error } = await supabase
+               .from('profiles')
+               .update({ badges: updatedBadges }) // Use the updated badges array
+               .eq('id', user.id);
+
+             if (error) {
+                   console.error(`Failed to save badges to database:`, error);
+                   toast({ title: "Badge Save Error", description: `Could not save newly earned badges.`, variant: "destructive"});
+                   // Revert optimistic UI update
+                   setBadges(currentBadges);
+             } else {
+                  console.log(`Badges saved to DB: ${updatedBadges.join(', ')}`);
+                  // Update the main profile state as well after DB success
+                   setProfile(prev => prev ? { ...prev, badges: updatedBadges } : null);
+
+                   // Notify about the *last* newly awarded badge
+                   const badgeInfo = BADGES.find(b => b.name === newlyAwardedBadge);
+                    if (badgeInfo && newlyAwardedBadge !== lastAwardedBadge) {
+                       setShowConfetti(true);
+                       sonnerToast.success(`Badge Unlocked: ${badgeInfo.name}!`, {
+                         description: badgeInfo.description,
+                         duration: 5000,
+                         icon: <badgeInfo.icon className="text-green-500" />,
+                       });
+                       setLastAwardedBadge(newlyAwardedBadge);
+                       setTimeout(() => setShowConfetti(false), 5000);
+                    }
+             }
+        }
+
+   }, [supabase, user?.id, toast, lastAwardedBadge]); // Added user.id dependency
+
+
   // Fetch or confirm profile/quota data on client-side if needed (minor adjustments)
   useEffect(() => {
     const ensureData = async () => {
@@ -342,7 +393,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
       }
     };
     ensureData();
-  }, [user.id, supabase, toast, profile, quota, dbSetupError, initialXp, initialBadges, initialQuota, initialProfile]); // Dependencies adjusted
+  }, [user.id, supabase, toast, profile, quota, dbSetupError, initialXp, initialBadges, initialQuota, initialProfile, checkAndAwardBadges]); // Dependencies adjusted
 
 
   // Effect to check onboarding status only on client-side after profile is loaded
@@ -389,57 +440,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
   useEffect(() => {
     checkAndAwardBadges(xp, badges);
   }, [xp, badges, checkAndAwardBadges]); // Added checkAndAwardBadges dependency
-
-
-   // Function to check and award badges
-   const checkAndAwardBadges = useCallback(async (currentXp: number, currentBadges: string[]) => {
-        let newlyAwardedBadge: string | null = null;
-        let updatedBadges = [...currentBadges]; // Start with current badges
-
-        for (const badge of BADGES) {
-            // Check if XP threshold is met AND the badge hasn't been awarded yet
-            if (currentXp >= badge.xp && !updatedBadges.includes(badge.name)) {
-                 console.log(`Badge condition met: ${badge.name}`);
-                 newlyAwardedBadge = badge.name; // Store the latest badge to award
-                 updatedBadges.push(badge.name); // Add to the array we will update with
-            }
-        }
-
-        // If new badges were found, update state and DB
-        if (newlyAwardedBadge && user?.id) { // Check if user.id exists
-             setBadges(updatedBadges); // Optimistic UI update
-
-             const { error } = await supabase
-               .from('profiles')
-               .update({ badges: updatedBadges }) // Use the updated badges array
-               .eq('id', user.id);
-
-             if (error) {
-                   console.error(`Failed to save badges to database:`, error);
-                   toast({ title: "Badge Save Error", description: `Could not save newly earned badges.`, variant: "destructive"});
-                   // Revert optimistic UI update
-                   setBadges(currentBadges);
-             } else {
-                  console.log(`Badges saved to DB: ${updatedBadges.join(', ')}`);
-                  // Update the main profile state as well after DB success
-                   setProfile(prev => prev ? { ...prev, badges: updatedBadges } : null);
-
-                   // Notify about the *last* newly awarded badge
-                   const badgeInfo = BADGES.find(b => b.name === newlyAwardedBadge);
-                    if (badgeInfo && newlyAwardedBadge !== lastAwardedBadge) {
-                       setShowConfetti(true);
-                       sonnerToast.success(`Badge Unlocked: ${badgeInfo.name}!`, {
-                         description: badgeInfo.description,
-                         duration: 5000,
-                         icon: <badgeInfo.icon className="text-green-500" />,
-                       });
-                       setLastAwardedBadge(newlyAwardedBadge);
-                       setTimeout(() => setShowConfetti(false), 5000);
-                    }
-             }
-        }
-
-   }, [supabase, user?.id, toast, lastAwardedBadge]); // Added user.id dependency
 
 
    // Function to check quota and increment if allowed

@@ -21,16 +21,15 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Loader2, User as UserIcon, Save, X, Lock, BrainCircuit, Trophy, Star, HelpCircle } from 'lucide-react'; // Added Lock, BrainCircuit, Trophy, Star, HelpCircle
+import { AlertCircle, Loader2, User as UserIcon, Save, X, Lock, BrainCircuit, Trophy, Star, HelpCircle, Zap } from 'lucide-react'; // Added Lock, BrainCircuit, Trophy, Star, HelpCircle, Zap
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Progress } from '@/components/ui/progress';
 import BadgeCollection from './badge-collection'; // Import the badge collection
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-// import { authenticateComposioApp } from '@/services/composio-service'; // Keep commented or remove if not using
-// import { startComposioLogin } from '@/actions/composio-actions'; // Keep commented or remove if not using
+import { handleDeauthenticateApp } from '@/services/composio-service'; // Corrected import
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-// import { App as ComposioAppEnum } from "composio-core"; // Keep commented or remove if not using
+import { App as ComposioAppEnum } from "composio-core"; // Import Composio App enum
 import { toast as sonnerToast } from 'sonner'; // Import sonner toast for confetti effect
 import Confetti from 'react-confetti';
 import { cn } from '@/lib/utils'; // Import cn
@@ -52,8 +51,8 @@ const profileSchema = z.object({
   full_name: z.string().max(100, 'Full name must be 100 characters or less').nullable().optional().or(z.literal('')),
   username: z.string().max(50, 'Username must be 50 characters or less').nullable().optional().or(z.literal('')),
   phone_number: z.string().max(20, 'Phone number must be 20 characters or less').nullable().optional().or(z.literal('')),
-  // Removed Composio-related fields
   gemini_api_key: z.string().max(255, 'API Key must be 255 characters or less').nullable().optional().or(z.literal('')),
+  composio_api_key: z.string().max(255, 'Composio API Key must be 255 characters or less').nullable().optional().or(z.literal(''))
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
@@ -83,14 +82,18 @@ export function ProfileDialog({
   const [profile, setProfile] = useState<UserProfileFunctionReturn | null>(initialProfile);
   const [quota, setQuota] = useState<Quota | null>(initialQuota);
   const [xp, setXp] = useState<number>(initialXp);
-  const [badges, setBadges] = useState<string[]>(initialBadges);
+  const [badges, setBadges] = useState<string[]>([]); // Initialize as empty array
   const [error, setError] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false); // State for confetti effect
+  const [authLoading, setAuthLoading] = useState<Record<string, boolean>>({}); // Track loading state per app
 
   useEffect(() => {
     setIsClient(true);
-  }, []);
+    // Ensure initialBadges is treated as an array, even if null/undefined initially
+    setBadges(initialBadges ?? []);
+  }, [initialBadges]);
+
 
   // Update local state when initial props change
   useEffect(() => {
@@ -105,31 +108,40 @@ export function ProfileDialog({
     setXp(initialXp);
   }, [initialXp]);
 
-  useEffect(() => {
-    setBadges(initialBadges || []); // Ensure badges is always an array
-  }, [initialBadges]);
-
 
   const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      full_name: profile?.full_name ?? '',
-      username: profile?.username ?? '',
-      phone_number: profile?.phone_number ?? '',
-      gemini_api_key: profile?.gemini_api_key ?? '',
+      full_name: '',
+      username: '',
+      phone_number: '',
+      gemini_api_key: '',
+      composio_api_key: '',
     },
   });
 
-  // Reset form when initialProfile changes
+  // Reset form when initialProfile changes and hydrate default values
   useEffect(() => {
-    form.reset({
-      full_name: profile?.full_name ?? '',
-      username: profile?.username ?? '',
-      phone_number: profile?.phone_number ?? '',
-      gemini_api_key: profile?.gemini_api_key ?? '',
-    });
+    if (initialProfile) {
+      form.reset({
+        full_name: initialProfile.full_name ?? '',
+        username: initialProfile.username ?? '',
+        phone_number: initialProfile.phone_number ?? '',
+        gemini_api_key: initialProfile.gemini_api_key ?? '',
+        composio_api_key: initialProfile.composio_api_key ?? '',
+      });
+    } else {
+      // Optionally reset to empty if profile is null
+       form.reset({
+         full_name: '',
+         username: '',
+         phone_number: '',
+         gemini_api_key: '',
+         composio_api_key: '',
+       });
+    }
     setError(null); // Clear errors when profile reloads
-  }, [profile, form]);
+  }, [initialProfile, form]);
 
 
   async function onSubmit(data: ProfileFormData) {
@@ -155,6 +167,7 @@ export function ProfileDialog({
         username: data.username,
         phone_number: data.phone_number,
         gemini_api_key: data.gemini_api_key,
+        composio_api_key: data.composio_api_key, // Include Composio API Key
         updated_at: new Date().toISOString(),
       };
 
@@ -192,8 +205,77 @@ export function ProfileDialog({
     }
   }
 
+    // --- Composio Authentication Handler ---
+    const handleAuthenticateApp = useCallback(async (appName: string) => {
+      if (!profile?.composio_api_key) {
+          toast({
+              title: "Composio API Key Missing",
+              description: "Please add your Composio API Key in the 'API Keys' tab first.",
+              variant: "destructive",
+          });
+          return;
+      }
+
+      setAuthLoading(prev => ({ ...prev, [appName]: true }));
+      setError(null);
+      console.log(`Starting authentication for ${appName}...`);
+
+      try {
+          console.log(`Calling API /api/auth/composio/connect for ${appName} with API Key ending: ...${profile.composio_api_key.slice(-4)}`);
+          const response = await fetch('/api/auth/composio/connect', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                  userId: user.id,
+                  appName: appName as ComposioAppEnum, // Cast to the enum type
+                  composioApiKey: profile.composio_api_key, // Pass the API key from the profile
+                  // baseUrl is optional here, handled server-side
+              }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok && result.redirectUrl) {
+              console.log(`Redirecting user to Composio for ${appName} auth...`);
+              window.location.href = result.redirectUrl; // Redirect user to Composio OAuth page
+              // The backend callback will handle updating the auth status
+          } else {
+              console.error(`Authentication initiation failed for ${appName}:`, result.error || `HTTP Status: ${response.status}`);
+               // Provide more specific user feedback
+               let description = result.error || `Could not initiate authentication. Status: ${response.status}`;
+               if (description.includes("Invalid API Key")) {
+                   description = "Invalid Composio API Key. Please check your profile.";
+               } else if (response.status === 500 && description.includes("getEntity")) {
+                   description = "Composio SDK issue: 'getEntity' method not found. Please check the 'composio-core' library version or initialization.";
+               } else if (response.status === 500) {
+                    description = `Server error during authentication initiation: ${result.error || 'Unknown internal error'}`;
+               }
+              toast({
+                  title: `Authentication Failed (${appName})`,
+                  description: description,
+                  variant: "destructive",
+              });
+               setError(`Authentication initiation failed for ${appName}: ${description}`);
+          }
+      } catch (error: any) {
+          console.error(`Error calling authentication API for ${appName}:`, error);
+          toast({
+              title: `Authentication Error (${appName})`,
+              description: error.message || "An unexpected error occurred.",
+              variant: "destructive",
+          });
+           setError(`Error initiating authentication for ${appName}: ${error.message}`);
+      } finally {
+          setAuthLoading(prev => ({ ...prev, [appName]: false }));
+      }
+  }, [profile, user.id, toast]); // Added toast to dependencies
+
   // Calculate quota percentage
-  const quotaPercentage = quota ? (quota.request_count / quota.quota_limit) * 100 : 0;
+  const quotaPercentage = quota && quota.quota_limit > 0
+    ? (quota.request_count / quota.quota_limit) * 100
+    : 0;
   const quotaTooltipContent = quota
     ? `${quota.request_count} / ${quota.quota_limit} requests used this cycle.`
     : "Loading quota...";
@@ -235,63 +317,67 @@ export function ProfileDialog({
   const xpTooltipContent = `Level ${xpInfo.level} | ${xp} XP (${xpInfo.xpTowardsNext}/${xpInfo.xpNeededForNext} towards Lvl ${xpInfo.level + 1} @ ${xpInfo.nextLevelXp} XP)`;
 
   // Calculate reset date
-  const getResetDate = () => {
-    if (!quota?.last_reset_at) return 'N/A';
-    try {
-      const resetDate = new Date(quota.last_reset_at);
-      resetDate.setMonth(resetDate.getMonth() + 1);
-      return resetDate.toLocaleDateString(); // Format based on user's locale
-    } catch (e) {
-      return 'Invalid Date';
-    }
-  };
+   const getResetDate = () => {
+     if (!quota?.last_reset_at) return 'N/A';
+     try {
+       const resetDate = new Date(quota.last_reset_at);
+       resetDate.setMonth(resetDate.getMonth() + 1);
+       // Use toLocaleDateString for better formatting, check if 'date' is valid
+       return !isNaN(resetDate.getTime()) ? resetDate.toLocaleDateString() : 'Invalid Date';
+     } catch (e) {
+       console.error("Error formatting reset date:", e);
+       return 'Invalid Date';
+     }
+   };
 
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90vh]">
-        <DialogHeader className="px-6 pt-6">
-          <DialogTitle>Profile & Settings</DialogTitle>
-          <DialogDescription>
-            Manage your profile details, API keys, and usage.
-          </DialogDescription>
-        </DialogHeader>
 
-        {dbSetupError && (
-          <div className="px-6 py-4 border-t border-border">
-            <div className="bg-destructive/10 border border-destructive/50 text-destructive p-3 rounded-md text-sm flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <div>
-                <span className="font-semibold">Database Error:</span> Cannot load or save profile/quota due to a database setup issue. Please run the SQL script from <code>supabase/schema.sql</code> in your Supabase project.
-              </div>
-            </div>
-          </div>
-        )}
+     <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90vh]">
+         <DialogHeader className="px-6 pt-6">
+           <DialogTitle>Profile & Settings</DialogTitle>
+           <DialogDescription>
+             Manage your profile details, API keys, and usage.
+           </DialogDescription>
+         </DialogHeader>
 
-        {error && (
-          <div className="px-6 py-4 border-t border-border">
-            <div className="bg-destructive/10 border border-destructive/50 text-destructive p-3 rounded-md text-sm flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <div>
-                <span className="font-semibold">Error:</span> {error}
-              </div>
-            </div>
-          </div>
-        )}
+         {dbSetupError && (
+           <div className="px-6 py-4 border-t border-border">
+             <div className="bg-destructive/10 border border-destructive/50 text-destructive p-3 rounded-md text-sm flex items-start gap-2">
+               <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+               <div>
+                 <span className="font-semibold">Database Error:</span> Cannot load or save profile/quota due to a database setup issue. Please run the SQL script from <code>supabase/schema.sql</code> in your Supabase project.
+               </div>
+             </div>
+           </div>
+         )}
 
-        <ScrollArea className="overflow-y-auto border-t border-b border-border">
-          <div className="px-6 py-6">
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" id="profile-form">
-                <Tabs defaultValue="profile">
-                  <TabsList className="grid w-full grid-cols-3 mb-6">
-                    <TabsTrigger value="profile">Profile</TabsTrigger>
-                    <TabsTrigger value="keys">API Keys</TabsTrigger>
-                    <TabsTrigger value="usage">Usage & Billing</TabsTrigger>
-                  </TabsList>
+         {error && (
+           <div className="px-6 py-4 border-t border-border">
+             <div className="bg-destructive/10 border border-destructive/50 text-destructive p-3 rounded-md text-sm flex items-start gap-2">
+               <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+               <div>
+                 <span className="font-semibold">Error:</span> {error}
+               </div>
+             </div>
+           </div>
+         )}
 
-                  {/* Profile Tab */}
-                  <TabsContent value="profile" className="space-y-6 mt-0">
+         <ScrollArea className="overflow-y-auto border-t border-b border-border">
+           <div className="px-6 py-6">
+             <Form {...form}>
+               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" id="profile-form">
+                 <Tabs defaultValue="profile">
+                   <TabsList className="grid w-full grid-cols-4 mb-6"> {/* Changed to 4 columns */}
+                     <TabsTrigger value="profile">Profile</TabsTrigger>
+                     <TabsTrigger value="keys">API Keys</TabsTrigger>
+                     <TabsTrigger value="integrations">Integrations</TabsTrigger> {/* Added Integrations Tab */}
+                     <TabsTrigger value="usage">Usage & Billing</TabsTrigger>
+                   </TabsList>
+
+                   {/* Profile Tab */}
+                   <TabsContent value="profile" className="space-y-6 mt-0">
                     <FormField
                       control={form.control}
                       name="full_name"
@@ -299,174 +385,260 @@ export function ProfileDialog({
                         <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
                           <FormLabel className="sm:text-right sm:col-span-1 mt-1">Full Name</FormLabel>
                           <FormControl className="col-span-1 sm:col-span-2">
-                             <Input placeholder="Your Full Name" {...field} value={field.value ?? ''}/>
+                            <Input placeholder="Your Full Name" {...field} value={field.value ?? ''} />
                           </FormControl>
                           <FormMessage className="sm:col-start-2 sm:col-span-2" />
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="username"
-                      render={({ field }) => (
-                        <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                          <FormLabel className="sm:text-right sm:col-span-1 mt-1">Username</FormLabel>
-                          <FormControl className="col-span-1 sm:col-span-2">
-                             <Input placeholder="Your Username" {...field} value={field.value ?? ''} />
-                          </FormControl>
-                          <FormMessage className="sm:col-start-2 sm:col-span-2" />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="phone_number"
-                      render={({ field }) => (
-                        <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                          <FormLabel className="sm:text-right sm:col-span-1 mt-1">Phone</FormLabel>
-                          <FormControl className="col-span-1 sm:col-span-2">
-                             <Input type="tel" placeholder="Your Phone Number" {...field} value={field.value ?? ''}/>
-                          </FormControl>
-                          <FormMessage className="sm:col-start-2 sm:col-span-2" />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                      <Label className="sm:text-right sm:col-span-1 mt-1">Email</Label>
-                      <div className="col-span-1 sm:col-span-2">
-                        <Input type="email" value={user?.email ?? ''} disabled className="text-muted-foreground bg-muted/50" />
-                        <p className="text-xs text-muted-foreground mt-1">Email cannot be changed.</p>
-                      </div>
-                    </div>
-                  </TabsContent>
+                     <FormField
+                       control={form.control}
+                       name="username"
+                       render={({ field }) => (
+                         <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                           <FormLabel className="sm:text-right sm:col-span-1 mt-1">Username</FormLabel>
+                           <FormControl className="col-span-1 sm:col-span-2">
+                              <Input placeholder="Your Username" {...field} value={field.value ?? ''} />
+                           </FormControl>
+                           <FormMessage className="sm:col-start-2 sm:col-span-2" />
+                         </FormItem>
+                       )}
+                     />
+                     <FormField
+                       control={form.control}
+                       name="phone_number"
+                       render={({ field }) => (
+                         <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                           <FormLabel className="sm:text-right sm:col-span-1 mt-1">Phone</FormLabel>
+                           <FormControl className="col-span-1 sm:col-span-2">
+                              <Input type="tel" placeholder="Your Phone Number" {...field} value={field.value ?? ''}/>
+                           </FormControl>
+                           <FormMessage className="sm:col-start-2 sm:col-span-2" />
+                         </FormItem>
+                       )}
+                     />
+                     <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                       <Label className="sm:text-right sm:col-span-1 mt-1">Email</Label>
+                       <div className="col-span-1 sm:col-span-2">
+                         <Input type="email" value={user?.email ?? ''} disabled className="text-muted-foreground bg-muted/50" />
+                         <p className="text-xs text-muted-foreground mt-1">Email cannot be changed.</p>
+                       </div>
+                     </div>
+                   </TabsContent>
 
-                  {/* API Keys Tab */}
-                  <TabsContent value="keys" className="space-y-6 mt-0">
-                    <FormField
-                      control={form.control}
-                      name="gemini_api_key"
-                      render={({ field }) => (
-                        <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
-                          <FormLabel className="sm:text-right sm:col-span-1 mt-1 flex items-center gap-1 justify-end">
-                            <span>Google Gemini API Key</span>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="focus:outline-none">
-                                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-                                  </a>
-                                </TooltipTrigger>
-                                <TooltipContent side="top">
-                                  <p>Get your key from Google AI Studio. Required for all AI features.</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </FormLabel>
-                          <FormControl className="col-span-1 sm:col-span-2">
-                             <Input
-                                type="password"
-                                placeholder="Enter your Gemini API Key"
-                                {...field}
-                                value={field.value ?? ''}
-                             />
-                          </FormControl>
-                          <FormMessage className="sm:col-start-2 sm:col-span-2" />
-                          <FormDescription className="sm:col-start-2 sm:col-span-2">
-                            Your key is stored securely and used only for AI generation on your behalf.
-                          </FormDescription>
-                        </FormItem>
-                      )}
-                    />
-                  </TabsContent>
-
-                  {/* Usage & Billing Tab */}
-                  <TabsContent value="usage" className="space-y-6 mt-0">
-                    <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4 shadow-sm">
-                      <h4 className="text-base font-semibold">Monthly Usage</h4>
-                      <TooltipProvider>
-                        <Tooltip content={quotaTooltipContent}>
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-sm font-medium">
-                              <span>Requests Used</span>
-                              <span>{quota ? `${quota.request_count ?? 0} / ${quota.quota_limit ?? 100}` : <Loader2 className="h-4 w-4 animate-spin inline" />}</span>
-                            </div>
-                            <Progress
-                              value={quotaPercentage}
-                              className="h-2"
-                              aria-label="Monthly Usage Quota"
-                              indicatorClassName={isQuotaExceeded ? "bg-destructive" : "bg-primary"}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Resets on: {getResetDate()}
-                            </p>
-                          </div>
-                        </Tooltip>
-
-                        <Tooltip content={xpTooltipContent}>
-                          <div className="space-y-1 mt-4">
-                            <div className="flex justify-between text-sm font-medium">
-                              <span>Experience Points (XP)</span>
-                              <span>{xp} XP</span>
-                            </div>
-                            <Progress
-                              value={xpInfo.percentage}
-                              className="h-2"
-                              aria-label={xpTooltipContent}
-                              indicatorClassName="bg-gradient-to-r from-purple-500 to-cyan-400"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Next Level: {xpInfo.nextLevelXp} XP
-                            </p>
-                          </div>
-                        </Tooltip>
-                      </TooltipProvider>
-
-                      <Separator className="my-4" />
-                      <div>
-                        <p className="text-sm mb-2">You are currently on the <span className="font-semibold text-primary">Free Plan</span>.</p>
-                        <Button disabled>Upgrade Plan (Coming Soon)</Button>
-                      </div>
-                    </div>
-
-                    {/* Badge Collection */}
-                    <div className="mt-6">
-                      <h4 className="text-base font-semibold mb-3">Achievements</h4>
-                      {badges && badges.length > 0 ? (
-                         <BadgeCollection userBadges={badges} />
-                      ) : (
-                        <p className="text-sm text-muted-foreground">Generate more posts to unlock badges!</p>
-                      )}
-                    </div>
-                    {/* Confetti effect trigger */}
-                    {isClient && showConfetti && (
-                      <Confetti
-                        recycle={false}
-                        numberOfPieces={200}
-                        width={typeof window !== 'undefined' ? window.innerWidth : 0}
-                        height={typeof window !== 'undefined' ? window.innerHeight : 0}
-                        className="!fixed !top-0 !left-0 !w-full !h-full !z-[10002]" // Ensure higher z-index than dialog
-                        onConfettiComplete={() => setShowConfetti(false)}
+                   {/* API Keys Tab */}
+                   <TabsContent value="keys" className="space-y-6 mt-0">
+                     <FormField
+                       control={form.control}
+                       name="gemini_api_key"
+                       render={({ field }) => (
+                         <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                           <FormLabel htmlFor="gemini_api_key" className="sm:text-right sm:col-span-1 mt-1 flex items-center gap-1 justify-end">
+                             <span>Google Gemini API Key</span>
+                             <TooltipProvider>
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                   <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="focus:outline-none">
+                                     <HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                                   </a>
+                                 </TooltipTrigger>
+                                 <TooltipContent side="top">
+                                   <p>Get your key from Google AI Studio. Required for all AI features.</p>
+                                 </TooltipContent>
+                               </Tooltip>
+                             </TooltipProvider>
+                           </FormLabel>
+                           <FormControl className="col-span-1 sm:col-span-2">
+                              <Input
+                                 id="gemini_api_key"
+                                 type="password"
+                                 placeholder="Enter your Gemini API Key"
+                                 {...field}
+                                 value={field.value ?? ''}
+                              />
+                           </FormControl>
+                           <FormMessage className="sm:col-start-2 sm:col-span-2" />
+                           <FormDescription className="sm:col-start-2 sm:col-span-2">
+                             Your key is stored securely and used only for AI generation on your behalf.
+                           </FormDescription>
+                         </FormItem>
+                       )}
+                     />
+                     {/* Composio API Key - New Field */}
+                      <FormField
+                        control={form.control}
+                        name="composio_api_key"
+                        render={({ field }) => (
+                            <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-2">
+                                <FormLabel htmlFor="composio_api_key" className="sm:text-right sm:col-span-1 mt-1 flex items-center gap-1 justify-end">
+                                    <span>Composio API Key</span>
+                                      <TooltipProvider>
+                                         <Tooltip>
+                                            <TooltipTrigger asChild>
+                                               <a href="https://docs.composio.dev/getting-started/api-keys" target="_blank" rel="noopener noreferrer" className="focus:outline-none">
+                                                 <HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                                               </a>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top">
+                                              <p>Get your key from Composio. Required for connecting apps.</p>
+                                               <p className="text-xs italic mt-1">Run `composio login` in your terminal.</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                      </TooltipProvider>
+                                </FormLabel>
+                                <FormControl className="col-span-1 sm:col-span-2">
+                                    <Input
+                                        id="composio_api_key"
+                                        type="password"
+                                        placeholder="Enter your Composio API Key"
+                                        {...field}
+                                        value={field.value ?? ''}
+                                    />
+                                </FormControl>
+                                <FormMessage className="sm:col-start-2 sm:col-span-2" />
+                                <FormDescription className="sm:col-start-2 sm:col-span-2">
+                                  Your Composio API key connects VibeFlow to your Composio account to manage app integrations.
+                                </FormDescription>
+                            </FormItem>
+                        )}
                       />
-                    )}
-                  </TabsContent>
-                </Tabs>
-              </form>
-            </Form>
-          </div>
-        </ScrollArea>
-        <DialogFooter className="px-6 pb-6 pt-4 border-t">
-          <DialogClose asChild>
-            <Button type="button" variant="outline">
-              Cancel
-            </Button>
-          </DialogClose>
-          {/* Trigger form submission via react-hook-form */}
-          <Button type="submit" form="profile-form" disabled={loading || dbSetupError || !form.formState.isDirty}>
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save Changes
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+                   </TabsContent>
+
+                   {/* Integrations Tab - NEW */}
+                   <TabsContent value="integrations" className="space-y-6 mt-0">
+                     <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4 shadow-sm">
+                       <h4 className="text-base font-semibold">Connect Your Accounts</h4>
+                       <p className="text-sm text-muted-foreground">
+                         Authenticate with Composio to allow VibeFlow to post on your behalf.
+                         Ensure your Composio API Key is added in the 'API Keys' tab first.
+                       </p>
+
+                       {['linkedin', 'twitter', 'youtube'].map((appName) => {
+                         const isAuthed = profile?.[`is_${appName}_authed` as keyof Profile] ?? false;
+                         const displayAppName = appName.charAt(0).toUpperCase() + appName.slice(1);
+
+                         return (
+                           <div key={appName} className="flex items-center justify-between border-t pt-4">
+                             <Label className="font-medium">{displayAppName}</Label>
+                             {isAuthed ? (
+                               <div className="flex items-center gap-2">
+                                 <span className="text-sm text-green-500">Connected</span>
+                                 <Button
+                                   variant="outline"
+                                   size="sm"
+                                   onClick={() => handleDeauthenticateApp(user.id, appName as ComposioAppEnum, setProfile, toast)} // Use the imported function
+                                   disabled={authLoading[appName]}
+                                   loading={authLoading[appName]}
+                                 >
+                                   Disconnect
+                                 </Button>
+                               </div>
+                             ) : (
+                               <Button
+                                 size="sm"
+                                 onClick={() => handleAuthenticateApp(appName)}
+                                 disabled={authLoading[appName] || !profile?.composio_api_key} // Disable if API key is missing
+                                 loading={authLoading[appName]}
+                               >
+                                 {authLoading[appName] ? 'Connecting...' : 'Authenticate'}
+                               </Button>
+                             )}
+                           </div>
+                         );
+                       })}
+                     </div>
+                   </TabsContent>
+
+
+                   {/* Usage & Billing Tab */}
+                   <TabsContent value="usage" className="space-y-6 mt-0">
+                     <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4 shadow-sm">
+                       <h4 className="text-base font-semibold">Monthly Usage</h4>
+                       <TooltipProvider>
+                         <Tooltip content={quotaTooltipContent}>
+                           <div className="space-y-1">
+                             <div className="flex justify-between text-sm font-medium">
+                               <span>Requests Used</span>
+                               <span>{quota ? `${quota.request_count ?? 0} / ${quota.quota_limit ?? 100}` : <Loader2 className="h-4 w-4 animate-spin inline" />}</span>
+                             </div>
+                             <Progress
+                               value={quotaPercentage}
+                               className="h-2"
+                               aria-label="Monthly Usage Quota"
+                               indicatorClassName={isQuotaExceeded ? "bg-destructive" : "bg-primary"}
+                             />
+                             <p className="text-xs text-muted-foreground">
+                               Resets on: {getResetDate()}
+                             </p>
+                           </div>
+                         </Tooltip>
+
+                         <Tooltip content={xpTooltipContent}>
+                           <div className="space-y-1 mt-4">
+                             <div className="flex justify-between text-sm font-medium">
+                               <span>Experience Points (XP)</span>
+                               <span>{xp} XP</span>
+                             </div>
+                             <Progress
+                               value={xpInfo.percentage}
+                               className="h-2"
+                               aria-label={xpTooltipContent}
+                               indicatorClassName="bg-gradient-to-r from-purple-500 to-cyan-400"
+                             />
+                             <p className="text-xs text-muted-foreground">
+                               Next Level: {xpInfo.nextLevelXp} XP
+                             </p>
+                           </div>
+                         </Tooltip>
+                       </TooltipProvider>
+
+                       <Separator className="my-4" />
+                       <div>
+                         <p className="text-sm mb-2">You are currently on the <span className="font-semibold text-primary">Free Plan</span>.</p>
+                         <Button disabled>Upgrade Plan (Coming Soon)</Button>
+                       </div>
+                     </div>
+
+                     {/* Badge Collection */}
+                    <div className="mt-6">
+                       <h4 className="text-base font-semibold mb-3">Achievements</h4>
+                       {badges && badges.length > 0 ? ( // Check if badges is not null/undefined and has items
+                          <BadgeCollection userBadges={badges} />
+                       ) : (
+                         <p className="text-sm text-muted-foreground">Generate more posts to unlock badges!</p>
+                       )}
+                     </div>
+                     {/* Confetti effect trigger */}
+                     {isClient && showConfetti && (
+                       <Confetti
+                         recycle={false}
+                         numberOfPieces={200}
+                         width={typeof window !== 'undefined' ? window.innerWidth : 0}
+                         height={typeof window !== 'undefined' ? window.innerHeight : 0}
+                         className="!fixed !top-0 !left-0 !w-full !h-full !z-[10002]" // Ensure higher z-index than dialog
+                         onConfettiComplete={() => setShowConfetti(false)}
+                       />
+                     )}
+                   </TabsContent>
+                 </Tabs>
+               </form>
+             </Form>
+           </div>
+         </ScrollArea>
+         <DialogFooter className="px-6 pb-6 pt-4 border-t">
+           <DialogClose asChild>
+             <Button type="button" variant="outline">
+               Cancel
+             </Button>
+           </DialogClose>
+           {/* Trigger form submission via react-hook-form */}
+           <Button type="submit" form="profile-form" disabled={loading || dbSetupError || !isDirty}>
+             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+             Save Changes
+           </Button>
+         </DialogFooter>
+       </DialogContent>
     </Dialog>
+
   );
 }

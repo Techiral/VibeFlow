@@ -1,140 +1,188 @@
-# Firebase Studio - VibeFlow
+# ✨ VibeFlow - AI-Powered Social Media Post Generation ✨
 
-This is a NextJS starter project called VibeFlow, built within Firebase Studio. It allows users to input content (URL or text), summarize it using AI, and generate tailored social media posts for different platforms (LinkedIn, Twitter, YouTube). Users can then tune these posts using AI suggestions.
+[![VibeFlow Landing Page](./public/og-image-vibeflow.png)](/) _(Click image to view live demo - if deployed)_
 
-## Getting Started
+**Stop staring at a blank page. Start creating magnetic social media content in seconds.**
 
-**🚨 Important:** If you are seeing errors like `relation "public.profiles" does not exist`, `function public.get_user_profile does not exist`, or other database-related issues, you **must** run the SQL commands in **Step 3** below. This step ensures your database schema is correctly set up and up-to-date.
+VibeFlow is a Next.js application built with Supabase, Genkit, and ShadCN UI that leverages the power of Google Gemini to transform any content (URLs, text) into engaging, platform-specific posts for **LinkedIn**, **Twitter**, and **YouTube**.
 
-1.  **Install Dependencies:**
-    ```bash
-    npm install
-    ```
+**Tired of the content grind?** VibeFlow is your AI co-pilot, summarizing information, generating tailored drafts with different personas, allowing you to tune them to perfection, and get instant feedback. Reclaim hours and boost your social media presence effortlessly.
 
-2.  **Set Up Environment Variables:**
+---
 
-    Create a `.env.local` file in the root of the project and add your Supabase API keys:
+## 🚀 Key Features
 
-    ```plaintext
-    # Replace with your actual Supabase URL and Anon Key
-    # Find these in your Supabase project settings > API
-    NEXT_PUBLIC_SUPABASE_URL=YOUR_SUPABASE_URL
-    NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+*   **🤖 AI Content Transformation:** Input a URL or paste text, and let Gemini summarize and generate initial drafts.
+*   **🎭 Persona-Driven Generation:** Choose from various AI writing styles (Tech CEO, Casual Gen Z, Thought Leader, Meme Lord, etc.) to match your brand voice.
+*   **🎯 Platform Optimization:** Get posts specifically crafted for LinkedIn, Twitter (X), and YouTube descriptions, considering character limits and platform conventions.
+*   **💡 AI Advisor:** Get instant feedback on your drafts! Identifies tone mismatches, clarity issues, and weak phrasing with actionable suggestions.
+*   **✍️ Inline Tuning & Editing:** Refine generated posts directly in the editor using AI suggestions ("Make it wittier," "More concise," "Add emojis") or manual edits.
+*   **🎮 Gamified Experience:** Earn XP ("AI Fuel") for generating content and unlock achievement badges.
+*   **📈 Usage Tracking:** Monitor your monthly request quota (100 requests/month included).
+*   **🔐 Secure API Key Management:** Store your Google Gemini API key securely within your user profile.
+*   **🎨 Modern UI:** Built with Next.js App Router, React Server Components, ShadCN UI, and Tailwind CSS for a sleek, responsive experience.
+*   **🌙 Dark/Light Mode:** Choose your preferred theme.
+*   **⌨️ Keyboard Shortcuts:** Navigate and perform actions faster (Ctrl+H for Help).
+*   **🚀 Responsive Design:** Looks great on desktop and mobile.
 
-    # GOOGLE_GENAI_API_KEY is no longer set here.
-    # Users will add their key in the application's profile settings.
+---
 
-    # Optional: Set the base URL if running behind a proxy or in a specific domain
-    # NEXT_PUBLIC_BASE_URL=http://localhost:9002
-    ```
+## ⚙️ How It Works (User Flow)
 
-    **Important:** Keep your API keys secure and do not commit `.env.local` to version control.
+1.  **Visit Landing Page:** Discover VibeFlow's capabilities.
+2.  **Sign Up / Log In:** Create an account or log in using Supabase Auth.
+3.  **Dashboard:**
+    *   **Add Gemini Key:** Go to Profile Settings (👤 icon) and add your Google Gemini API Key. This is essential for AI features.
+    *   **Input Content:** Paste text or a URL into the main input area.
+    *   **Select Persona:** Choose a desired AI writing style.
+    *   **Generate Posts:** Click the "Generate Posts" button. VibeFlow uses Genkit and your Gemini key to:
+        *   Summarize the input content.
+        *   Generate drafts for LinkedIn, Twitter, and YouTube based on the summary and persona.
+    *   **Review & Edit:** Navigate through the tabs (LinkedIn, Twitter, YouTube) to view the generated drafts. Edit them directly in the textareas.
+    *   **Tune with AI:** Use the quick tuning buttons ("Make Wittier", etc.) or the "Tune Tone & Style" (🎭 icon) sidebar to refine posts using AI.
+    *   **Get Feedback:** Click the AI Advisor (✨ icon) on a post to get suggestions for improvement. Apply suggestions with one click.
+    *   **Boost:** Use the Boost Panel (⚙️ icon) to quickly insert trending hashtags and emojis.
+    *   **Copy:** Copy the final post content using the Copy (📋 icon) button.
+    *   **(Future) Publish:** Connect your accounts and publish directly (feature not yet implemented).
+4.  **Manage Profile:** Update your details, check usage, and view unlocked badges in the Profile Settings dialog.
 
-3.  **Set Up Supabase Database (MANDATORY):**
+---
 
-    You **must** run SQL commands to set up the necessary tables (`profiles`, `quotas`) and functions (`increment_quota`, `get_remaining_quota`, `get_user_profile`) in your Supabase project. If you skip this step or have an outdated schema, the application will **not** work correctly and you will see database errors like:
-     * `relation "public.profiles" does not exist`
-     * `relation "public.quotas" does not exist`
-     * `function public.get_user_profile does not exist`
-     * `function public.increment_quota does not exist`
-     * `function public.get_remaining_quota does not exist`
-     * `"could not find function ... in schema cache"`
+## 🛠️ Getting Started
 
-    a.  Navigate to the **SQL Editor** in your Supabase project dashboard.
-    b.  Click **+ New query**.
-    c.  Paste and run the **entire** content of the SQL file found at `supabase/schema.sql`.
+**🚨 Important:** If you see errors like `relation "public.profiles" does not exist`, `function public.get_user_profile does not exist`, or other database-related issues, you **must** run the SQL commands in **Step 3** below. This step ensures your database schema is correctly set up and up-to-date.
 
-    **Idempotent Script:** This script is **idempotent**, meaning it can be run multiple times safely. It uses `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, and `ALTER TABLE ADD COLUMN IF NOT EXISTS` to ensure that:
-        * If you are setting up for the first time, all necessary tables and functions will be created.
-        * If you have run a previous version of this script, running the latest version will **safely add missing columns and update functions** without losing your existing data or causing "already exists" errors.
+**1. Install Dependencies:**
+```bash
+npm install
+```
 
-4.  **Run Development Server:**
-    ```bash
-    npm run dev
-    ```
-    This will start the Next.js application, typically on `http://localhost:9002`.
+**2. Set Up Environment Variables:**
 
-5.  **(Optional) Run Genkit Developer UI:**
-    If you want to inspect or test the AI flows directly using the Genkit developer UI, run:
-    ```bash
-    npm run genkit:watch
-    ```
-    This will start the Genkit UI, usually on `http://localhost:4000`.
+Create a `.env.local` file in the root of the project and add your Supabase API keys:
 
-6.  **Open the App:**
-    Navigate to `http://localhost:9002` (or the specified port) in your browser. Sign up or log in.
+```plaintext
+# Replace with your actual Supabase URL and Anon Key
+# Find these in your Supabase project settings > API
+NEXT_PUBLIC_SUPABASE_URL=YOUR_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 
-7.  **Add Gemini API Key:**
-    Go to your profile settings (click the user icon in the dashboard) and add your Google Gemini API Key.
-    *   Get a Gemini Key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+# GOOGLE_GENAI_API_KEY is no longer set here.
+# Users will add their key in the application's profile settings.
 
-## Project Structure
+# Optional: Set the base URL if running behind a proxy or in a specific domain
+# NEXT_PUBLIC_BASE_URL=http://localhost:9002
+```
 
--   `src/app/`: Contains the Next.js App Router pages and layouts.
-    -   `dashboard/`: Dashboard related pages and components.
-        - `page.tsx`: The main dashboard page (requires login).
-        - `layout.tsx`: Layout for dashboard routes.
-    -   `login/page.tsx`: The authentication page.
-    -   `layout.tsx`: The root layout for the application.
-    -   `api/`: API routes (e.g., health check).
-    -   `auth/callback`: Route handler for Supabase auth callback.
--   `src/components/`: Reusable React components.
-    -   `dashboard/`: Components specific to the dashboard UI.
-        - `dashboard.tsx`: The core UI for content input and post generation.
-        - `profile-dialog.tsx`: Dialog for managing user profile and settings (including API key).
-        - `ai-advisor-panel.tsx`: Panel for displaying AI feedback on posts.
-    -   `ui/`: ShadCN UI components.
--   `src/ai/`: Contains AI-related code using Genkit.
-    -   `ai-instance.ts`: Configures the default Genkit instance.
-    -   `flows/`: Defines the AI workflows (summarization, post generation, tuning, analysis).
-        - `analyze-post.ts`: Flow for analyzing post drafts.
-    -   `dev.ts`: Entry point for running Genkit flows in development mode.
--   `src/lib/`: Utility functions and library integrations.
-    -   `supabase/`: Supabase client setup (client, server, middleware).
-    -   `utils.ts`: General utility functions.
--   `src/services/`: Business logic services.
-    - `content-parser.ts`: Parses content from URLs (placeholder).
-    - `composio-service.ts`: (Removed Composio logic, file might be deleted).
--   `src/hooks/`: Custom React hooks (e.g., `useToast`, `useMobile`).
--   `src/types/`: TypeScript type definitions.
-    -   `supabase.ts`: Auto-generated or manually defined Supabase database types.
--   `public/`: Static assets.
--   `middleware.ts`: Next.js middleware for Supabase session handling.
--   `supabase/`: Contains SQL schema and setup files.
-    -   `schema.sql`: **(Crucial)** SQL commands for creating tables and functions. **Must be run in Supabase SQL Editor.**
--   `next.config.js`: Next.js configuration (includes webpack fallback for `async_hooks`).
--   `tailwind.config.ts`: Tailwind CSS configuration.
--   `tsconfig.json`: TypeScript configuration.
--   `components.json`: ShadCN UI configuration.
+**Important:** Keep your API keys secure and do not commit `.env.local` to version control. Ensure you have a `.gitignore` file that includes `.env*.local`.
 
-## Features
+**3. Set Up Supabase Database (MANDATORY):**
 
--   **Authentication:** Supabase Auth for user login/signup.
--   **Profile Management:** Users can update their name, username, phone, and **Google Gemini API Key**.
--   **Content Input:** Accepts URLs or raw text.
--   **Persona Selection:** Choose an AI writing style (e.g., Tech CEO, Casual Gen Z).
--   **AI Summarization:** Uses Google Gemini via Genkit (user's API key) to summarize input content. Includes **auto-retry** for temporary API issues.
--   **Social Post Generation:** Generates posts for LinkedIn, Twitter, and YouTube based on the summary and selected persona (user's API key). Includes **auto-retry**.
--   **Post Tuning:** Refine generated posts with AI suggestions ("Make wittier", "More concise", etc.) (user's API key). Includes **auto-retry**.
--   **AI Advisor:** Analyzes generated posts for tone, clarity, and engagement, providing inline suggestions for improvement (user's API key). Includes **auto-retry**.
--   **Quota Management:** Tracks user requests against a monthly limit (100 requests/month). Displays usage in the profile. Disables generation/tuning/analysis when quota is exceeded. Includes retry logic for temporary API issues. Quota is refunded for failed AI operations.
--   **Gamification:** XP meter ("AI Fuel Tank") and unlockable badges for reaching generation milestones, with toast/confetti notifications.
--   **Rate Limiting & Queueing:** Handles API rate limits with auto-retry countdowns (future: optional request queueing).
--   **UI:** Built with Next.js App Router, React Server Components, ShadCN UI, and Tailwind CSS. Includes hover effects and subtle animations.
--   **Database:** Supabase PostgreSQL for user profiles, quotas, gamification data (XP/badges), etc.
--   **(Placeholder) Publishing:** UI elements for publishing posts (feature disabled).
--   **(Placeholder) Billing:** UI elements for upgrading plans (integration not yet implemented).
--   **(Optional) Onboarding:** A guided walkthrough for first-time users (react-joyride integration).
+You **must** run SQL commands to set up the necessary tables (`profiles`, `quotas`) and functions (`increment_quota`, `get_remaining_quota`, `get_user_profile`) in your Supabase project. If you skip this step or have an outdated schema, the application will **not** work correctly and you will see database errors like:
 
-## Supabase Schema (`supabase/schema.sql`)
+*   `relation "public.profiles" does not exist`
+*   `relation "public.quotas" does not exist`
+*   `function public.get_user_profile does not exist`
+*   `function public.increment_quota does not exist`
+*   `function public.get_remaining_quota does not exist`
+*   `"could not find function ... in schema cache"`
+
+**How to Run the Script:**
+
+a.  Navigate to the **SQL Editor** in your Supabase project dashboard.
+b.  Click **+ New query**.
+c.  Paste and run the **entire** content of the SQL file found at `supabase/schema.sql`.
+
+**Idempotent Script:** This script is **idempotent**, meaning it can be run multiple times safely. It uses `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, and `ALTER TABLE ADD COLUMN IF NOT EXISTS` to ensure that:
+
+*   If you are setting up for the first time, all necessary tables and functions will be created.
+*   If you have run a previous version of this script, running the latest version will **safely add missing columns and update functions** without losing your existing data or causing "already exists" errors.
+
+**4. Run Development Server:**
+```bash
+npm run dev
+```
+This will start the Next.js application, typically on `http://localhost:9002`.
+
+**5. (Optional) Run Genkit Developer UI:**
+If you want to inspect or test the AI flows directly using the Genkit developer UI, run:
+```bash
+npm run genkit:watch
+```
+This will start the Genkit UI, usually on `http://localhost:4000`.
+
+**6. Open the App:**
+Navigate to `http://localhost:9002` (or the specified port) in your browser. Sign up or log in.
+
+**7. Add Gemini API Key:**
+Go to your profile settings (click the user icon 👤 in the dashboard) and add your Google Gemini API Key under the "API Keys" tab.
+*   Get a Gemini Key from [Google AI Studio](https://aistudio.google.com/app/apikey). **This is required for all AI features.**
+
+---
+
+## 📂 Project Structure
+
+```
+.
+├── public/               # Static assets (images, etc.)
+├── supabase/
+│   └── schema.sql        # !! CRUCIAL !! Supabase DB setup script
+├── src/
+│   ├── actions/          # Server Actions (placeholder for now)
+│   ├── ai/               # Genkit AI flows and configuration
+│   │   ├── flows/        # Specific AI workflows (summarize, generate, tune, analyze)
+│   │   ├── ai-instance.ts # Genkit core setup
+│   │   └── dev.ts        # Entry point for Genkit dev UI
+│   ├── app/              # Next.js App Router pages, layouts, API routes
+│   │   ├── (main)/       # Main routes (landing page)
+│   │   │   └── page.tsx
+│   │   ├── api/          # API routes (health check, etc.)
+│   │   ├── auth/         # Auth callback route
+│   │   ├── dashboard/    # Dashboard routes (protected)
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx  # Main dashboard server component
+│   │   ├── login/        # Login/Signup page
+│   │   │   └── page.tsx
+│   │   ├── globals.css   # Global styles & Tailwind directives
+│   │   └── layout.tsx    # Root layout
+│   ├── components/       # React components
+│   │   ├── dashboard/    # Components specific to the dashboard UI
+│   │   │   ├── dashboard.tsx        # Core client component for dashboard logic
+│   │   │   ├── profile-dialog.tsx   # Dialog for user settings
+│   │   │   ├── ai-advisor-panel.tsx # Sidebar for AI feedback
+│   │   │   ├── boost-panel.tsx      # Sidebar for hashtags/emojis
+│   │   │   ├── tone-tuner-sheet.tsx # Sheet for selecting persona
+│   │   │   ├── badge-collection.tsx # Displays unlocked badges
+│   │   │   ├── help-modal.tsx       # Displays keyboard shortcuts
+│   │   │   └── preview-mockup.tsx   # Simple platform preview
+│   │   └── ui/           # ShadCN UI components (Button, Card, etc.)
+│   ├── hooks/            # Custom React hooks (useToast, useMobile)
+│   ├── lib/              # Utility functions and library setups
+│   │   ├── supabase/     # Supabase client/server/middleware setup
+│   │   └── utils.ts      # General utilities (like cn)
+│   ├── services/         # Business logic services (content parsing)
+│   └── types/            # TypeScript definitions
+│       └── supabase.ts   # Auto-generated or manual Supabase types
+├── .env.local            # Local environment variables (ignored by git)
+├── .gitignore            # Files/folders ignored by git
+├── components.json       # ShadCN UI config
+├── middleware.ts         # Next.js middleware (for Supabase auth session)
+├── next.config.js        # Next.js configuration
+├── package.json          # Project dependencies and scripts
+├── README.md             # This file
+└── tsconfig.json         # TypeScript configuration
+```
+
+---
+
+## 📜 Supabase Schema (`supabase/schema.sql`)
 
 This file (`supabase/schema.sql`) contains the necessary SQL commands to set up your database. **You must execute this script in the Supabase SQL Editor** (see Step 3 in Getting Started). Failure to do so will result in application errors related to missing tables, functions, or columns (e.g., `relation "public.profiles" does not exist`).
 
 **Important:** The script is **idempotent** (safe to run multiple times) using `CREATE OR REPLACE FUNCTION`, `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ADD COLUMN IF NOT EXISTS`, etc. Running the latest version will update your schema without data loss.
 
 ```sql
--- Content of supabase/schema.sql (V3.2 - Composio Removed):
--- Supabase Schema Setup V3.2
+-- Supabase Schema Setup V3.1 - Composio Removed, Idempotent Script
 -- This script can be run multiple times safely.
 
 -- Drop dependent objects in the correct order
@@ -279,6 +327,10 @@ CREATE POLICY "Allow authenticated users to view own quota"
 -- Prevent direct modification - only allow via SECURITY DEFINER functions
 DROP POLICY IF EXISTS "Allow insert for own quota" ON public.quotas;
 DROP POLICY IF EXISTS "Allow update for own quota" ON public.quotas;
+-- Ensure insert requires authenticated user (though SECURITY DEFINER bypasses RLS, good practice)
+CREATE POLICY "Allow insert for own quota (via function)"
+    ON public.quotas FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
 
 
 -- 3. get_user_profile Function (Upsert Logic, returns SETOF) - Updated for removed columns
@@ -504,83 +556,18 @@ SELECT id, 0, NOW(), 100, NOW() FROM auth.users
 ON CONFLICT (user_id) DO NOTHING;
 */
 
-RAISE NOTICE 'VibeFlow schema setup/update script completed (V3.2 - Composio Removed).';
-
-force an update
+RAISE NOTICE 'VibeFlow schema setup/update script completed (V3.1 - Composio Removed).';
 ```
-```]></content>
-  </change>
-  <change>
-    <file>package.json</file>
-    <description>Remove composio-core dependency.</description>
-    <content><![CDATA[{
-  "name": "nextn",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev --turbopack -p 9002",
-    "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
-    "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@genkit-ai/googleai": "^1.6.2",
-    "@genkit-ai/next": "^1.6.2",
-    "@hookform/resolvers": "^3.9.0",
-    "@radix-ui/react-accordion": "^1.2.3",
-    "@radix-ui/react-alert-dialog": "^1.1.6",
-    "@radix-ui/react-avatar": "^1.1.3",
-    "@radix-ui/react-checkbox": "^1.1.4",
-    "@radix-ui/react-dialog": "^1.1.6",
-    "@radix-ui/react-dropdown-menu": "^2.1.6",
-    "@radix-ui/react-label": "^2.1.2",
-    "@radix-ui/react-menubar": "^1.1.6",
-    "@radix-ui/react-popover": "^1.1.6",
-    "@radix-ui/react-progress": "^1.1.2",
-    "@radix-ui/react-radio-group": "^1.2.3",
-    "@radix-ui/react-scroll-area": "^1.2.3",
-    "@radix-ui/react-select": "^2.1.6",
-    "@radix-ui/react-separator": "^1.1.2",
-    "@radix-ui/react-slider": "^1.2.3",
-    "@radix-ui/react-slot": "^1.1.2",
-    "@radix-ui/react-switch": "^1.1.3",
-    "@radix-ui/react-tabs": "^1.1.3",
-    "@radix-ui/react-toast": "^1.2.6",
-    "@radix-ui/react-tooltip": "^1.1.8",
-    "@supabase/ssr": "^0.4.0",
-    "@tanstack-query-firebase/react": "^1.0.5",
-    "@tanstack/react-query": "^5.66.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "date-fns": "^3.6.0",
-    "firebase": "^11.3.0",
-    "genkit": "^1.6.2",
-    "lucide-react": "^0.475.0",
-    "next": "15.2.3",
-    "openai": "^4.53.2",
-    "patch-package": "^8.0.0",
-    "react": "^18.3.1",
-    "react-confetti": "^6.1.0",
-    "react-day-picker": "^8.10.1",
-    "react-dom": "^18.3.1",
-    "react-hook-form": "^7.54.2",
-    "react-joyride": "^2.8.2",
-    "recharts": "^2.15.1",
-    "sonner": "^1.6.0",
-    "tailwind-merge": "^3.0.1",
-    "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.24.2"
-  },
-  "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "genkit-cli": "^1.6.1",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5"
-  }
-}
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit pull requests or open issues.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE). _(Assuming MIT, update if different)_
+```

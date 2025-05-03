@@ -570,4 +570,10 @@ Contributions are welcome! Please feel free to submit pull requests or open issu
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE). _(Assuming MIT, update if different)_
+---
+
+## 📄 License
+
+This project is lice
+nsed under the [MIT License](LICENSE). _(Assuming MIT, update if different)_
 ```

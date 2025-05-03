@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -27,9 +28,10 @@ import { Progress } from '@/components/ui/progress';
 import BadgeCollection from './badge-collection'; // Import the badge collection
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-// Removed import { handleDeauthenticateApp } from '@/services/composio-service'; // Corrected import
+// Removed import { authenticateComposioApp } from '@/services/composio-service'; // Keep for logic
+// Removed import { startComposioLogin } from '@/actions/composio-actions'; // Keep for getting key
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-// import { App as ComposioAppEnum } from "composio-core"; // Import Composio App enum - Removed as Composio is removed
+// Removed import { App as ComposioAppEnum } from "composio-core"; // Import Composio App enum
 import { toast as sonnerToast } from 'sonner'; // Import sonner toast for confetti effect
 import Confetti from 'react-confetti';
 import { cn } from '@/lib/utils'; // Import cn
@@ -46,7 +48,7 @@ interface ProfileDialogProps {
   dbSetupError: boolean; // Pass DB setup error status
 }
 
-// Define Zod schema for profile validation - Removed Composio fields
+// Define Zod schema for profile validation - Composio Removed
 const profileSchema = z.object({
   full_name: z.string().max(100, 'Full name must be 100 characters or less').nullable().optional().or(z.literal('')),
   username: z.string().max(50, 'Username must be 50 characters or less').nullable().optional().or(z.literal('')),
@@ -58,11 +60,11 @@ const profileSchema = z.object({
 
 type ProfileFormData = z.infer<typeof profileSchema>;
 
-// Define badge thresholds and details (duplicate from dashboard for now)
+// Define badge thresholds and details
 const BADGES = [
   { xp: 50, name: 'Vibe Starter ✨', description: 'Generated 5 posts!', icon: Star },
   { xp: 100, name: 'Content Ninja 🥷', description: 'Generated 10 posts!', icon: Trophy },
-  { xp: 200, name: 'Social Samurai ⚔️', description: 'Generated 20 posts!', icon: Zap }, // Assuming Zap is defined elsewhere or replaced
+  { xp: 200, name: 'Social Samurai ⚔️', description: 'Generated 20 posts!', icon: Zap },
   { xp: 500, name: 'AI Maestro 🧑‍🔬', description: 'Mastered 50 generations!', icon: BrainCircuit },
 ];
 
@@ -87,12 +89,11 @@ export function ProfileDialog({
   const [error, setError] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false); // State for confetti effect
-  // Removed authLoading state
+  // Removed Composio related states
 
   useEffect(() => {
     setIsClient(true);
-    // Ensure initialBadges is treated as an array, even if null/undefined initially
-    setBadges(initialBadges ?? []);
+    setBadges(initialBadges ?? []); // Ensure initialBadges is an array
   }, [initialBadges]);
 
 
@@ -131,9 +132,9 @@ export function ProfileDialog({
         gemini_api_key: initialProfile.gemini_api_key ?? '',
         // Removed Composio fields
       });
+      // Removed setting Composio auth states
     } else {
-      // Optionally reset to empty if profile is null
-       form.reset({
+      form.reset({
          full_name: '',
          username: '',
          phone_number: '',
@@ -147,7 +148,7 @@ export function ProfileDialog({
 
   async function onSubmit(data: ProfileFormData) {
     setLoading(true);
-    setError(null); // Clear previous errors
+    setError(null);
 
     if (dbSetupError) {
       setError("Cannot save profile, database setup is incomplete.");
@@ -168,7 +169,7 @@ export function ProfileDialog({
         username: data.username,
         phone_number: data.phone_number,
         gemini_api_key: data.gemini_api_key,
-        // Removed Composio fields from update
+        // Removed Composio fields from updates
         updated_at: new Date().toISOString(),
       };
 
@@ -176,12 +177,10 @@ export function ProfileDialog({
         .from('profiles')
         .update(updates)
         .eq('id', user.id)
-        .select() // Select the updated row
-        .returns<UserProfileFunctionReturn[]>(); // Specify the return type as an array
+        .select()
+        .returns<UserProfileFunctionReturn[]>();
 
-      if (updateError) {
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
       if (!updatedDataArray || updatedDataArray.length === 0) {
         throw new Error("Failed to retrieve updated profile data.");
@@ -189,13 +188,13 @@ export function ProfileDialog({
 
       const updatedProfile = updatedDataArray[0];
 
-      setProfile(updatedProfile); // Update local profile state
-      onProfileUpdate(updatedProfile); // Notify parent component
+      setProfile(updatedProfile);
+      onProfileUpdate(updatedProfile);
       toast({ title: 'Profile Updated', description: 'Your profile has been saved successfully.' });
-      onOpenChange(false); // Close dialog on success
+      onOpenChange(false);
     } catch (error: any) {
       console.error("Error updating profile:", error.message);
-      setError(`Error updating profile: "${error.message}"`); // Display the specific error
+      setError(`Error updating profile: "${error.message}"`);
       toast({
         title: 'Update Failed',
         description: `Could not update profile: ${error.message}`,
@@ -206,11 +205,13 @@ export function ProfileDialog({
     }
   }
 
-  // Removed Composio Authentication Handler
+  // Removed handleGetComposioKey function
+  // Removed handleAuthenticateApp function
+  // Removed handleDeauthenticate function
 
   // Calculate quota percentage
   const quotaPercentage = quota && quota.quota_limit > 0
-    ? ((quota.request_count ?? 0) / quota.quota_limit) * 100 // Handle null request_count
+    ? ((quota.request_count ?? 0) / quota.quota_limit) * 100
     : 0;
   const quotaTooltipContent = quota
     ? `${quota.request_count ?? 0} / ${quota.quota_limit ?? 100} requests used this cycle.`
@@ -221,7 +222,7 @@ export function ProfileDialog({
   // Calculate XP Percentage for next level
    const getCurrentLevelInfo = (currentXp: number) => {
      let currentLevel = 0;
-     let nextLevelXp = BADGES.find(b => !b.hidden)?.xp || 50; // Use hidden property if defined
+     let nextLevelXp = BADGES.find(b => !b.hidden)?.xp || 50;
      let currentLevelXpThreshold = 0;
      const sortedVisibleBadges = BADGES.filter(b => !b.hidden).sort((a, b) => a.xp - b.xp);
 
@@ -232,15 +233,11 @@ export function ProfileDialog({
          if (i + 1 < sortedVisibleBadges.length) {
            nextLevelXp = sortedVisibleBadges[i + 1].xp;
          } else {
-           // If it's the last badge, set a hypothetical next level
-           nextLevelXp = currentLevelXpThreshold * 2; // Example: double the last threshold
+           nextLevelXp = currentLevelXpThreshold * 2;
          }
        } else {
-         // If current XP is less than the first badge threshold
-         if (i === 0) {
-           nextLevelXp = sortedVisibleBadges[0].xp;
-         }
-         break; // Stop once the current XP level is found
+         if (i === 0) nextLevelXp = sortedVisibleBadges[0].xp;
+         break;
        }
      }
      const xpTowardsNext = Math.max(0, currentXp - currentLevelXpThreshold);
@@ -259,7 +256,6 @@ export function ProfileDialog({
      try {
        const resetDate = new Date(quota.last_reset_at);
        resetDate.setMonth(resetDate.getMonth() + 1);
-       // Use toLocaleDateString for better formatting, check if 'date' is valid
        return !isNaN(resetDate.getTime()) ? resetDate.toLocaleDateString() : 'Invalid Date';
      } catch (e) {
        console.error("Error formatting reset date:", e);
@@ -271,8 +267,8 @@ export function ProfileDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-       <DialogContent className="sm:max-w-xl grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90vh]">
-        <DialogHeader className="px-6 pt-6">
+       <DialogContent className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] max-h-[90vh]">
+        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
           <DialogTitle>Profile & Settings</DialogTitle>
           <DialogDescription>
             Manage your profile details, API keys, and usage.
@@ -280,7 +276,7 @@ export function ProfileDialog({
         </DialogHeader>
 
         {dbSetupError && (
-          <div className="px-6 py-4 border-t border-border">
+          <div className="px-4 sm:px-6 py-4 border-t border-border">
             <div className="bg-destructive/10 border border-destructive/50 text-destructive p-3 rounded-md text-sm flex items-start gap-2">
               <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
               <div>
@@ -290,8 +286,8 @@ export function ProfileDialog({
           </div>
         )}
 
-        {error && !dbSetupError && ( // Only show generic error if not DB setup error
-          <div className="px-6 py-4 border-t border-border">
+        {error && !dbSetupError && (
+          <div className="px-4 sm:px-6 py-4 border-t border-border">
             <div className="bg-destructive/10 border border-destructive/50 text-destructive p-3 rounded-md text-sm flex items-start gap-2">
               <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
               <div>
@@ -302,202 +298,205 @@ export function ProfileDialog({
         )}
 
         <ScrollArea className="overflow-y-auto border-t border-b border-border">
-          <div className="px-6 py-6">
+          <div className="px-4 sm:px-6 py-6">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" id="profile-form">
-                <Tabs defaultValue="profile">
-                   <TabsList className="grid w-full grid-cols-3 mb-6"> {/* Changed to 3 columns */}
-                    <TabsTrigger value="profile">Profile</TabsTrigger>
-                    <TabsTrigger value="keys">API Keys</TabsTrigger>
-                    {/* Removed Integrations Tab */}
-                    <TabsTrigger value="usage">Usage & Billing</TabsTrigger>
-                  </TabsList>
+                 {/* Use horizontal tabs on larger screens, vertical stack on smaller */}
+                 <Tabs defaultValue="profile" orientation="vertical" className="flex flex-col md:flex-row gap-6 md:gap-8">
+                    <TabsList className="flex flex-row md:flex-col w-full md:w-48 shrink-0 justify-start h-auto">
+                       <TabsTrigger value="profile" className="justify-start">Profile</TabsTrigger>
+                       <TabsTrigger value="keys" className="justify-start">API Keys</TabsTrigger>
+                       {/* Removed Integrations Tab */}
+                       <TabsTrigger value="usage" className="justify-start">Usage & Billing</TabsTrigger>
+                    </TabsList>
 
-                  {/* Profile Tab */}
-                  <TabsContent value="profile" className="space-y-4 mt-0"> {/* Reduced top margin */}
-                   <FormField
-                     control={form.control}
-                     name="full_name"
-                     render={({ field }) => (
-                       <FormItem>
-                         <FormLabel>Full Name</FormLabel>
-                         <FormControl>
-                           <Input placeholder="Your Full Name" {...field} value={field.value ?? ''} />
-                         </FormControl>
-                         <FormMessage />
-                       </FormItem>
-                     )}
-                   />
-                    <FormField
-                      control={form.control}
-                      name="username"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Username</FormLabel>
-                          <FormControl>
-                             <Input placeholder="Your Username" {...field} value={field.value ?? ''} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="phone_number"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Phone</FormLabel>
-                          <FormControl>
-                             <Input type="tel" placeholder="Your Phone Number" {...field} value={field.value ?? ''}/>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="space-y-2">
-                      <Label>Email</Label>
-                      <Input type="email" value={user?.email ?? ''} disabled className="text-muted-foreground bg-muted/50" />
-                      <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
-                    </div>
-                  </TabsContent>
+                   <div className="flex-grow space-y-6"> {/* Container for tab content */}
+                      {/* Profile Tab */}
+                      <TabsContent value="profile" className="mt-0 md:mt-0 space-y-4"> {/* Removed top margin */}
+                       <FormField
+                         control={form.control}
+                         name="full_name"
+                         render={({ field }) => (
+                           <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
+                             <FormLabel className="sm:text-right sm:mt-2">Full Name</FormLabel>
+                             <FormControl className="sm:col-span-2">
+                               <Input placeholder="Your Full Name" {...field} value={field.value ?? ''} />
+                             </FormControl>
+                             <FormMessage className="sm:col-start-2 sm:col-span-2" />
+                           </FormItem>
+                         )}
+                       />
+                        <FormField
+                          control={form.control}
+                          name="username"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
+                              <FormLabel className="sm:text-right sm:mt-2">Username</FormLabel>
+                              <FormControl className="sm:col-span-2">
+                                 <Input placeholder="Your Username" {...field} value={field.value ?? ''} />
+                              </FormControl>
+                              <FormMessage className="sm:col-start-2 sm:col-span-2" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="phone_number"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
+                              <FormLabel className="sm:text-right sm:mt-2">Phone</FormLabel>
+                              <FormControl className="sm:col-span-2">
+                                 <Input type="tel" placeholder="Your Phone Number" {...field} value={field.value ?? ''}/>
+                              </FormControl>
+                              <FormMessage className="sm:col-start-2 sm:col-span-2" />
+                            </FormItem>
+                          )}
+                        />
+                        <div className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
+                          <Label className="sm:text-right sm:mt-2">Email</Label>
+                          <div className="sm:col-span-2">
+                             <Input type="email" value={user?.email ?? ''} disabled className="text-muted-foreground bg-muted/50" />
+                             <p className="text-xs text-muted-foreground mt-1">Email cannot be changed.</p>
+                          </div>
+                        </div>
+                      </TabsContent>
 
-                  {/* API Keys Tab */}
-                  <TabsContent value="keys" className="space-y-4 mt-0">
-                    <FormField
-                      control={form.control}
-                      name="gemini_api_key"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel htmlFor="gemini_api_key" className="flex items-center gap-1">
-                            <span>Google Gemini API Key</span>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="focus:outline-none">
-                                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-                                  </a>
-                                </TooltipTrigger>
-                                <TooltipContent side="top">
-                                  <p>Get your key from Google AI Studio. Required for all AI features.</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </FormLabel>
-                          <FormControl>
-                             <Input
-                                id="gemini_api_key"
-                                type="password"
-                                placeholder="Enter your Gemini API Key"
-                                {...field}
-                                value={field.value ?? ''}
-                             />
-                          </FormControl>
-                          <FormMessage />
-                          <FormDescription>
-                            Your key is stored securely and used only for AI generation on your behalf.
-                          </FormDescription>
-                        </FormItem>
-                      )}
-                    />
-                     {/* Removed Composio API Key section */}
-                  </TabsContent>
+                      {/* API Keys Tab */}
+                      <TabsContent value="keys" className="mt-0 md:mt-0 space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="gemini_api_key"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-1 sm:grid-cols-3 items-start gap-x-4 gap-y-1">
+                              <FormLabel htmlFor="gemini_api_key" className="flex items-center gap-1 sm:text-right sm:mt-2">
+                                <span>Google Gemini API Key</span>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="focus:outline-none -ml-0.5">
+                                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                                      </a>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top">
+                                      <p>Get your key from Google AI Studio.<br />Required for all AI features.</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </FormLabel>
+                              <FormControl className="sm:col-span-2">
+                                 <Input
+                                    id="gemini_api_key"
+                                    type="password"
+                                    placeholder="Enter your Gemini API Key"
+                                    {...field}
+                                    value={field.value ?? ''}
+                                 />
+                              </FormControl>
+                              <FormMessage className="sm:col-start-2 sm:col-span-2" />
+                              <FormDescription className="sm:col-start-2 sm:col-span-2">
+                                Your key is stored securely and used only for AI generation on your behalf.
+                              </FormDescription>
+                            </FormItem>
+                          )}
+                        />
+                         {/* Removed Composio API Key section */}
+                      </TabsContent>
 
-                  {/* Integrations Tab - Removed */}
+                      {/* Integrations Tab - Removed */}
 
+                      {/* Usage & Billing Tab */}
+                      <TabsContent value="usage" className="mt-0 md:mt-0 space-y-6">
+                        <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4 shadow-sm">
+                          <h4 className="text-base font-semibold mb-2">Monthly Usage & XP</h4>
+                          <TooltipProvider>
+                            <Tooltip>
+                               <TooltipTrigger asChild>
+                                   <div className="cursor-default space-y-1">
+                                     <div className="flex justify-between text-sm font-medium">
+                                       <span>Requests Used</span>
+                                       <span>{quota ? `${quota.request_count ?? 0} / ${quota.quota_limit ?? 100}` : <Loader2 className="h-4 w-4 animate-spin inline" />}</span>
+                                     </div>
+                                     <Progress
+                                       value={quotaPercentage}
+                                       className="h-2"
+                                       aria-label="Monthly Usage Quota"
+                                       indicatorClassName={isQuotaExceeded ? "bg-destructive" : "bg-primary"}
+                                     />
+                                     <p className="text-xs text-muted-foreground">
+                                       Resets on: {getResetDate()}
+                                     </p>
+                                   </div>
+                               </TooltipTrigger>
+                               <TooltipContent side="bottom" align="start">
+                                  {quotaTooltipContent}
+                               </TooltipContent>
+                            </Tooltip>
 
-                  {/* Usage & Billing Tab */}
-                  <TabsContent value="usage" className="space-y-6 mt-0">
-                    <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4 shadow-sm">
-                      <h4 className="text-base font-semibold">Monthly Usage</h4>
-                      <TooltipProvider>
-                        <Tooltip>
-                           <TooltipTrigger asChild>
-                               <div className="cursor-default space-y-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                               <div className="cursor-default space-y-1 mt-4">
                                  <div className="flex justify-between text-sm font-medium">
-                                   <span>Requests Used</span>
-                                   <span>{quota ? `${quota.request_count ?? 0} / ${quota.quota_limit ?? 100}` : <Loader2 className="h-4 w-4 animate-spin inline" />}</span>
+                                   <span>Experience Points (XP)</span>
+                                   <span>{xp} XP</span>
                                  </div>
                                  <Progress
-                                   value={quotaPercentage}
+                                   value={xpInfo.percentage}
                                    className="h-2"
-                                   aria-label="Monthly Usage Quota"
-                                   indicatorClassName={isQuotaExceeded ? "bg-destructive" : "bg-primary"}
+                                   aria-label={xpTooltipContent}
+                                   indicatorClassName="bg-gradient-to-r from-purple-500 to-cyan-400"
                                  />
                                  <p className="text-xs text-muted-foreground">
-                                   Resets on: {getResetDate()}
+                                   Next Level: {xpInfo.nextLevelXp} XP
                                  </p>
                                </div>
-                           </TooltipTrigger>
-                           <TooltipContent side="bottom" align="start">
-                              {quotaTooltipContent}
-                           </TooltipContent>
-                        </Tooltip>
+                               </TooltipTrigger>
+                               <TooltipContent side="bottom" align="start">
+                                   {xpTooltipContent}
+                               </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
 
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                           <div className="cursor-default space-y-1 mt-4">
-                             <div className="flex justify-between text-sm font-medium">
-                               <span>Experience Points (XP)</span>
-                               <span>{xp} XP</span>
-                             </div>
-                             <Progress
-                               value={xpInfo.percentage}
-                               className="h-2"
-                               aria-label={xpTooltipContent}
-                               indicatorClassName="bg-gradient-to-r from-purple-500 to-cyan-400"
-                             />
-                             <p className="text-xs text-muted-foreground">
-                               Next Level: {xpInfo.nextLevelXp} XP
-                             </p>
-                           </div>
-                           </TooltipTrigger>
-                           <TooltipContent side="bottom" align="start">
-                               {xpTooltipContent}
-                           </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                          <Separator className="my-4" />
+                          <div>
+                            <p className="text-sm mb-2">You are currently on the <span className="font-semibold text-primary">Free Plan</span>.</p>
+                            <Button disabled>Upgrade Plan (Coming Soon)</Button>
+                          </div>
+                        </div>
 
-                      <Separator className="my-4" />
-                      <div>
-                        <p className="text-sm mb-2">You are currently on the <span className="font-semibold text-primary">Free Plan</span>.</p>
-                        <Button disabled>Upgrade Plan (Coming Soon)</Button>
-                      </div>
+                        {/* Badge Collection */}
+                       <div className="mt-6">
+                          <h4 className="text-base font-semibold mb-3">Achievements</h4>
+                          {badges && badges.length > 0 ? (
+                             <BadgeCollection userBadges={badges} />
+                          ) : (
+                            <p className="text-sm text-muted-foreground">Generate more posts to unlock badges!</p>
+                          )}
+                        </div>
+                        {/* Confetti effect trigger */}
+                        {isClient && showConfetti && (
+                          <Confetti
+                            recycle={false}
+                            numberOfPieces={200}
+                            width={typeof window !== 'undefined' ? window.innerWidth : 0}
+                            height={typeof window !== 'undefined' ? window.innerHeight : 0}
+                            className="!fixed !top-0 !left-0 !w-full !h-full !z-[10002]" // Ensure higher z-index than dialog
+                            onConfettiComplete={() => setShowConfetti(false)}
+                          />
+                        )}
+                      </TabsContent>
                     </div>
-
-                    {/* Badge Collection */}
-                   <div className="mt-6">
-                      <h4 className="text-base font-semibold mb-3">Achievements</h4>
-                      {badges && badges.length > 0 ? ( // Check if badges is not null/undefined and has items
-                         <BadgeCollection userBadges={badges} />
-                      ) : (
-                        <p className="text-sm text-muted-foreground">Generate more posts to unlock badges!</p>
-                      )}
-                    </div>
-                    {/* Confetti effect trigger */}
-                    {isClient && showConfetti && (
-                      <Confetti
-                        recycle={false}
-                        numberOfPieces={200}
-                        width={typeof window !== 'undefined' ? window.innerWidth : 0}
-                        height={typeof window !== 'undefined' ? window.innerHeight : 0}
-                        className="!fixed !top-0 !left-0 !w-full !h-full !z-[10002]" // Ensure higher z-index than dialog
-                        onConfettiComplete={() => setShowConfetti(false)}
-                      />
-                    )}
-                  </TabsContent>
-                </Tabs>
+                 </Tabs>
               </form>
             </Form>
           </div>
         </ScrollArea>
-        <DialogFooter className="px-6 pb-6 pt-4 border-t">
+        <DialogFooter className="px-4 sm:px-6 pb-4 sm:pb-6 pt-4 border-t flex-col sm:flex-row gap-2">
           <DialogClose asChild>
-            <Button type="button" variant="outline">
+            <Button type="button" variant="outline" className="w-full sm:w-auto">
               Cancel
             </Button>
           </DialogClose>
-          {/* Trigger form submission via react-hook-form */}
-          <Button type="submit" form="profile-form" disabled={loading || dbSetupError || !isDirty}>
+          <Button type="submit" form="profile-form" disabled={loading || dbSetupError || !isDirty} className="w-full sm:w-auto">
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save Changes
           </Button>

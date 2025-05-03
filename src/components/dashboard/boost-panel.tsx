@@ -1,7 +1,8 @@
+// src/components/dashboard/boost-panel.tsx
 'use client';
 
 import { useState } from 'react';
-import { Hash, Smile, ChevronDown, ChevronUp } from 'lucide-react';
+import { Hash, Smile, ChevronRight } from 'lucide-react'; // Import ChevronRight
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';

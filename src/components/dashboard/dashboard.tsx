@@ -18,7 +18,7 @@ import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, In
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
-import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post';
+import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post'; // Added analyzePost
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
@@ -382,13 +382,13 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
     // Check for new badges earned due to XP update
     checkAndAwardBadges(newXp, newBadges);
     toast({ title: "Profile Updated", description: "Your profile information has been saved." });
-  }, [toast]); // Removed initialXp/initialBadges as they are handled by state initialization
+  }, [toast, checkAndAwardBadges]); // Include checkAndAwardBadges in dependencies
 
 
   // Check for badge awards whenever XP or badges change
   useEffect(() => {
     checkAndAwardBadges(xp, badges);
-  }, [xp, badges]);
+  }, [xp, badges, checkAndAwardBadges]); // Added checkAndAwardBadges dependency
 
 
    // Function to check and award badges
@@ -608,7 +608,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         toast({ title: "Quota Error", description: `An unexpected error occurred updating usage: ${rpcError.message}`, variant: "destructive" });
         return false;
     }
-  }, [dbSetupError, quota, quotaRemaining, quotaUsed, quotaLimit, xp, supabase, user?.id, toast, checkAndAwardBadges]); // Added user.id
+  }, [dbSetupError, quota, quotaRemaining, quotaLimit, xp, supabase, user?.id, toast, checkAndAwardBadges]); // Added user.id
 
 
   const handleSignOut = async () => {

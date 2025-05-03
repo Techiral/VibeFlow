@@ -24,5 +24,3 @@ export async function GET(request: Request) {
   // return the user to an error page with instructions
   return NextResponse.redirect(`${origin}/login?message=Could not log in with provider. Please try again.`)
 }
-
-```

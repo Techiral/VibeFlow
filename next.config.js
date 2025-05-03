@@ -17,10 +17,8 @@ const nextConfig = {
       },
     ],
   },
-  experimental: {
-    // Add 'composio-core' to external packages to prevent bundling issues on the server
-    serverComponentsExternalPackages: [], // Removed 'composio-core'
-  },
+  // Use the correct key 'serverExternalPackages' instead of the experimental one
+  serverExternalPackages: [], // Updated from experimental.serverComponentsExternalPackages
   webpack: (config, options) => {
     // Only apply fallbacks for the client-side bundle
     if (!options.isServer) {

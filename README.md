@@ -505,6 +505,8 @@ ON CONFLICT (user_id) DO NOTHING;
 */
 
 RAISE NOTICE 'VibeFlow schema setup/update script completed (V3.2 - Composio Removed).';
+
+force an update
 ```
 ```]></content>
   </change>

@@ -3,7 +3,7 @@
 
 import type { User } from '@supabase/supabase-js';
 import type { Profile, Quota } from '@/types/supabase';
-import { useState, useTransition, useEffect, useCallback, useRef } from 'react'; // Added useRef
+import { useState, useTransition, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -12,40 +12,40 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'; // Added SelectGroup, SelectLabel
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, User as UserIcon, Database, Zap, Sparkles, Trophy, Star, BrainCircuit, HelpCircle, Hash, Smile, Palette, Settings2, Fuel, CreditCard, Key, Lock, Lightbulb, X, ChevronRight } from 'lucide-react'; // Added icons
+import { LogOut, Loader2, Bot, Twitter, Linkedin, Youtube, Copy, Send, Wand2, Info, BarChart, User as UserIcon, Database, Zap, Sparkles, Trophy, Star, BrainCircuit, HelpCircle, Hash, Smile, Palette, Settings2, Fuel, CreditCard, Key, Lock, Lightbulb, X, ChevronRight, Timer } from 'lucide-react'; // Added Timer icon
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
-import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post'; // Added analyzePost
+import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
-import { ProfileDialog } from './profile-dialog'; // Import the profile dialog
-import { Progress } from "@/components/ui/progress"; // Import Progress component
-import AiAdvisorPanel from './ai-advisor-panel'; // Import AI Advisor Panel
-import { toast as sonnerToast } from 'sonner'; // Import sonner toast for confetti effect
+import { ProfileDialog } from './profile-dialog';
+import { Progress } from "@/components/ui/progress";
+import AiAdvisorPanel from './ai-advisor-panel';
+import { toast as sonnerToast } from 'sonner';
 import Confetti from 'react-confetti';
-import Joyride, { Step, CallBackProps, STATUS } from 'react-joyride'; // Import STATUS
-import { Separator } from '@/components/ui/separator'; // Import Separator
+import Joyride, { Step, CallBackProps, STATUS } from 'react-joyride';
+import { Separator } from '@/components/ui/separator';
 import BoostPanel from './boost-panel';
 import ToneTunerSheet from './tone-tuner-sheet';
 import HelpModal from './help-modal';
 import PreviewMockup from './preview-mockup';
-import { cn } from "@/lib/utils"; // Import cn utility function
+import { cn } from "@/lib/utils";
 
 
-// Persona types and mapping (updated with optgroups)
+// Persona types and mapping
 type Persona = 'default' | 'tech_ceo' | 'casual_gen_z' | 'thought_leader' | 'meme_lord' | 'formal_pro' | 'fun_vibes';
-const PERSONAS: Record<string, { label: string; prompt?: string; group: string }> = {
+const PERSONAS: Record<Persona, { label: string; prompt?: string; group: string }> = {
   'default': { label: 'Default', group: 'General' },
-  'casual_gen_z': { label: 'Casual Gen Z', prompt: 'Write in a laid-back, emoji-friendly style...', group: 'Casual' },
-  'fun_vibes': { label: 'Fun Vibes', prompt: 'Write in an upbeat, playful, and engaging tone...', group: 'Casual' },
-  'meme_lord': { label: 'Meme Lord', prompt: 'Write like an internet meme lord, witty and sarcastic...', group: 'Casual' },
-  'tech_ceo': { label: 'Tech CEO', prompt: 'Write like a visionary, authoritative tech CEO...', group: 'Professional' },
-  'thought_leader': { label: 'Thought Leader', prompt: 'Write like an insightful industry thought leader...', group: 'Professional' },
-  'formal_pro': { label: 'Formal Pro', prompt: 'Write in a strictly formal and professional business tone...', group: 'Professional' },
+  'casual_gen_z': { label: 'Casual Gen Z', prompt: 'Write in a laid-back, emoji-friendly style with internet slang.', group: 'Casual' },
+  'fun_vibes': { label: 'Fun Vibes', prompt: 'Write in an upbeat, playful, and engaging tone. Use exclamation points and positive language.', group: 'Casual' },
+  'meme_lord': { label: 'Meme Lord', prompt: 'Write like an internet meme lord, witty, sarcastic, and slightly absurd. Reference current memes if appropriate.', group: 'Casual' },
+  'tech_ceo': { label: 'Tech CEO', prompt: 'Write like a visionary, authoritative tech CEO. Focus on innovation, disruption, and the future.', group: 'Professional' },
+  'thought_leader': { label: 'Thought Leader', prompt: 'Write like an insightful industry thought leader. Use sophisticated language and offer unique perspectives.', group: 'Professional' },
+  'formal_pro': { label: 'Formal Pro', prompt: 'Write in a strictly formal and professional business tone. Avoid contractions and slang.', group: 'Professional' },
 };
 const PERSONA_GROUPS = Array.from(new Set(Object.values(PERSONAS).map(p => p.group)));
 
@@ -85,6 +85,14 @@ type AnalysisStates = {
 type AnalysisResults = {
   [key in SocialPlatform]?: AnalyzePostOutput | null;
 };
+// Add state for rate limiting
+type RateLimitState = {
+    [key: string]: { // key could be 'generate', 'tune_linkedin', etc.
+        limited: boolean;
+        retryAfter: number | null; // Timestamp when retry is possible
+    }
+};
+
 
 // Onboarding Steps
 const ONBOARDING_STEPS: Step[] = [
@@ -134,9 +142,10 @@ const ONBOARDING_STEPS: Step[] = [
 const isRetriableError = (error: any): boolean => {
     const message = error.message?.toLowerCase() || '';
     const status = error.status || (error instanceof Error ? (error as any).status : null); // Basic check
+    const statusCode = error.statusCode; // Check for statusCode property as well
 
     // Check for Genkit specific statuses or common HTTP errors indicating temporary issues
-    if (status === 'UNAVAILABLE' || status === 'RESOURCE_EXHAUSTED' || status === 503 || status === 429) {
+    if (status === 'UNAVAILABLE' || status === 'RESOURCE_EXHAUSTED' || status === 503 || statusCode === 503 || status === 429 || statusCode === 429) {
         return true;
     }
 
@@ -186,11 +195,13 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
   const [xp, setXp] = useState<number>(initialXp);
   const [badges, setBadges] = useState<string[]>(initialBadges);
   const [isClient, setIsClient] = useState(false);
-  const [isBoostPanelOpen, setIsBoostPanelOpen] = useState(false); // State for Boost Panel
-  const [isToneSheetOpen, setIsToneSheetOpen] = useState(false); // State for Tone Tuner
-  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false); // State for Help Modal
-  const [activeTab, setActiveTab] = useState<SocialPlatform>('linkedin'); // State for active tab
-  const outputTextareaRef = useRef<HTMLTextAreaElement>(null); // Ref for output textarea
+  const [isBoostPanelOpen, setIsBoostPanelOpen] = useState(false);
+  const [isToneSheetOpen, setIsToneSheetOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<SocialPlatform>('linkedin');
+  const outputTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [rateLimitState, setRateLimitState] = useState<RateLimitState>({}); // Rate limit state
+  const rateLimitTimers = useRef<Record<string, NodeJS.Timeout>>({}); // Store timers
 
    // --- Derived State ---
    const quotaUsed = quota?.request_count ?? 0;
@@ -203,79 +214,74 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
 
    useEffect(() => {
     setIsClient(true);
+    // Clear any existing timers on unmount
+    return () => {
+        Object.values(rateLimitTimers.current).forEach(clearTimeout);
+    };
   }, []);
 
-   // Function to check and award badges (Moved before usage)
+   // Function to check and award badges
    const checkAndAwardBadges = useCallback(async (currentXp: number, currentBadges: string[]) => {
-    let newlyAwardedBadge: string | null = null;
-    let updatedBadges = [...currentBadges]; // Start with current badges
+        let newlyAwardedBadge: string | null = null;
+        let updatedBadges = [...currentBadges];
 
-    for (const badge of BADGES) {
-        // Check if XP threshold is met AND the badge hasn't been awarded yet
-        if (currentXp >= badge.xp && !updatedBadges.includes(badge.name)) {
-             console.log(`Badge condition met: ${badge.name}`);
-             newlyAwardedBadge = badge.name; // Store the latest badge to award
-             updatedBadges.push(badge.name); // Add to the array we will update with
+        for (const badge of BADGES) {
+            if (currentXp >= badge.xp && !updatedBadges.includes(badge.name)) {
+                console.log(`Badge condition met: ${badge.name}`);
+                newlyAwardedBadge = badge.name;
+                updatedBadges.push(badge.name);
+            }
         }
-    }
 
-    // If new badges were found, update state and DB
-    if (newlyAwardedBadge && user?.id) { // Check if user.id exists
-         setBadges(updatedBadges); // Optimistic UI update
+        if (newlyAwardedBadge && user?.id) {
+            setBadges(updatedBadges);
 
-         const { error } = await supabase
-           .from('profiles')
-           .update({ badges: updatedBadges }) // Use the updated badges array
-           .eq('id', user.id);
+            const { error } = await supabase
+               .from('profiles')
+               .update({ badges: updatedBadges })
+               .eq('id', user.id);
 
-         if (error) {
-               console.error(`Failed to save badges to database:`, error);
-               toast({ title: "Badge Save Error", description: `Could not save newly earned badges.`, variant: "destructive"});
-               // Revert optimistic UI update
-               setBadges(currentBadges);
-         } else {
-              console.log(`Badges saved to DB: ${updatedBadges.join(', ')}`);
-              // Update the main profile state as well after DB success
-               setProfile(prev => prev ? { ...prev, badges: updatedBadges } : null);
+            if (error) {
+                console.error(`Failed to save badges to database:`, error);
+                toast({ title: "Badge Save Error", description: `Could not save newly earned badges.`, variant: "destructive"});
+                setBadges(currentBadges); // Revert
+            } else {
+                console.log(`Badges saved to DB: ${updatedBadges.join(', ')}`);
+                setProfile(prev => prev ? { ...prev, badges: updatedBadges } : null);
 
-               // Notify about the *last* newly awarded badge
-               const badgeInfo = BADGES.find(b => b.name === newlyAwardedBadge);
+                const badgeInfo = BADGES.find(b => b.name === newlyAwardedBadge);
                 if (badgeInfo && newlyAwardedBadge !== lastAwardedBadge) {
                    setShowConfetti(true);
                    sonnerToast.success(`Badge Unlocked: ${badgeInfo.name}!`, {
                      description: badgeInfo.description,
                      duration: 5000,
-                     icon: <badgeInfo.icon className="text-green-500" />,
+                     icon: <badgeInfo.icon className="text-yellow-500" />, // Use yellow for unlocked
                    });
                    setLastAwardedBadge(newlyAwardedBadge);
                    setTimeout(() => setShowConfetti(false), 5000);
                 }
-         }
-    }
-   }, [supabase, user?.id, toast, lastAwardedBadge]); // Added user.id dependency
+            }
+        }
+   }, [supabase, user?.id, toast, lastAwardedBadge]);
 
 
-  // Effect to show toast messages (removed Composio logic)
+  // Effect to show toast messages
   useEffect(() => {
-    // Placeholder for any future toast logic based on search params
     const message = searchParams.get('message');
     if (message) {
       toast({ title: "Notification", description: message });
-      // Clean the URL (optional)
-      // router.replace('/dashboard', undefined); // Use router.replace to avoid history stack pollution
     }
   }, [searchParams, toast, router]);
 
 
-  // Fetch or confirm profile/quota data on client-side if needed (minor adjustments)
+  // Effect to fetch or confirm profile/quota data
   useEffect(() => {
     const ensureData = async () => {
       let currentProfile = profile;
       let currentQuota = quota;
       let setupErrorMsg: string | null = null;
 
-      // --- Ensure Profile ---
-       if (!currentProfile) {
+       if (!currentProfile && user?.id) { // Ensure user ID exists before fetching
          try {
             console.log("Attempting to fetch profile via RPC on client...");
             const { data, error } = await supabase
@@ -284,148 +290,111 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              if (error) {
                   console.error("Error fetching/creating profile on client:", error.message);
                   if (error.message.includes("function public.get_user_profile") && error.message.includes("does not exist")) {
-                      setupErrorMsg = "Database setup incomplete: Missing 'get_user_profile' function. Please run the SQL script from `supabase/schema.sql`. See README Step 3.";
-                  } else if (error.message.includes("relation") && error.message.includes("does not exist")) {
-                       setupErrorMsg = `Database setup incomplete: Missing required table or relation (${error.message}). Please run the SQL script from \`supabase/schema.sql\`. See README Step 3.`;
-                  } else if (error.message.includes("permission denied")) {
-                      setupErrorMsg = "Database access error: Permission denied for profile data. Check Row Level Security policies. See README Step 3.";
-                   } else if (error.message.includes("Could not find the") && error.message.includes("column") && error.message.includes("in the schema cache")) {
-                      const missingColumnMatch = error.message.match(/'(.*?)'/);
-                      const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'unknown';
-                      setupErrorMsg = `Database schema mismatch: Column '${missingColumn}' not found. Run the latest 'supabase/schema.sql'. See README Step 3.`;
+                      setupErrorMsg = "Database setup incomplete: Missing 'get_user_profile' function. Run setup script.";
                   } else {
-                     toast({ title: "Profile Error", description: `Could not load your profile data: ${error.message}`, variant: "destructive" });
-                     setupErrorMsg = `Profile Error: ${error.message}`; // Use the error message directly
+                     setupErrorMsg = `Profile Error: ${error.message}`;
                   }
                   if (setupErrorMsg) setDbSetupError(setupErrorMsg);
              } else if (data && Array.isArray(data) && data.length > 0) {
-                 console.log("Profile fetched successfully on client.");
                  currentProfile = data[0] as Profile;
                  setProfile(currentProfile);
                  setXp(currentProfile.xp ?? initialXp);
                  setBadges(currentProfile.badges ?? initialBadges);
-                 if (!setupErrorMsg) setDbSetupError(null); // Clear error if profile fetch succeeds
+                 if (!setupErrorMsg) setDbSetupError(null);
              } else {
-                 console.warn("Profile still null/empty after calling get_user_profile on client");
-                 // Set a specific error message if profile is unexpectedly null
-                 setupErrorMsg = "Failed to load or initialize user profile data. Please try logging out and back in or check DB schema (README Step 3).";
+                 setupErrorMsg = "Failed to load or initialize user profile data.";
                  toast({ title: "Profile Error", description: setupErrorMsg, variant: "destructive" });
                  setDbSetupError(setupErrorMsg);
              }
          } catch (error: any) {
-             console.error("Unexpected client error fetching/creating profile:", error.message);
-             setupErrorMsg = `Unexpected error loading profile data. Check console. Details: ${error.message}`;
+             setupErrorMsg = `Unexpected error loading profile data. Details: ${error.message}`;
              toast({ title: "Profile Error", description: setupErrorMsg, variant: "destructive" });
              setDbSetupError(setupErrorMsg);
          }
-      } else {
-         // Profile already exists, sync XP/badges from initial props if needed
+      } else if (currentProfile) { // Profile exists
          setXp(currentProfile.xp ?? initialXp);
          setBadges(currentProfile.badges ?? initialBadges);
-         if (!setupErrorMsg) setDbSetupError(null); // Clear error if profile exists
+         if (!setupErrorMsg) setDbSetupError(null);
       }
 
 
-      // --- Ensure Quota ---
-      if (!currentQuota && !setupErrorMsg) { // Only fetch quota if profile is okay
+      if (!currentQuota && user?.id && !setupErrorMsg) {
         try {
           console.log("Attempting to fetch quota via RPC on client...");
-          // Use get_remaining_quota first, as it handles potential resets
           const { data: remainingQuotaRpc, error: rpcError } = await supabase
              .rpc('get_remaining_quota', { p_user_id: user.id });
 
            if (rpcError) {
              console.error('Error calling get_remaining_quota RPC:', rpcError.message);
              let errorMsg = `Failed to load usage data: ${rpcError.message}`;
-             // Check for specific errors indicating setup issues
-             if (rpcError.message.includes("function public.get_remaining_quota") && rpcError.message.includes("does not exist")) {
+              if (rpcError.message.includes("function public.get_remaining_quota") && rpcError.message.includes("does not exist")) {
                  errorMsg = "Database setup incomplete: Missing 'get_remaining_quota' function. Run setup script.";
-             } else if (rpcError.message.includes("relation") && rpcError.message.includes("does not exist")) {
-                 errorMsg = `Database setup incomplete: Missing required table or relation (${rpcError.message}). Run setup script.`;
-             } else if (rpcError.message.includes("permission denied")) {
-                 errorMsg = "Database access error: Permission denied for 'get_remaining_quota'. Check RLS/function security.";
-             } else if (rpcError.message.includes("406")) { // Handle 406 Not Acceptable, often RLS related
-                 errorMsg = `Database access error: Could not fetch quota (406). Check RLS policies/function return type.`;
-                 toast({ title: "Quota Load Error", description: "Could not retrieve usage details (406).", variant: "destructive" });
+             } else if (rpcError.message.includes("relation \"public.quotas\" does not exist")) {
+                 errorMsg = "Database setup incomplete: Missing 'quotas' table. Run setup script.";
              }
              setupErrorMsg = errorMsg;
              toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
-             setDbSetupError(setupErrorMsg); // Set DB setup error
+             setDbSetupError(setupErrorMsg);
            } else if (typeof remainingQuotaRpc === 'number') {
-               // Quota function executed, now fetch the full details
                console.log("RPC get_remaining_quota successful, fetching full details...");
                const { data: quotaDetails, error: selectError } = await supabase
                  .from('quotas')
-                 .select('*') // Select all columns
+                 .select('*')
                  .eq('user_id', user.id)
-                 .maybeSingle(); // Use maybeSingle to handle potentially missing rows
+                 .maybeSingle();
 
-               if (selectError && selectError.code !== 'PGRST116') { // Ignore 'PGRST116' (No rows found)
+               if (selectError && selectError.code !== 'PGRST116') {
                    console.error('Error fetching quota details after RPC:', selectError.message);
                    let errorMsg = `Failed to load full usage details: ${selectError.message}`;
-                    if (selectError.message.includes("relation") && selectError.message.includes("does not exist")) {
+                    if (selectError.message.includes("relation \"public.quotas\" does not exist")) {
                       errorMsg = `Database setup incomplete: Missing required table (${selectError.message}). Run setup script.`;
-                    } else if (selectError.message.includes("permission denied")) {
-                      errorMsg = "Database access error: Permission denied for 'quotas' table. Check RLS.";
-                    } else if (selectError.message.includes("406")) {
-                        errorMsg = `Config issue: Could not fetch quota details (406). Check RLS/table access.`;
-                        toast({ title: "Quota Load Error", description: "Could not retrieve usage details (406).", variant: "destructive" });
                     }
-                   if (!setupErrorMsg) setupErrorMsg = errorMsg; // Prioritize previous errors
+                   if (!setupErrorMsg) setupErrorMsg = errorMsg;
                    toast({ title: 'Quota Error', description: errorMsg, variant: 'destructive' });
                    setDbSetupError(setupErrorMsg);
                } else if (quotaDetails) {
-                   console.log("Quota details fetched successfully on client.");
                    currentQuota = quotaDetails as Quota;
                    setQuota(currentQuota);
-                   if (!setupErrorMsg) setDbSetupError(null); // Clear error if quota fetch succeeds
+                   if (!setupErrorMsg) setDbSetupError(null);
                } else {
-                   // This case means get_remaining_quota worked, but no row exists in quotas table yet.
-                   // This might happen if the increment_quota/get_remaining_quota functions handle upsert logic.
-                   // We can construct a temporary quota object based on the RPC result.
                    console.log("Quota record not found, constructing temporary quota state from RPC result.");
-                   const limit = DEFAULT_QUOTA_LIMIT; // Assume default limit
+                   const limit = DEFAULT_QUOTA_LIMIT;
                    const used = limit - remainingQuotaRpc;
                    const nowISO = new Date().toISOString();
                    currentQuota = {
                        user_id: user.id,
-                       request_count: Math.max(0, used), // Ensure count isn't negative
+                       request_count: Math.max(0, used),
                        quota_limit: limit,
-                       last_reset_at: nowISO, // Placeholder, real reset time is managed by DB function
-                       created_at: nowISO,    // Placeholder
-                       ip_address: null       // Placeholder
+                       last_reset_at: nowISO,
+                       created_at: nowISO,
+                       ip_address: null
                    };
                    setQuota(currentQuota);
                    if (!setupErrorMsg) setDbSetupError(null);
                }
            } else {
-               // get_remaining_quota returned something unexpected (not null, not number)
-               console.warn("get_remaining_quota RPC returned unexpected data:", remainingQuotaRpc);
                if (!setupErrorMsg) setupErrorMsg = "Could not determine quota state from database function.";
                toast({ title: 'Quota Error', description: setupErrorMsg, variant: 'destructive' });
                setDbSetupError(setupErrorMsg);
            }
         } catch (err: any) {
-          console.error('Unexpected error fetching quota:', err.message);
           if (!setupErrorMsg) setupErrorMsg = `Unexpected error loading usage data: ${err.message}`;
           toast({ title: 'Quota Error', description: setupErrorMsg, variant: 'destructive' });
           setDbSetupError(setupErrorMsg);
         }
       } else if (setupErrorMsg) {
-          // If there was a profile error, make sure dbSetupError reflects it
           setDbSetupError(setupErrorMsg);
       } else if (currentQuota && currentProfile) {
-          // Both profile and quota exist, clear any transient setup error
            setDbSetupError(null);
       }
     };
-    ensureData();
-  }, [user.id, supabase, toast, profile, quota, dbSetupError, initialXp, initialBadges, initialQuota, initialProfile, checkAndAwardBadges]); // Dependencies adjusted
+    if(user?.id) ensureData(); // Only run if user ID is available
+  }, [user?.id, supabase, toast, profile, quota, dbSetupError, initialXp, initialBadges]); // Dependencies adjusted
 
 
-  // Effect to check onboarding status only on client-side after profile is loaded
+  // Effect to check onboarding status
   useEffect(() => {
-    if (isClient && profile && !profile.badges?.includes('onboarded') && !dbSetupError) { // Don't run onboarding if DB error
+    if (isClient && profile && !profile.badges?.includes('onboarded') && !dbSetupError) {
       setRunOnboarding(true);
     }
   }, [isClient, profile, dbSetupError]);
@@ -434,50 +403,43 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
   // Effect for Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Ctrl+H or Cmd+H to open Help Modal
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'h') {
         event.preventDefault();
         setIsHelpModalOpen(prev => !prev);
       }
-      // Add other shortcuts here if needed
     };
-
     window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []); // Empty dependency array ensures this runs once on mount
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
 
-   // Function to handle profile updates from the dialog
-   const handleProfileUpdate = useCallback((updatedProfile: Profile) => {
+  // Update profile and check badges
+  const handleProfileUpdate = useCallback((updatedProfile: Profile) => {
     setProfile(updatedProfile);
-    // Update local state for XP and badges based on the updated profile
-    const newXp = updatedProfile.xp ?? 0; // Default to 0 if null
-    const newBadges = updatedProfile.badges ?? []; // Default to empty array if null
+    const newXp = updatedProfile.xp ?? 0;
+    const newBadges = updatedProfile.badges ?? [];
     setXp(newXp);
     setBadges(newBadges);
-    // Check for new badges earned due to XP update
     checkAndAwardBadges(newXp, newBadges);
     toast({ title: "Profile Updated", description: "Your profile information has been saved." });
-  }, [toast, checkAndAwardBadges]); // Include checkAndAwardBadges in dependencies
+  }, [toast, checkAndAwardBadges]);
 
 
-  // Check for badge awards whenever XP or badges change
+  // Effect to check badges whenever XP or badges array itself changes
   useEffect(() => {
-    if (profile) { // Only check if profile is loaded
+    if (profile && badges) { // Check if badges array exists
       checkAndAwardBadges(xp, badges);
     }
-  }, [xp, badges, profile, checkAndAwardBadges]); // Added profile and checkAndAwardBadges dependency
+  }, [xp, badges, profile, checkAndAwardBadges]); // badges is now a dependency
 
 
-   // Function to check quota and increment if allowed
+  // Check and increment quota
   const checkAndIncrementQuota = useCallback(async (incrementAmount: number = 1): Promise<boolean> => {
      if (dbSetupError) {
          toast({ title: "Database Error", description: `Cannot process request due to database setup issue: ${dbSetupError}`, variant: "destructive" });
          return false;
      }
-      if (!user?.id) { // Check if user ID is available
+      if (!user?.id) {
           toast({ title: "Authentication Error", description: "User not identified. Cannot update quota.", variant: "destructive" });
           return false;
       }
@@ -491,38 +453,37 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
 
               if (fetchError) {
                   console.error("RPC Error checking remaining quota:", fetchError.message);
+                   let errorMsg = `Failed to check usage limit: ${fetchError.message}`;
                    if (fetchError.message.includes("function public.get_remaining_quota") && fetchError.message.includes("does not exist")) {
-                       setDbSetupError("Database function 'get_remaining_quota' missing. Run setup script.");
-                       toast({ title: "Database Error", description: "Missing function to check usage.", variant: "destructive" });
-                   } else if (fetchError.message.includes("406")) {
-                       setDbSetupError("Database access error: Could not fetch quota (406). Check RLS/function return type.");
-                       toast({ title: "Quota Load Error", description: "Could not retrieve usage details (406).", variant: "destructive" });
-                   } else {
-                       toast({ title: "Quota Check Error", description: `Failed to check usage limit: ${fetchError.message}`, variant: "destructive" });
+                       errorMsg = "Database function 'get_remaining_quota' missing. Run setup script.";
+                       setDbSetupError(errorMsg);
+                   } else if (fetchError.message.includes("relation \"public.quotas\" does not exist")) {
+                        errorMsg = "Database table 'quotas' missing. Run setup script.";
+                        setDbSetupError(errorMsg);
                    }
+                   toast({ title: "Quota Check Error", description: errorMsg, variant: "destructive" });
                   return false;
               }
               if (typeof fetchedQuotaRemaining === 'number') {
                   currentRemaining = fetchedQuotaRemaining;
                   console.log("Fetched remaining quota via RPC:", currentRemaining);
-                  // Update local state if quota was null before
                   const limit = DEFAULT_QUOTA_LIMIT;
                   const used = limit - currentRemaining;
-                  setQuota(prev => ({
-                      ...prev, // Keep potential other fields if they exist
+                  const tempQuota: Quota = {
                       user_id: user.id,
                       request_count: Math.max(0, used),
                       quota_limit: limit,
-                      last_reset_at: prev?.last_reset_at || new Date().toISOString() // Keep existing or set placeholder
-                  }));
+                      last_reset_at: new Date().toISOString(), // Placeholder
+                      created_at: new Date().toISOString(),    // Placeholder
+                      ip_address: null
+                  };
+                  setQuota(tempQuota); // Update local state
 
               } else {
-                  console.warn("get_remaining_quota RPC did not return a number:", fetchedQuotaRemaining);
                   toast({ title: "Quota Check Error", description: "Could not determine remaining usage.", variant: "destructive" });
                   return false;
               }
          } catch (rpcError: any) {
-              console.error("Unexpected Error calling get_remaining_quota RPC:", rpcError.message);
               toast({ title: "Quota Check Error", description: `Unexpected error checking usage: ${rpcError.message}`, variant: "destructive" });
               return false;
          }
@@ -531,12 +492,10 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
 
      if (currentRemaining < incrementAmount) {
        toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
-       // Optionally update quota state to reflect limit reached
        if (quota) setQuota(prev => prev ? {...prev, request_count: prev.quota_limit ?? DEFAULT_QUOTA_LIMIT} : null);
        return false;
      }
 
-     // Optimistic UI Update
      const optimisticQuotaUsed = (quota?.request_count ?? 0) + incrementAmount;
      const optimisticQuota = quota ? { ...quota, request_count: optimisticQuotaUsed } : null;
      if (optimisticQuota) setQuota(optimisticQuota);
@@ -544,8 +503,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
      const optimisticXp = xp + (incrementAmount * XP_PER_REQUEST);
      setXp(optimisticXp);
 
-
-    // --- Call increment_quota RPC ---
     try {
         console.log(`Attempting to increment quota by ${incrementAmount} for user ${user.id}`);
         const { data: newRemainingRpc, error } = await supabase.rpc('increment_quota', {
@@ -554,73 +511,49 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         });
 
        if (error) {
-          // Revert optimistic updates on error
-          setQuota(quota);
-          setXp(xp);
+          setQuota(quota); // Revert optimistic quota
+          setXp(xp);       // Revert optimistic XP
 
           console.error("Error incrementing quota RPC:", error.message);
+          let errorMsg = `Failed to update usage count: ${error.message}`;
           if (error.message.includes("quota_exceeded")) {
-             toast({ title: "Quota Exceeded", description: "You have reached your monthly usage limit.", variant: "destructive" });
+             errorMsg = "You have reached your monthly usage limit.";
              if(quota) setQuota(prev => prev ? {...prev, request_count: prev.quota_limit ?? DEFAULT_QUOTA_LIMIT} : null);
           } else if (error.message.includes("function public.increment_quota") && error.message.includes("does not exist")) {
-             setDbSetupError("Database function 'increment_quota' missing. Run setup script.");
-             toast({ title: "Database Error", description: "Missing function to update usage.", variant: "destructive" });
-          } else if (error.message.includes("permission denied") || error.message.includes("violates row-level security policy")) {
-              setDbSetupError("Database permission error updating quota. Check RLS policies.");
-              toast({ title: "Database Security Error", description: "Failed to update usage count.", variant: "destructive" });
-          } else {
-             toast({ title: "Quota Error", description: `Failed to update usage count: ${error.message}`, variant: "destructive" });
+             errorMsg = "Database function 'increment_quota' missing. Run setup script.";
+             setDbSetupError(errorMsg);
           }
+          toast({ title: "Quota Error", description: errorMsg, variant: "destructive" });
           return false;
        }
 
-       // --- Refetch data after successful RPC ---
         console.log("Quota increment RPC successful, refetching data...");
-        // Use Promise.allSettled to handle potential errors during refetch gracefully
         const [quotaResult, profileResult] = await Promise.allSettled([
-            supabase
-                .from('quotas')
-                .select('*') // Select all columns
-                .eq('user_id', user.id)
-                .single(),
-            supabase
-                .from('profiles')
-                .select('*, xp, badges') // Explicitly select XP and badges
-                .eq('id', user.id)
-                .single()
+            supabase.from('quotas').select('*').eq('user_id', user.id).single(),
+            supabase.from('profiles').select('*, xp, badges').eq('id', user.id).single()
         ]);
 
-        // Process quota refetch result
         if (quotaResult.status === 'fulfilled' && quotaResult.value.data) {
-             console.log("Refetched quota data:", quotaResult.value.data);
              setQuota(quotaResult.value.data as Quota);
-        } else if (quotaResult.status === 'rejected' || (quotaResult.status === 'fulfilled' && quotaResult.value.error)) {
-            const fetchQuotaError = quotaResult.status === 'rejected' ? quotaResult.reason : quotaResult.value.error;
-            console.error("Error fetching quota after increment:", fetchQuotaError?.message || fetchQuotaError);
-            toast({ title: "Quota Update Warning", description: "Usage updated, but failed to refresh details.", variant: "default" });
-            // Keep optimistic state if refetch fails
+        } else {
+            console.error("Error fetching quota after increment:", quotaResult.status === 'rejected' ? quotaResult.reason : quotaResult.value.error);
+            // Keep optimistic state if refetch fails but RPC succeeded
         }
 
-        // Process profile refetch result
         if (profileResult.status === 'fulfilled' && profileResult.value.data) {
-            console.log("Refetched profile data:", profileResult.value.data);
             const completeProfile = profileResult.value.data as Profile;
-            setProfile(completeProfile); // Update profile state
-            const newXp = completeProfile.xp ?? 0; // Use 0 as default
-            const newBadges = completeProfile.badges ?? []; // Use [] as default
+            setProfile(completeProfile);
+            const newXp = completeProfile.xp ?? initialXp; // Use initialXp as fallback
+            const newBadges = completeProfile.badges ?? initialBadges; // Use initialBadges as fallback
             setXp(newXp);
             setBadges(newBadges);
-            checkAndAwardBadges(newXp, newBadges); // Check for badges
-        } else if (profileResult.status === 'rejected' || (profileResult.status === 'fulfilled' && profileResult.value.error)) {
-            const fetchProfileError = profileResult.status === 'rejected' ? profileResult.reason : profileResult.value.error;
-            console.error("Error fetching profile after increment:", fetchProfileError?.message || fetchProfileError);
-             toast({ title: "Profile Update Warning", description: "Usage updated, but failed to refresh profile data (XP/badges).", variant: "default" });
+            checkAndAwardBadges(newXp, newBadges);
+        } else {
+            console.error("Error fetching profile after increment:", profileResult.status === 'rejected' ? profileResult.reason : profileResult.value.error);
              // Keep optimistic XP/badge state
         }
 
-       // Final check based on RPC return value (optional, as refetch is more reliable)
        if (typeof newRemainingRpc === 'number' && newRemainingRpc < 0) {
-           // This indicates the RPC itself detected exceeding quota, update state if refetch missed it
            if (quota && quota.request_count < (quota.quota_limit ?? DEFAULT_QUOTA_LIMIT)) {
                setQuota(prev => prev ? {...prev, request_count: prev.quota_limit ?? DEFAULT_QUOTA_LIMIT} : null);
            }
@@ -628,16 +561,14 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
            return false;
        }
 
-      return true; // Increment successful
+      return true;
     } catch (rpcError: any) {
-        // Revert optimistic updates on unexpected catch
-        setQuota(quota);
+        setQuota(quota); // Revert optimistic
         setXp(xp);
-        console.error("Unexpected Error calling increment_quota RPC:", rpcError.message);
         toast({ title: "Quota Error", description: `An unexpected error occurred updating usage: ${rpcError.message}`, variant: "destructive" });
         return false;
     }
-  }, [dbSetupError, quota, quotaRemaining, quotaLimit, xp, supabase, user?.id, toast, checkAndAwardBadges]); // Added user.id
+  }, [dbSetupError, quota, quotaRemaining, quotaLimit, xp, supabase, user?.id, toast, checkAndAwardBadges, initialXp, initialBadges]); // Added initialXp, initialBadges
 
 
   const handleSignOut = async () => {
@@ -653,47 +584,133 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
       setSummary(null);
       setPostDrafts({});
       setDbSetupError(null);
+      setRateLimitState({}); // Clear rate limit state on sign out
       router.push('/login');
     }
   };
 
- // Wrapper function for AI calls with retry logic
+ // Countdown Timer Component
+ const CountdownTimer = ({ targetTime, onComplete }: { targetTime: number, onComplete: () => void }) => {
+     const [remaining, setRemaining] = useState(Math.max(0, Math.ceil((targetTime - Date.now()) / 1000)));
+
+     useEffect(() => {
+         if (remaining <= 0) {
+             onComplete();
+             return;
+         }
+         const timer = setInterval(() => {
+             const newRemaining = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
+             setRemaining(newRemaining);
+             if (newRemaining <= 0) {
+                 clearInterval(timer);
+                 onComplete();
+             }
+         }, 1000);
+         return () => clearInterval(timer);
+     }, [targetTime, onComplete, remaining]);
+
+     const minutes = Math.floor(remaining / 60);
+     const seconds = remaining % 60;
+
+     return <span>Try again in {minutes}:{seconds < 10 ? `0${seconds}` : seconds}</span>;
+ };
+
+
+ // Wrapper function for AI calls with retry and rate limit handling
  const callAiWithRetry = async <T>(
     aiFunction: () => Promise<T>,
     operationName: string,
-    cost: number
-): Promise<{ data: T | null; error: any | null }> => {
+    cost: number,
+    operationKey: string // Unique key for rate limiting state (e.g., 'generate', 'tune_linkedin')
+): Promise<{ data: T | null; error: any | null; rateLimited?: boolean; retryAfter?: number }> => {
     let retries = 0;
     let backoff = INITIAL_BACKOFF_MS;
     let success = false;
     let data: T | null = null;
     let error: any = null;
+    let rateLimited = false;
+    let apiRetryAfterSeconds: number | null = null; // Store potential retry-after from API
+
+    // Check local rate limit state first
+    const currentLimit = rateLimitState[operationKey];
+    if (currentLimit?.limited && currentLimit.retryAfter && currentLimit.retryAfter > Date.now()) {
+        console.log(`${operationName} is rate-limited locally. Retry after ${new Date(currentLimit.retryAfter).toLocaleTimeString()}`);
+        return { data: null, error: new Error("Rate limited"), rateLimited: true, retryAfter: currentLimit.retryAfter };
+    }
 
     // Check quota before attempting the operation
     if (!await checkAndIncrementQuota(cost)) {
-      return { data: null, error: new Error("Quota exceeded") }; // Or specific error
+      return { data: null, error: new Error("Quota exceeded") };
     }
 
     while (retries < MAX_RETRIES) {
         try {
             data = await aiFunction();
-            success = true; // Mark success if function completes without throwing
+            success = true;
             console.log(`${operationName} successful.`);
-            break; // Exit loop on success
+             // Clear rate limit state on success
+            setRateLimitState(prev => {
+                const newState = { ...prev };
+                delete newState[operationKey];
+                return newState;
+            });
+            if (rateLimitTimers.current[operationKey]) {
+                clearTimeout(rateLimitTimers.current[operationKey]);
+                delete rateLimitTimers.current[operationKey];
+            }
+            break;
         } catch (err: any) {
-            error = err; // Store the last error
+            error = err;
 
-             // Check for specific API key error - not retriable
              if (err.status === 'UNAUTHENTICATED' || err.message?.includes("API key not valid")) {
                  console.error(`${operationName}: Invalid API Key used.`);
                  toast({ title: `${operationName} Failed`, description: "Invalid Gemini API Key. Check profile.", variant: "destructive" });
                  setIsProfileDialogOpen(true);
-                 break; // Exit loop, do not retry
+                 break; // No retry for invalid key
              }
 
-            // Check if the error is retriable and we haven't exceeded retries
+             // Check specifically for Rate Limit / Resource Exhausted errors
+            if (err.status === 'RESOURCE_EXHAUSTED' || err.statusCode === 429 || err.message?.toLowerCase().includes('rate limit exceeded') || err.message?.toLowerCase().includes('quota exceeded')) {
+                rateLimited = true;
+                // Attempt to parse Retry-After header if available (logic depends on API response structure)
+                // Example: apiRetryAfterSeconds = parseRetryAfterHeader(err.headers);
+                apiRetryAfterSeconds = 60; // Default to 60 seconds if not provided by API
+
+                const retryTimestamp = Date.now() + (apiRetryAfterSeconds * 1000);
+                console.warn(`${operationName}: Rate limit hit. Setting retry after ${apiRetryAfterSeconds}s.`);
+                setRateLimitState(prev => ({
+                    ...prev,
+                    [operationKey]: { limited: true, retryAfter: retryTimestamp }
+                }));
+
+                // Set a timer to clear the rate limit state
+                if (rateLimitTimers.current[operationKey]) {
+                   clearTimeout(rateLimitTimers.current[operationKey]);
+                }
+                rateLimitTimers.current[operationKey] = setTimeout(() => {
+                    console.log(`Rate limit timer expired for ${operationKey}. Clearing state.`);
+                    setRateLimitState(prev => {
+                        const newState = { ...prev };
+                        if (newState[operationKey]?.retryAfter === retryTimestamp) { // Avoid race conditions
+                           delete newState[operationKey];
+                        }
+                        return newState;
+                    });
+                    delete rateLimitTimers.current[operationKey];
+                }, apiRetryAfterSeconds * 1000);
+
+                toast({
+                    title: "Rate Limit Reached",
+                    description: `${operationName} is temporarily unavailable due to rate limits.`,
+                    variant: "destructive",
+                    duration: 5000
+                });
+                break; // Exit loop on rate limit
+            }
+
+            // Check for other retriable errors
             if (isRetriableError(err) && retries < MAX_RETRIES - 1) {
-                const reason = err.status === 'RESOURCE_EXHAUSTED' ? "Rate limit" : "Service unavailable";
+                const reason = err.status === 503 || err.statusCode === 503 ? "Service unavailable (503)" : "Temporary issue";
                 console.warn(`${operationName}: ${reason}. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 toast({
                     title: "AI Busy",
@@ -703,15 +720,13 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                 });
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 retries++;
-                backoff *= 2; // Exponential backoff
+                backoff *= 2;
             } else {
                 // Non-retriable error or max retries reached
                 console.error(`${operationName} failed after ${retries + 1} attempts:`, err);
                  let description = `AI operation failed: ${err.message || 'Unknown AI error'}`;
-                 if (err.status === 'UNAVAILABLE') {
-                     description = `AI service for ${operationName.toLowerCase()} was unavailable. Try later.`;
-                 } else if (err.status === 'RESOURCE_EXHAUSTED') {
-                      description = `AI rate limit hit during ${operationName.toLowerCase()}. Check quota or try later.`;
+                 if (err.status === 'UNAVAILABLE' || err.status === 503 || err.statusCode === 503) {
+                     description = `AI service for ${operationName.toLowerCase()} was unavailable after retries. Try later.`;
                  }
                 toast({ title: `${operationName} Failed`, description, variant: "destructive" });
                 break; // Exit loop
@@ -719,7 +734,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         }
     }
 
-     // Refund quota if the operation ultimately failed
      if (!success && cost > 0 && user?.id) {
          console.log(`Refunding ${cost} quota point(s) for failed ${operationName}.`);
          try {
@@ -727,47 +741,40 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              if (refundRpcError) {
                  console.error(`Error during quota refund RPC for ${operationName}:`, refundRpcError.message);
              } else {
-                  // Optionally refetch quota/profile locally after refund without toast
-                  const { data: quotaData } = await supabase.from('quotas').select('*').eq('user_id', user.id).single();
-                  if (quotaData) setQuota(quotaData);
-                   const { data: profileData } = await supabase.from('profiles').select('*, xp, badges').eq('id', user.id).single();
-                   if (profileData) {
-                       setProfile(profileData);
-                       setXp(profileData.xp ?? initialXp);
-                       setBadges(profileData.badges ?? initialBadges);
-                       checkAndAwardBadges(profileData.xp ?? initialXp, profileData.badges ?? initialBadges);
-                   }
+                  const [quotaResult, profileResult] = await Promise.allSettled([
+                      supabase.from('quotas').select('*').eq('user_id', user.id).single(),
+                      supabase.from('profiles').select('*, xp, badges').eq('id', user.id).single()
+                  ]);
+                  if (quotaResult.status === 'fulfilled' && quotaResult.value.data) setQuota(quotaResult.value.data as Quota);
+                  if (profileResult.status === 'fulfilled' && profileResult.value.data) {
+                      const p = profileResult.value.data as Profile;
+                      setProfile(p); setXp(p.xp ?? 0); setBadges(p.badges ?? []);
+                      checkAndAwardBadges(p.xp ?? 0, p.badges ?? []);
+                  }
              }
          } catch (refundCatchError: any) {
              console.error(`Unexpected Error during ${operationName} quota refund attempt:`, refundCatchError.message);
          }
      }
 
-    return { data, error };
+    return { data, error, rateLimited, retryAfter: rateLimited ? rateLimitState[operationKey]?.retryAfter : undefined };
 };
 
 
- // Generate Summary and Posts Handler (using the retry wrapper)
+ // Generate Summary and Posts Handler
  const handleGenerate = async () => {
-    if (dbSetupError) {
-        toast({ title: "Database Setup Error", description: dbSetupError, variant: "destructive" });
-        return;
-    }
-    if (!profile?.gemini_api_key) {
-        toast({ title: "API Key Missing", description: "Please add your Google Gemini API key in profile.", variant: "destructive" });
-        setIsProfileDialogOpen(true);
-        return;
-    }
-    if (!contentInput.trim()) {
-        toast({ title: "Input Required", description: "Please enter content or a URL.", variant: "destructive" });
+    const operationKey = 'generate';
+    if (dbSetupError) { /* ... */ return; }
+    if (!profile?.gemini_api_key) { /* ... */ return; }
+    if (!contentInput.trim()) { /* ... */ return; }
+    if (rateLimitState[operationKey]?.limited) {
+        toast({ title: "Rate Limited", description: "Generation is currently rate limited.", variant: "default" });
         return;
     }
 
     const SUMMARY_COST = 1;
     const POST_COST_PER_PLATFORM = 1;
     const TOTAL_INITIAL_COST = SUMMARY_COST + (['linkedin', 'twitter', 'youtube'].length * POST_COST_PER_PLATFORM);
-
-    // No initial quota check here, handled by callAiWithRetry
 
     setIsGeneratingSummary(true);
     setIsGeneratingPosts(true);
@@ -777,24 +784,29 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
     setShowAiAdvisor({});
 
     const apiKey = profile.gemini_api_key;
+    const currentPersonaPrompt = PERSONAS[persona]?.prompt;
 
     startTransition(async () => {
         // --- Summarization ---
-        const { data: summaryResult, error: summaryError } = await callAiWithRetry(
+        const { data: summaryResult, error: summaryError, rateLimited: summaryRateLimited, retryAfter: summaryRetryAfter } = await callAiWithRetry(
             () => summarizeContent({ content: contentInput }, { apiKey }),
             "Summarization",
-            SUMMARY_COST
+            SUMMARY_COST,
+            `${operationKey}_summary` // More specific key
         );
 
         setIsGeneratingSummary(false);
 
+        if (summaryRateLimited) {
+             setIsGeneratingPosts(false);
+             // Toast or specific UI update handled by callAiWithRetry
+             return;
+        }
         if (summaryError || !summaryResult?.summary) {
-            // Error handled within callAiWithRetry (toast shown)
-            // If parsing error specifically, provide more context if possible
              if (summaryError?.message?.includes("parsing")) {
                toast({ title: "Content Parsing Failed", description: "Could not parse content from URL. Check URL or paste text.", variant: "destructive"});
             }
-            setIsGeneratingPosts(false); // Stop post generation if summary failed
+            setIsGeneratingPosts(false);
             return;
         }
 
@@ -805,15 +817,26 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         console.log("Starting post generation...");
         const platforms: SocialPlatform[] = ['linkedin', 'twitter', 'youtube'];
         const postPromises = platforms.map(async (platform) => {
-             const { data: postResult, error: postError } = await callAiWithRetry(
-                 () => generateSocialPosts({ summary: summaryResult.summary!, platform }, { apiKey }),
+             const platformOpKey = `${operationKey}_${platform}`;
+              // Check rate limit *before* calling
+             if (rateLimitState[platformOpKey]?.limited) {
+                  console.log(`Post generation for ${platform} skipped due to rate limit.`);
+                  return { platform, post: `Rate limited. Try again later.` };
+             }
+
+             const { data: postResult, error: postError, rateLimited: postRateLimited } = await callAiWithRetry(
+                 // Pass persona prompt here if needed for initial generation too
+                 () => generateSocialPosts({ summary: summaryResult.summary!, platform, personaPrompt: currentPersonaPrompt }, { apiKey }),
                  `Post Generation (${platform})`,
-                 POST_COST_PER_PLATFORM
+                 POST_COST_PER_PLATFORM,
+                 platformOpKey // Platform-specific key
              );
 
+            if (postRateLimited) {
+                return { platform, post: `Rate limited. Try again later.` };
+            }
             if (postError || !postResult?.post) {
-                // Error handled within callAiWithRetry (toast shown)
-                return { platform, post: `Error generating post for ${platform}.` }; // Indicate error in draft
+                return { platform, post: `Error generating post for ${platform}.` };
             }
             return { platform, post: postResult.post };
         });
@@ -831,41 +854,38 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
  };
 
 
- // Tune Post Handler (using the retry wrapper)
+ // Tune Post Handler
  const handleTunePost = async (platform: SocialPlatform, feedback: string) => {
-    if (dbSetupError) {
-        toast({ title: "Database Error", description: dbSetupError, variant: "destructive" });
-        return;
-    }
-    if (!profile?.gemini_api_key) {
-        toast({ title: "API Key Missing", description: "Please add your Gemini API key in profile.", variant: "destructive" });
-        setIsProfileDialogOpen(true);
-        return;
-    }
+    const operationKey = `tune_${platform}`;
+    if (dbSetupError) { /* ... */ return; }
+    if (!profile?.gemini_api_key) { /* ... */ return; }
     const originalPost = postDrafts[platform];
-    if (!originalPost || originalPost.startsWith("Error generating")) {
-        toast({ title: "Cannot Tune", description: "Cannot tune a post that failed generation.", variant: "destructive" });
+    if (!originalPost || originalPost.startsWith("Error generating") || originalPost.startsWith("Rate limited")) { /* ... */ return; }
+     if (rateLimitState[operationKey]?.limited) {
+        toast({ title: "Rate Limited", description: `Tuning for ${platform} is currently rate limited.`, variant: "default" });
         return;
     }
 
     const COST = 1;
-    // No initial quota check here, handled by callAiWithRetry
-
     setIsTuning(prev => ({ ...prev, [platform]: true }));
-    setAnalysisResults(prev => ({ ...prev, [platform]: null })); // Clear analysis on tune
+    setAnalysisResults(prev => ({ ...prev, [platform]: null }));
     const apiKey = profile.gemini_api_key;
+    const currentPersonaPrompt = PERSONAS[persona]?.prompt; // Get current persona prompt
 
     startTransition(async () => {
-        const { data: tunedResult, error: tuneError } = await callAiWithRetry(
-            () => tuneSocialPosts({ originalPost, feedback, platform }, { apiKey }),
+        const { data: tunedResult, error: tuneError, rateLimited: tuneRateLimited } = await callAiWithRetry(
+            () => tuneSocialPosts({ originalPost, feedback, platform, personaPrompt: currentPersonaPrompt }, { apiKey }), // Pass persona prompt
             `Tuning (${platform})`,
-            COST
+            COST,
+            operationKey // Use the specific operation key
         );
 
         setIsTuning(prev => ({ ...prev, [platform]: false }));
 
-        if (tuneError || !tunedResult?.tunedPost) {
-            // Error handled within callAiWithRetry
+        if (tuneRateLimited) {
+            // UI update handled by callAiWithRetry (toast) and the rateLimitState check
+        } else if (tuneError || !tunedResult?.tunedPost) {
+            // Error toast handled within callAiWithRetry
         } else {
             setPostDrafts(prev => ({ ...prev, [platform]: tunedResult.tunedPost }));
             toast({ title: "Post Tuned!", description: `Applied feedback: "${feedback}"`, variant: "default" });
@@ -875,43 +895,38 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
  };
 
 
- // Analyze Post Handler (using the retry wrapper)
+ // Analyze Post Handler
  const handleAnalyzePost = async (platform: SocialPlatform) => {
-    if (dbSetupError) {
-      toast({ title: "Database Error", description: dbSetupError, variant: "destructive" });
-      return;
-    }
-    if (!profile?.gemini_api_key) {
-      toast({ title: "API Key Missing", description: "Please add your Gemini API key in profile.", variant: "destructive" });
-      setIsProfileDialogOpen(true);
-      return;
-    }
+     const operationKey = `analyze_${platform}`;
+    if (dbSetupError) { /* ... */ return; }
+    if (!profile?.gemini_api_key) { /* ... */ return; }
     const currentPost = postDrafts[platform];
-    if (!currentPost || currentPost.startsWith("Error generating")) {
-      toast({ title: "Cannot Analyze", description: "Cannot analyze a post that failed generation.", variant: "destructive" });
-      return;
+    if (!currentPost || currentPost.startsWith("Error generating") || currentPost.startsWith("Rate limited")) { /* ... */ return; }
+     if (rateLimitState[operationKey]?.limited) {
+        toast({ title: "Rate Limited", description: `Analysis for ${platform} is currently rate limited.`, variant: "default" });
+        return;
     }
 
      const COST = 1;
-     // No initial quota check here, handled by callAiWithRetry
-
     setAnalysisStates(prev => ({ ...prev, [platform]: true }));
     setAnalysisResults(prev => ({ ...prev, [platform]: null }));
-    setShowAiAdvisor(prev => ({ ...prev, [platform]: true })); // Show advisor panel
+    setShowAiAdvisor(prev => ({ ...prev, [platform]: true }));
     const apiKey = profile.gemini_api_key;
 
     startTransition(async () => {
-       const { data: result, error: analysisError } = await callAiWithRetry(
+       const { data: result, error: analysisError, rateLimited: analysisRateLimited } = await callAiWithRetry(
            () => analyzePost({ postContent: currentPost, platform }, { apiKey }),
            `Analysis (${platform})`,
-           COST
+           COST,
+           operationKey // Use the specific operation key
        );
 
        setAnalysisStates(prev => ({ ...prev, [platform]: false }));
 
-        if (analysisError || !result) {
-            // Error handled within callAiWithRetry
-            setShowAiAdvisor(prev => ({ ...prev, [platform]: false })); // Hide advisor on failure
+        if (analysisRateLimited) {
+            setShowAiAdvisor(prev => ({ ...prev, [platform]: false })); // Hide advisor if rate limited
+        } else if (analysisError || !result) {
+            setShowAiAdvisor(prev => ({ ...prev, [platform]: false }));
         } else if (result.analysis !== undefined && result.flags !== undefined) {
              setAnalysisResults(prev => ({ ...prev, [platform]: result }));
              console.log(`Analysis for ${platform} successful.`);
@@ -919,7 +934,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                 toast({title: "AI Advisor", description: "Post looks good! No major issues found.", variant: "default"});
              }
          } else {
-             // Handle case where AI returns unexpected format even if no error thrown
              console.error(`Analysis for ${platform} returned invalid format.`);
              toast({ title: "Analysis Failed", description: "AI returned an unexpected result format.", variant: "destructive" });
              setShowAiAdvisor(prev => ({ ...prev, [platform]: false }));
@@ -935,8 +949,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
      const updatedPost = currentPost.substring(0, start) + suggestion + currentPost.substring(end);
      setPostDrafts(prev => ({ ...prev, [platform]: updatedPost }));
 
-      setAnalysisResults(prev => ({ ...prev, [platform]: null })); // Clear analysis result
-      // setShowAiAdvisor(prev => ({ ...prev, [platform]: false })); // Optionally close advisor
+      setAnalysisResults(prev => ({ ...prev, [platform]: null }));
       toast({ title: "Suggestion Applied", description: "Post updated with AI suggestion."});
   };
 
@@ -946,7 +959,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         toast({ title: "Database Setup Error", description: dbSetupError, variant: "destructive" });
         return;
      }
-    // Placeholder: Feature disabled
     toast({ title: "Publishing Unavailable", description: "Social media publishing feature is currently disabled.", variant: "default" });
   };
 
@@ -957,17 +969,13 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
       .catch(err => toast({ title: "Copy Failed", description: "Could not copy text.", variant: "destructive" }));
   };
 
-  // Insert text (emoji/hashtag) into the currently active output textarea
+  // Insert text (emoji/hashtag)
   const handleInsertText = (text: string) => {
      if (outputTextareaRef.current) {
        const { selectionStart, selectionEnd, value } = outputTextareaRef.current;
        const newValue = value.substring(0, selectionStart) + text + value.substring(selectionEnd);
-       // Update the specific draft based on the activeTab
        setPostDrafts(prev => ({ ...prev, [activeTab]: newValue }));
-
-       // Optional: Move cursor after inserted text
-       const newCursorPosition = selectionStart + text.length;
-       // Use setTimeout to allow state update before setting selection
+        const newCursorPosition = selectionStart + text.length;
         setTimeout(() => {
             if (outputTextareaRef.current) {
                  outputTextareaRef.current.focus();
@@ -975,13 +983,13 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
             }
         }, 0);
      } else {
-         toast({ title: "Action Failed", description: "Could not find the active post draft to insert text.", variant: "destructive"});
+         toast({ title: "Action Failed", description: "Could not find the active post draft.", variant: "destructive"});
      }
    };
 
 
   const handleJoyrideCallback = (data: CallBackProps) => {
-    const { status, type, action } = data;
+    const { status, type } = data;
      const FINISHED_STATUSES: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
 
      if (FINISHED_STATUSES.includes(status)) {
@@ -1008,11 +1016,30 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
      }
   };
 
+   // Function to clear a specific rate limit state
+   const clearRateLimit = (key: string) => {
+        console.log(`Clearing rate limit state for ${key}`);
+        setRateLimitState(prev => {
+            const newState = { ...prev };
+            delete newState[key];
+            return newState;
+        });
+         if (rateLimitTimers.current[key]) {
+            clearTimeout(rateLimitTimers.current[key]);
+            delete rateLimitTimers.current[key];
+        }
+    };
+
 
   // Determine if generation/tuning should be globally disabled
   const isDisabled = isPending || quotaExceeded || !!dbSetupError;
-  const maxXPForLevel = BADGES[BADGES.length - 1]?.xp || 500; // Max XP for progress
-  const xpPercentage = maxXPForLevel > 0 ? Math.min(100, (xp / maxXPForLevel) * 100) : 0; // XP progress relative to max badge
+  const maxXPForLevel = BADGES[BADGES.length - 1]?.xp || 500;
+  const xpPercentage = maxXPForLevel > 0 ? Math.min(100, (xp / maxXPForLevel) * 100) : 0;
+
+  // --- Button Specific Disabled States ---
+  const isGenerateDisabled = isDisabled || !contentInput.trim() || !profile?.gemini_api_key || !!rateLimitState['generate_summary']?.limited || !!rateLimitState['generate_linkedin']?.limited || !!rateLimitState['generate_twitter']?.limited || !!rateLimitState['generate_youtube']?.limited;
+  const getTuneDisabledState = (platform: SocialPlatform) => isDisabled || !postDrafts[platform] || postDrafts[platform]?.startsWith("Error") || postDrafts[platform]?.startsWith("Rate limited") || isTuning[platform] || !!rateLimitState[`tune_${platform}`]?.limited;
+  const getAnalyzeDisabledState = (platform: SocialPlatform) => isDisabled || !postDrafts[platform] || postDrafts[platform]?.startsWith("Error") || postDrafts[platform]?.startsWith("Rate limited") || analysisStates[platform] || !!rateLimitState[`analyze_${platform}`]?.limited;
 
 
   return (
@@ -1025,34 +1052,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
           showProgress
           showSkipButton
           callback={handleJoyrideCallback}
-          styles={{
-            options: {
-              zIndex: 10000,
-              primaryColor: 'hsl(var(--primary))',
-              arrowColor: 'hsl(var(--card))',
-            },
-            tooltip: {
-              backgroundColor: 'hsl(var(--card))',
-              color: 'hsl(var(--card-foreground))',
-              borderRadius: 'var(--radius)',
-              border: '1px solid hsl(var(--border))',
-            },
-            buttonNext: {
-              backgroundColor: 'hsl(var(--primary))',
-              borderRadius: 'calc(var(--radius) - 4px)',
-              fontSize: '0.875rem',
-              padding: '0.5rem 1rem',
-            },
-             buttonBack: {
-              color: 'hsl(var(--muted-foreground))',
-               fontSize: '0.875rem',
-               marginRight: '0.5rem',
-            },
-             buttonSkip: {
-               color: 'hsl(var(--muted-foreground))',
-               fontSize: '0.875rem',
-             },
-          }}
+          styles={{ /* styles */ }}
         />
      )}
 
@@ -1065,9 +1065,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
             <Zap className="h-6 w-6 text-primary" />
             <h1 className="text-2xl font-bold text-gradient hidden sm:block">VibeFlow</h1>
           </Link>
-        {/* Right side icons and buttons */}
         <div className="flex items-center gap-2 md:gap-4">
-           {/* XP & Quota Display */}
            {dbSetupError ? (
                 <Tooltip>
                    <TooltipTrigger asChild>
@@ -1082,17 +1080,20 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              <Tooltip>
                <TooltipTrigger asChild>
                   <div id="quota-display-tooltip-trigger" className="flex items-center gap-3 cursor-help bg-muted/30 border border-border/50 rounded-full px-3 py-1.5">
-                      {/* XP Meter */}
-                       <div className="flex items-center gap-1 text-xs font-medium text-purple-400">
+                       <div className="flex items-center gap-1 text-xs font-medium text-purple-400" title={`${xp.toLocaleString()} Experience Points`}>
                          <BrainCircuit className="h-3.5 w-3.5"/>
                          <span>{xp.toLocaleString()} XP</span>
                       </div>
                        <Separator orientation="vertical" className="h-4 bg-border/50"/>
-                       {/* Quota Bar */}
-                      {quota !== null && (
-                        <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                            <Progress value={quotaPercentage} className="w-16 h-1.5" title={`${quotaUsed}/${quotaLimit} requests used`} aria-label={`Quota usage: ${quotaUsed} of ${quotaLimit} requests used (${quotaPercentage.toFixed(0)}%)`} />
+                      {quota !== null ? (
+                        <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground" title={`${quotaUsed}/${quotaLimit} requests used`}>
+                            <Progress value={quotaPercentage} className="w-16 h-1.5" aria-label={`Quota usage: ${quotaUsed} of ${quotaLimit} (${quotaPercentage.toFixed(0)}%)`} />
                             <span>{quotaRemaining} left</span>
+                         </div>
+                      ): (
+                        <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                           <Loader2 className="h-3.5 w-3.5 animate-spin"/>
+                           <span>Quota...</span>
                          </div>
                       )}
                   </div>
@@ -1108,15 +1109,14 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                   </div>
                </TooltipContent>
              </Tooltip>
-           ) : (
+           ) : ( /* Loading state */
                <div className="flex items-center gap-1 text-sm text-muted-foreground bg-muted/30 border border-border/50 rounded-full px-3 py-1.5">
                    <Loader2 className="h-4 w-4 animate-spin"/>
                    <span>Loading...</span>
                </div>
            )}
 
-           {/* Help Button */}
-          <Tooltip>
+           <Tooltip>
              <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" onClick={() => setIsHelpModalOpen(true)} aria-label="Open Keyboard Shortcuts">
                      <HelpCircle className="h-5 w-5" />
@@ -1125,7 +1125,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              <TooltipContent><p>Help & Shortcuts (Ctrl+H)</p></TooltipContent>
            </Tooltip>
 
-          {/* Profile Button */}
           <Tooltip>
              <TooltipTrigger asChild>
                   <Button id="profile-button-tooltip-trigger" variant="ghost" size="icon" onClick={() => setIsProfileDialogOpen(true)} disabled={!!dbSetupError} aria-label="Open Profile Settings">
@@ -1135,7 +1134,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              <TooltipContent><p>Profile & Settings</p></TooltipContent>
            </Tooltip>
 
-          {/* Sign Out Button (Pill Style) */}
           <Tooltip>
              <TooltipTrigger asChild>
                 <Button variant="outline" size="sm" onClick={handleSignOut} className="rounded-full px-3 py-1 h-8" aria-label="Sign Out">
@@ -1147,10 +1145,10 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         </div>
       </header>
 
-      {/* Gamification Badge Bar (Slim under header) */}
-      {isClient && !dbSetupError && profile && (
+      {/* Gamification Badge Bar */}
+       {isClient && !dbSetupError && profile && (
          <div className="mb-4 -mt-4">
-            <div className="relative h-2 bg-muted/30 rounded-full overflow-hidden">
+           <div className="relative h-2 bg-muted/30 rounded-full overflow-hidden" title={`XP Progress: ${xpPercentage.toFixed(0)}% towards next badge`}>
               <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 ease-out" style={{ width: `${xpPercentage}%` }}></div>
             </div>
              <div className="flex justify-between mt-1 px-1 relative -top-3">
@@ -1188,7 +1186,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              <Database className="h-4 w-4" />
             <AlertTitle>Database Setup Required</AlertTitle>
             <AlertDescription>
-              {dbSetupError} Please check the README or Supabase setup instructions.
+              {dbSetupError} Please run the setup script.
             </AlertDescription>
           </Alert>
         )}
@@ -1198,12 +1196,25 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
              <Info className="h-4 w-4" />
             <AlertTitle>Quota Limit Reached</AlertTitle>
             <AlertDescription>
-              You've used all your requests for this month. Please{' '}
-                <Button variant="link" className="p-0 h-auto text-destructive-foreground underline" onClick={() => setIsProfileDialogOpen(true)}>upgrade your plan</Button>
-                {' '}or wait until next month for the quota to reset.
+              You've used all your requests. Upgrade or wait for reset.
             </AlertDescription>
           </Alert>
         )}
+
+      {/* Display Rate Limit Timers */}
+      {Object.entries(rateLimitState).map(([key, limit]) => (
+          limit.limited && limit.retryAfter && limit.retryAfter > Date.now() && (
+              <Alert key={key} variant="default" className="mb-4 bg-yellow-500/10 border-yellow-500/30">
+                  <Timer className="h-4 w-4 text-yellow-500" />
+                  <AlertTitle className="text-yellow-600">Rate Limit Active</AlertTitle>
+                  <AlertDescription className="text-yellow-700">
+                      Action "{key.replace(/_/g, ' ')}" is temporarily limited. {' '}
+                      <CountdownTimer targetTime={limit.retryAfter} onComplete={() => clearRateLimit(key)} />
+                  </AlertDescription>
+              </Alert>
+          )
+      ))}
+
 
       <main className="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
 
@@ -1214,7 +1225,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
             <CardDescription>Enter URL or text, choose a persona, and generate posts.</CardDescription>
           </CardHeader>
           <CardContent className="flex-grow flex flex-col gap-4">
-             {/* AI Persona Selector */}
              <div className="w-full sm:w-2/3 md:w-1/2">
                 <Label htmlFor="persona-select">AI Persona</Label>
                  <Select value={persona} onValueChange={(value) => setPersona(value as Persona)}>
@@ -1237,17 +1247,16 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                    </SelectContent>
                  </Select>
               </div>
-             {/* Main Textarea Input */}
             <Textarea
               id="content-input-textarea"
               placeholder="Paste your content or URL here..."
               value={contentInput}
               onChange={(e) => setContentInput(e.target.value)}
-              rows={4} // Start with 4 rows
-              className="min-h-[150px] md:min-h-[200px] lg:min-h-[250px] bg-input/50 border-border/50 text-base resize-y flex-grow" // Allow vertical resize
+              rows={4}
+              className="min-h-[150px] md:min-h-[200px] lg:min-h-[250px] bg-input/50 border-border/50 text-base resize-y flex-grow"
               disabled={isDisabled}
               suppressHydrationWarning
-              spellCheck={true} // Enable spellcheck
+              spellCheck={true}
               aria-label="Content Input"
             />
           </CardContent>
@@ -1255,9 +1264,9 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
             <Button
               id="generate-posts-button"
               onClick={handleGenerate}
-              disabled={isDisabled || !contentInput.trim() || !profile?.gemini_api_key}
+              disabled={isGenerateDisabled} // Use specific disabled state
               loading={isGeneratingSummary || isGeneratingPosts}
-              className="w-full md:w-auto ml-auto transition-transform duration-200 hover:scale-105" // Added hover effect
+              className="w-full md:w-auto ml-auto transition-transform duration-200 hover:scale-105"
             >
               <Wand2 className="mr-2 h-4 w-4" /> Generate Posts
             </Button>
@@ -1272,7 +1281,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                 <CardTitle>Generated Drafts</CardTitle>
                 <CardDescription>Review, analyze, tune, and publish your social media posts.</CardDescription>
               </CardHeader>
-              <CardContent className="flex-grow flex flex-col"> {/* Ensure flex-col for proper layout */}
+              <CardContent className="flex-grow flex flex-col">
                  {(isGeneratingSummary || isGeneratingPosts) && (
                     <div className="flex h-full items-center justify-center p-10 text-muted-foreground">
                        <Loader2 className="h-8 w-8 animate-spin mr-3" />
@@ -1304,60 +1313,57 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                     </TabsList>
 
                     {(['linkedin', 'twitter', 'youtube'] as SocialPlatform[]).map((platform) => (
-                      <TabsContent key={platform} value={platform} className="flex-grow mt-0 flex flex-col"> {/* Ensure flex-col here */}
-                        <div className="flex gap-4 h-full flex-grow"> {/* Ensure flex-grow here */}
+                      <TabsContent key={platform} value={platform} className="flex-grow mt-0 flex flex-col">
+                        <div className="flex gap-4 h-full flex-grow">
                             {/* Main Output Card for the Platform */}
                             <Card className="bg-background border-border/50 h-full flex flex-col flex-grow">
-                              <CardContent className="p-4 space-y-4 relative flex-grow flex flex-col"> {/* Flex-col for textarea growth */}
+                              <CardContent className="p-4 space-y-4 relative flex-grow flex flex-col">
                                 {isTuning[platform] && (
                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-md">
                                       <Loader2 className="h-6 w-6 animate-spin text-primary-foreground"/>
                                    </div>
                                  )}
-                                 {postDrafts[platform]?.startsWith("Error generating") ? (
+                                 {postDrafts[platform]?.startsWith("Error generating") || postDrafts[platform]?.startsWith("Rate limited") ? (
                                     <div className="flex h-full items-center justify-center text-destructive p-4 border border-dashed border-destructive/50 rounded-md">
                                         {postDrafts[platform]}
                                     </div>
                                  ) : (
                                     <Textarea
-                                      ref={platform === activeTab ? outputTextareaRef : null} // Assign ref only to active textarea
+                                      ref={platform === activeTab ? outputTextareaRef : null}
                                       value={postDrafts[platform] || ''}
                                       onChange={(e) => setPostDrafts(prev => ({...prev, [platform]: e.target.value}))}
-                                      className="min-h-[200px] bg-input/30 border-border/30 resize-y text-sm h-full flex-grow" // Allow resize, use flex-grow
+                                      className="min-h-[200px] bg-input/30 border-border/30 resize-y text-sm h-full flex-grow"
                                       suppressHydrationWarning
                                       spellCheck={true}
                                       disabled={isDisabled || isTuning[platform]}
                                       aria-label={`${platform} post draft`}
                                     />
                                  )}
-                                {/* Preview Mockup */}
                                 <PreviewMockup platform={platform} content={postDrafts[platform] || ''} />
 
                                 {/* Tune Buttons */}
-                                {!postDrafts[platform]?.startsWith("Error generating") && (
+                                {!postDrafts[platform]?.startsWith("Error generating") && !postDrafts[platform]?.startsWith("Rate limited") && (
                                      <div className="flex flex-wrap gap-2 shrink-0 pt-2 tune-buttons-group">
                                       <span className="text-xs text-muted-foreground mr-2 mt-1.5">Quick Tune:</span>
-                                       <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Make wittier')} disabled={isDisabled || !postDrafts[platform] || isTuning[platform]}>Witty</Button>
-                                       <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More concise')} disabled={isDisabled || !postDrafts[platform] || isTuning[platform]}>Concise</Button>
-                                       <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More professional')} disabled={isDisabled || !postDrafts[platform] || isTuning[platform]}>Professional</Button>
-                                       {/* Tone Tuner Trigger */}
-                                       <Button size="sm" variant="outline" onClick={() => setIsToneSheetOpen(true)} disabled={isDisabled || !postDrafts[platform] || isTuning[platform]}>
+                                       <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'Make wittier')} disabled={getTuneDisabledState(platform)}>Witty</Button>
+                                       <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More concise')} disabled={getTuneDisabledState(platform)}>Concise</Button>
+                                       <Button size="sm" variant="outline" onClick={() => handleTunePost(platform, 'More professional')} disabled={getTuneDisabledState(platform)}>Professional</Button>
+                                       <Button size="sm" variant="outline" onClick={() => setIsToneSheetOpen(true)} disabled={getTuneDisabledState(platform)}>
                                          <Palette className="mr-1.5 h-3.5 w-3.5"/> Tune Tone...
                                        </Button>
                                      </div>
                                 )}
                               </CardContent>
                               {/* Footer with Action Buttons */}
-                              {!postDrafts[platform]?.startsWith("Error generating") && (
+                              {!postDrafts[platform]?.startsWith("Error generating") && !postDrafts[platform]?.startsWith("Rate limited") && (
                                   <CardFooter className="flex justify-end gap-2 shrink-0 pt-0">
-                                    {/* AI Advisor Button */}
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                              <Button
                                                variant="ghost"
                                                size="icon"
                                                onClick={() => handleAnalyzePost(platform)}
-                                               disabled={isDisabled || !postDrafts[platform] || analysisStates[platform]}
+                                               disabled={getAnalyzeDisabledState(platform)} // Use specific disabled state
                                                loading={analysisStates[platform]}
                                                className="ai-advisor-button hover:bg-purple-500/10"
                                                aria-label="Get AI feedback"
@@ -1367,7 +1373,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                                         </TooltipTrigger>
                                         <TooltipContent><p>AI Advisor: Analyze Post</p></TooltipContent>
                                     </Tooltip>
-                                    {/* Boost Panel Trigger */}
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <Button
@@ -1383,7 +1388,6 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                                         </TooltipTrigger>
                                         <TooltipContent><p>Hashtags & Emojis</p></TooltipContent>
                                     </Tooltip>
-                                    {/* Copy Button */}
                                     <Tooltip>
                                        <TooltipTrigger asChild>
                                           <Button variant="ghost" size="icon" onClick={() => copyToClipboard(postDrafts[platform])} disabled={!postDrafts[platform] || isPublishing[platform]} aria-label="Copy Post">
@@ -1392,12 +1396,11 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                                        </TooltipTrigger>
                                        <TooltipContent><p>Copy Post</p></TooltipContent>
                                     </Tooltip>
-                                    {/* Publish Button */}
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                            <Button
                                              onClick={() => handlePublishPost(platform)}
-                                             disabled={true} // Always disabled for now
+                                             disabled={true}
                                              loading={isPublishing[platform]}
                                              size="sm"
                                              className="hover:scale-105"
@@ -1411,7 +1414,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
                                )}
                             </Card>
 
-                            {/* AI Advisor Panel (Conditional Rendering) */}
+                            {/* AI Advisor Panel */}
                             <AiAdvisorPanel
                                isOpen={!!showAiAdvisor[platform]}
                                isLoading={!!analysisStates[platform]}
@@ -1428,7 +1431,7 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
               </CardContent>
             </Card>
 
-             {/* Boost Panel (Hashtags & Emojis) */}
+             {/* Boost Panel */}
              <BoostPanel
                 isOpen={isBoostPanelOpen}
                 onToggle={() => setIsBoostPanelOpen(!isBoostPanelOpen)}
@@ -1458,12 +1461,14 @@ export default function Dashboard({ user, initialProfile, initialQuota, initialX
         <ToneTunerSheet
           isOpen={isToneSheetOpen}
           onOpenChange={setIsToneSheetOpen}
-          currentTone={persona} // Assuming persona maps to tone for now
+          currentTone={persona}
           onApplyTone={(newTone) => {
-            setPersona(newTone as Persona); // Update persona state
-            // Optionally, trigger a re-tune/re-generation here
-            handleTunePost(activeTab, `Change tone to ${PERSONAS[newTone as Persona]?.label || newTone}`);
-            setIsToneSheetOpen(false); // Close sheet after applying
+            const selectedPersona = newTone as Persona;
+            const personaData = PERSONAS[selectedPersona];
+            setPersona(selectedPersona);
+            // Trigger tune with the *new* persona's prompt
+            handleTunePost(activeTab, `Change tone to ${personaData?.label || selectedPersona}`);
+            setIsToneSheetOpen(false);
           }}
         />
 

@@ -1,15 +1,14 @@
-
 'use server';
 
 /**
- * @fileOverview Tunes social media posts based on user feedback.
+ * @fileOverview Tunes social media posts based on user feedback and persona.
  *
  * - tuneSocialPosts - A function that tunes social media posts.
  * - TuneSocialPostsInput - The input type for the tuneSocialPosts function.
  * - TuneSocialPostsOutput - The return type for the tuneSocialPosts function.
  */
 
-import {ai as defaultAi} from '@/ai/ai-instance'; // Use the configured instance
+import {ai as defaultAi} from '@/ai/ai-instance';
 import { GenkitError } from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'genkit';
@@ -22,7 +21,8 @@ type FlowOptions = {
 const TuneSocialPostsInputSchema = z.object({
   originalPost: z.string().describe('The original social media post.'),
   feedback: z.string().describe('User feedback on the post (e.g., Make wittier, More concise).'),
-  platform: z.enum(['linkedin', 'twitter', 'youtube']).describe('The platform the original post was intended for (influences length considerations).') // Added platform context
+  platform: z.enum(['linkedin', 'twitter', 'youtube']).describe('The platform the original post was intended for (influences length considerations).'),
+  personaPrompt: z.string().optional().describe('An optional prompt snippet defining the desired AI persona or writing style.'), // Added personaPrompt
 });
 export type TuneSocialPostsInput = z.infer<typeof TuneSocialPostsInputSchema>;
 
@@ -49,18 +49,16 @@ export async function tuneSocialPosts(
 const prompt = defaultAi.definePrompt({
   name: 'tuneSocialPostsPrompt',
   input: {
-    schema: z.object({
-      originalPost: z.string().describe('The original social media post.'),
-      feedback: z.string().describe('User feedback on the post (e.g., Make wittier, More concise).'),
-      platform: z.enum(['linkedin', 'twitter', 'youtube']).describe('The platform the original post was intended for (influences length considerations).') // Added platform context
-    }),
+    schema: TuneSocialPostsInputSchema, // Use the updated schema
   },
   output: {
-    schema: z.object({
-      tunedPost: z.string().describe('The tuned social media post.'),
-    }),
+    schema: TuneSocialPostsOutputSchema,
   },
-  prompt: `You are a social media expert. You will be given an original social media post and feedback on how to improve it. Please tune the post based on the feedback.
+  // Updated prompt to incorporate persona if provided
+  prompt: `You are a social media expert. You will be given an original social media post and feedback on how to improve it. Tune the post based on the feedback.
+{{#if personaPrompt}}
+Adopt the following writing style: {{{personaPrompt}}}
+{{/if}}
 
 Original Post (intended for {{platform}}):
 {{{originalPost}}}
@@ -68,7 +66,7 @@ Original Post (intended for {{platform}}):
 Feedback:
 {{{feedback}}}
 
-Tuned Post (keep appropriate for {{platform}}):`, // Enhanced prompt with platform context
+Tuned Post (keep appropriate for {{platform}}):`,
   // Define config schema to accept API key
   configSchema: z.object({
     apiKey: z.string().optional(),
@@ -96,7 +94,7 @@ const isRetriableError = (error: any): boolean => {
     // Check for HTTP status codes within the error message or structure (e.g., 503)
     // Also check for common textual indicators of temporary issues.
     if (
-        error.status === 503 ||
+        error.status === 503 || error.statusCode === 503 || // Added statusCode check
         message.includes('503') ||
         message.includes('service unavailable') ||
         message.includes('overloaded') ||
@@ -131,7 +129,7 @@ async (input, flowOptions) => { // Receive flowOptions
         try {
             // Call the prompt object directly, passing the API key via config
             const {output} = await prompt(
-                input, // Prompt input
+                input, // Prompt input now includes personaPrompt
                 { config: { apiKey: flowOptions.apiKey } } // Prompt config with API key
             );
 
@@ -154,8 +152,10 @@ async (input, flowOptions) => { // Receive flowOptions
                  const message = error.message?.toLowerCase() || '';
                  if (error.message === "AI returned an empty tuned post.") {
                       reason = "Received empty tuned post";
-                 } else if (error.status === 'RESOURCE_EXHAUSTED' || message.includes('rate limit exceeded')) {
-                      reason = "AI service rate limit potentially hit";
+                 } else if (error.status === 'RESOURCE_EXHAUSTED' || message.includes('rate limit exceeded') || message.includes('quota exceeded')) {
+                      reason = "AI service rate limit or quota potentially hit";
+                 } else if (error.status === 503 || error.statusCode === 503 || message.includes('503')) {
+                      reason = "AI service unavailable (503)";
                  }
                 console.warn(`TuneSocialPostsFlow (${input.platform}): ${reason}. Retrying in ${backoff}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
@@ -174,12 +174,12 @@ async (input, flowOptions) => { // Receive flowOptions
                   if (error instanceof GenkitError) {
                      finalStatus = error.status ?? finalStatus;
                  } else if (isRetriableError(error)) { // If it was retriable but retries exhausted
-                      if (error.status === 503 || messageLower.includes('503') || messageLower.includes('overloaded') || messageLower.includes('service unavailable')) {
+                      if (error.status === 503 || error.statusCode === 503 || messageLower.includes('503') || messageLower.includes('overloaded') || messageLower.includes('service unavailable')) {
                           finalStatus = 'UNAVAILABLE';
                           finalMessage = `AI service was unavailable for tuning (${input.platform}) after multiple retry attempts.`; // Specific message
-                      } else if (error.status === 'RESOURCE_EXHAUSTED' || messageLower.includes('rate limit exceeded')) {
+                      } else if (error.status === 'RESOURCE_EXHAUSTED' || messageLower.includes('rate limit exceeded') || messageLower.includes('quota exceeded')) {
                            finalStatus = 'RESOURCE_EXHAUSTED';
-                           finalMessage = `AI service rate limit issues persisted during tuning (${input.platform}) after multiple retry attempts. Please check your Google API quota.`; // Specific message
+                           finalMessage = `AI service rate limit/quota issues persisted during tuning (${input.platform}) after multiple retry attempts. Please check your Google API quota or wait.`; // Specific message
                       } else {
                            finalStatus = 'INTERNAL'; // Default for other retriable errors after exhaustion
                            finalMessage = `Post tuning for ${input.platform} failed due to a temporary AI service issue after ${MAX_RETRIES} attempts. Please try again later. Original error: ${error.message}`;

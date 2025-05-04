@@ -4,19 +4,19 @@
 
 **Stop staring at a blank page. Start creating magnetic social media content in seconds.**
 
-VibeFlow is a Next.js application built with Supabase, Genkit, and ShadCN UI that leverages the power of Google Gemini to transform any content (URLs, text) into engaging, platform-specific posts for **LinkedIn**, **Twitter**, and **YouTube**.
+VibeFlow is a Next.js application built with Supabase, Genkit, and ShadCN UI that leverages the power of Google Gemini to transform your text content into engaging, platform-specific posts for **LinkedIn**, **Twitter**, and **YouTube**.
 
-**Tired of the content grind?** VibeFlow is your AI co-pilot, summarizing information, generating tailored drafts with different personas, allowing you to tune them to perfection, and get instant feedback. Reclaim hours and boost your social media presence effortlessly.
+**Tired of the content grind?** VibeFlow is your AI co-pilot, summarizing your text, generating tailored drafts with different personas, allowing you to tune them to perfection, and get instant feedback. Reclaim hours and boost your social media presence effortlessly.
 
 ---
 
 ## 🚀 Key Features
 
-*   **🤖 AI Content Transformation:** Input a URL or paste text, and let Gemini summarize and generate initial drafts.
+*   **🤖 AI Content Transformation:** Paste text, and let Gemini summarize and generate initial drafts.
 *   **🎭 Persona-Driven Generation:** Choose from various AI writing styles (Tech CEO, Casual Gen Z, Thought Leader, Meme Lord, etc.) to match your brand voice.
 *   **🎯 Platform Optimization:** Get posts specifically crafted for LinkedIn, Twitter (X), and YouTube descriptions, considering character limits and platform conventions.
 *   **💡 AI Advisor:** Get instant feedback on your drafts! Identifies tone mismatches, clarity issues, and weak phrasing with actionable suggestions.
-*   **✍️ Inline Tuning & Editing:** Refine generated posts directly in the editor using AI suggestions ("Make it wittier," "More concise," "Add emojis") or manual edits.
+*   **✍️ Inline Tuning & Editing:** Refine generated posts directly in the editor using AI suggestions ("Make it wittier," "Add emojis") or manual edits.
 *   **🎮 Gamified Experience:** Earn XP ("AI Fuel") for generating content and unlock achievement badges.
 *   **📈 Usage Tracking:** Monitor your monthly request quota (100 requests/month included).
 *   **🔐 Secure API Key Management:** Store your Google Gemini API key securely within your user profile.
@@ -33,13 +33,13 @@ VibeFlow is a Next.js application built with Supabase, Genkit, and ShadCN UI tha
 2.  **Sign Up / Log In:** Create an account or log in using Supabase Auth.
 3.  **Dashboard:**
     *   **Add Gemini Key:** Go to Profile Settings (👤 icon) and add your Google Gemini API Key. This is essential for AI features.
-    *   **Input Content:** Paste text or a URL into the main input area.
+    *   **Input Content:** Paste text into the main input area.
     *   **Select Persona:** Choose a desired AI writing style.
     *   **Generate Posts:** Click the "Generate Posts" button. VibeFlow uses Genkit and your Gemini key to:
-        *   Summarize the input content.
+        *   Summarize the input text.
         *   Generate drafts for LinkedIn, Twitter, and YouTube based on the summary and persona.
     *   **Review & Edit:** Navigate through the tabs (LinkedIn, Twitter, YouTube) to view the generated drafts. Edit them directly in the textareas.
-    *   **Tune with AI:** Use the quick tuning buttons ("Make Wittier", etc.) or the "Tune Tone & Style" (🎭 icon) sidebar to refine posts using AI.
+    *   **Tune with AI:** Use the quick tuning buttons ("Make it wittier", etc.) or the "Tune Tone & Style" (🎭 icon) sidebar to refine posts using AI.
     *   **Get Feedback:** Click the AI Advisor (✨ icon) on a post to get suggestions for improvement. Apply suggestions with one click.
     *   **Boost:** Use the Boost Panel (⚙️ icon) to quickly insert trending hashtags and emojis.
     *   **Copy:** Copy the final post content using the Copy (📋 icon) button.
@@ -135,8 +135,9 @@ Go to your profile settings (click the user icon 👤 in the dashboard) and add 
 │   │   └── dev.ts        # Entry point for Genkit dev UI
 │   ├── app/              # Next.js App Router pages, layouts, API routes
 │   │   ├── (main)/       # Main routes (landing page)
-│   │   │   └── page.tsx
-│   │   ├── api/          # API routes (health check, etc.)
+│   │   │   ├── page.tsx
+│   │   │   └── about-vibeflow.tsx # Added About page
+│   │   ├── api/          # API routes (health check, auth callbacks)
 │   │   ├── auth/         # Auth callback route
 │   │   ├── dashboard/    # Dashboard routes (protected)
 │   │   │   ├── layout.tsx
@@ -160,7 +161,7 @@ Go to your profile settings (click the user icon 👤 in the dashboard) and add 
 │   ├── lib/              # Utility functions and library setups
 │   │   ├── supabase/     # Supabase client/server/middleware setup
 │   │   └── utils.ts      # General utilities (like cn)
-│   ├── services/         # Business logic services (content parsing)
+│   ├── services/         # Business logic services (content parsing - text only now)
 │   └── types/            # TypeScript definitions
 │       └── supabase.ts   # Auto-generated or manual Supabase types
 ├── .env.local            # Local environment variables (ignored by git)
@@ -203,9 +204,6 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   gemini_api_key text, -- Consider encrypting this column in a real application
   xp integer DEFAULT 0, -- Added XP column
   badges text[] DEFAULT ARRAY[]::text[], -- Added badges column (array of text)
-  -- Removed: composio_mcp_url, linkedin_url, twitter_url, youtube_url
-  -- Removed: is_linkedin_authed, is_twitter_authed, is_youtube_authed
-  -- Removed: composio_api_key
   -- Add length constraints if they don't exist
   CONSTRAINT username_length CHECK (char_length(username) <= 50),
   CONSTRAINT full_name_length CHECK (char_length(full_name) <= 100),
@@ -576,4 +574,3 @@ This project is licensed under the [MIT License](LICENSE). _(Assuming MIT, updat
 
 This project is lice
 nsed under the [MIT License](LICENSE). _(Assuming MIT, update if different)_
-```

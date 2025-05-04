@@ -15,7 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip"; // Adjusted import
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -29,7 +30,6 @@ import { Progress } from "@/components/ui/progress"; // Import Progress componen
 import AiAdvisorPanel from './ai-advisor-panel'; // Import AI Advisor Panel
 import { toast as sonnerToast } from 'sonner'; // Import sonner toast for confetti effect
 import Confetti from 'react-confetti';
-// import Joyride, { Step, CallBackProps } from 'react-joyride'; // Remove react-joyride import
 import ToneTunerSheet from './tone-tuner-sheet'; // Import ToneTunerSheet
 import BoostPanel from './boost-panel'; // Import BoostPanel
 import PreviewMockup from './preview-mockup'; // Import PreviewMockup
@@ -90,12 +90,6 @@ const BADGES = [
   { xp: 500, name: 'AI Maestro 🧑‍🔬', description: 'Mastered 50 generations!', icon: BrainCircuit },
   // { xp: 0, name: 'onboarded', description: 'Completed the onboarding tour!', hidden: true }, // Remove onboarding badge
 ];
-
-// Remove Onboarding steps definition
-// const ONBOARDING_STEPS: Step[] = [
-//   // ... removed steps
-// ];
-
 
 export default function Dashboard({
   user,
@@ -210,12 +204,6 @@ export default function Dashboard({
     //   return () => clearTimeout(timer);
     // }
   }, []); // Removed dependencies related to Joyride
-
-  // Remove handleJoyrideCallback
-  // const handleJoyrideCallback = useCallback(async (data: CallBackProps) => {
-  //   // ... removed Joyride logic
-  // }, [supabase, user.id, profile, badges]);
-
 
   // --- Rate Limit Countdown Effect ---
   useEffect(() => {
@@ -670,44 +658,7 @@ export default function Dashboard({
 
       } finally {
         // --- Quota Refund Logic ---
-        // Refund ONLY IF:
-        // 1. Quota increment succeeded in this attempt (shouldRefund is true)
-        // 2. An error occurred (error is not null)
-        // 3. The error was NOT a rate limit/temporary issue OR retries are exhausted for a rate limit issue
-        // 4. The operation had a cost > 0
-        const shouldIssueRefund = shouldRefund && error && (!isRateLimitError || currentAttempt >= MAX_AI_RETRIES -1) && cost > 0;
-
-        if (shouldIssueRefund) {
-          console.log(`Refunding ${cost} quota point(s) for ${operationKey} due to error: ${error.message}`);
-          try {
-            // Use negative increment to refund
-            const { error: decrementError } = await supabase.rpc('increment_quota', {
-              p_user_id: user.id,
-              p_increment_amount: -cost,
-            });
-            if (decrementError) {
-              console.error("CRITICAL: Error refunding quota via RPC:", decrementError);
-              toast({ title: "Quota Refund Failed", description: "Could not automatically refund quota. Please contact support if issue persists.", variant: "destructive" });
-            } else {
-              console.log("Quota refunded successfully via RPC.");
-              // Refetch quota state after refund to update UI
-              const { data: refundedQuotaData, error: fetchError } = await supabase
-                .from('quotas')
-                .select('*')
-                .eq('user_id', user.id)
-                .single();
-              if (!fetchError && refundedQuotaData) {
-                setQuota(refundedQuotaData); // Update local state
-                console.log("Quota state updated after refund:", refundedQuotaData);
-              } else {
-                console.warn("Failed to refetch quota state after refund.");
-              }
-            }
-          } catch (refundError: any) {
-            console.error("CRITICAL: Exception during quota refund RPC call:", refundError.message);
-            toast({ title: "Quota Refund Exception", description: "An unexpected error occurred during quota refund.", variant: "destructive" });
-          }
-        }
+        // No refund logic needed as costs are handled differently
       } // End finally block
     } // End while loop
 
@@ -742,14 +693,14 @@ export default function Dashboard({
 
     const summaryCost = 1; // Cost for summarization
     const generationCostPerPlatform = 1; // Cost per platform generation
-    const totalInitialCost = summaryCost + (PLATFORMS.length * generationCostPerPlatform); // Total cost upfront
+    const totalInitialCost = summaryCost; // Charge only for summary initially
 
     const summaryResult = await callAiWithRetry(
       async () => {
         if (!profile?.gemini_api_key) throw new Error("Missing Gemini API Key");
         return await summarizeContent({ content }, { apiKey: profile.gemini_api_key });
       },
-      totalInitialCost, // Charge total cost upfront for summary + all generations
+      totalInitialCost, // Charge only summary cost initially
       'summarize' // Operation key for rate limiting/error handling
     );
 
@@ -769,12 +720,12 @@ export default function Dashboard({
     let anyRateLimited = false;
 
     // Generate posts for each platform sequentially or in parallel
-    // For simplicity and potentially clearer rate limiting, let's do sequentially
+    // Charge cost per platform generation attempt
     for (const platform of PLATFORMS) {
       setLoadingState(prev => ({ ...prev, generating: platform }));
       const personaPrompt = PERSONAS.find(p => p.value === selectedPersona)?.prompt || '';
 
-      // Call AI for generation - cost is 0 here as it was charged upfront
+      // Call AI for generation - charge cost here
       const result = await callAiWithRetry(
         async () => {
           if (!profile?.gemini_api_key) throw new Error("Missing Gemini API Key");
@@ -783,7 +734,7 @@ export default function Dashboard({
             { apiKey: profile.gemini_api_key }
           );
         },
-        0, // Cost is 0 for generation step
+        generationCostPerPlatform, // Cost per platform generation
         'generate' // Use 'generate' key for rate limiting this specific step
       );
 
@@ -851,8 +802,6 @@ export default function Dashboard({
        if (!tuneResult.rateLimited) {
            toast({ title: `Tuning Failed (${platform})`, description: tuneResult.error?.message || 'Unknown tuning error.', variant: "destructive" });
        }
-       // Optionally refund quota if needed (handled in callAiWithRetry)
-       console.log(`Refunding 1 quota point for failed tuning.`);
     } else {
       console.log(`Tuning ${platform} post successful:`, tuneResult.data.tunedPost);
       setGeneratedPosts(prev => ({ ...prev, [platform]: tuneResult.data.tunedPost }));
@@ -1024,17 +973,7 @@ export default function Dashboard({
         if (isToneTunerOpen) setIsToneTunerOpen(false);
         if (isBoostPanelOpen) setIsBoostPanelOpen(false);
         if (isHelpModalOpen) setIsHelpModalOpen(false);
-        // Remove Joyride close logic
-        // if (runTour) setRunTour(false);
       }
-       // Optionally: Add shortcut for Generate Posts (e.g., Ctrl/Cmd + Enter in input)
-        // Be careful not to conflict with default browser/textarea behavior
-        // Example (needs refinement):
-        // const target = event.target as HTMLElement;
-        // if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && target.tagName === 'TEXTAREA' && target.id === 'content-input-textarea-id') { // Need to add an id to the input textarea
-        //   event.preventDefault();
-        //   handleGeneratePosts();
-        // }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -1152,43 +1091,8 @@ export default function Dashboard({
 
   // Main Dashboard Structure
   return (
-    <TooltipProvider> {/* Wrap everything in TooltipProvider */}
-      {/* Remove Joyride component */}
-      {/* {isClient && (
-        <Joyride
-          steps={ONBOARDING_STEPS}
-          run={runTour}
-          continuous={true}
-          showProgress={true}
-          showSkipButton={true}
-          callback={handleJoyrideCallback}
-          styles={{
-            options: {
-              zIndex: 10000, // Ensure Joyride is above other elements
-              primaryColor: '#6D28D9', // Match primary color
-              arrowColor: '#1E1E24', // Match card background
-              backgroundColor: '#1E1E24', // Match card background
-              textColor: '#F1F5F9', // Match foreground color
-            },
-            tooltip: {
-              borderRadius: '0.5rem',
-              padding: '1rem',
-            },
-            buttonNext: {
-              backgroundColor: '#6D28D9',
-              borderRadius: '0.375rem',
-              color: '#F1F5F9',
-            },
-            buttonBack: {
-              color: '#A0AEC0', // Muted foreground
-            },
-            buttonSkip: {
-              color: '#A0AEC0', // Muted foreground
-            },
-          }}
-        />
-      )} */}
-       {isClient && showConfetti && (
+     <TooltipProvider>
+      {isClient && showConfetti && (
         <Confetti
           width={typeof window !== 'undefined' ? window.innerWidth : 0}
           height={typeof window !== 'undefined' ? window.innerHeight : 0}
@@ -1199,9 +1103,7 @@ export default function Dashboard({
         />
       )}
        <div className={cn(
-         "flex flex-col min-h-screen bg-background text-foreground p-4 md:p-6 lg:p-8",
-         // Remove joyride-active class logic
-         // runTour && "joyride-active"
+         "flex flex-col min-h-screen bg-background text-foreground p-4 md:p-6 lg:p-8"
        )}>
          <header className="flex flex-wrap justify-between items-center mb-6 md:mb-8 gap-4">
            <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
@@ -1324,11 +1226,11 @@ export default function Dashboard({
                 <Card id="content-input-section" className="shadow-md border-border/30">
                     <CardHeader>
                         <CardTitle className="text-lg md:text-xl">1. Input Content</CardTitle>
-                        <CardDescription>Paste text, article URL, or video link.</CardDescription>
+                        <CardDescription>Paste text to summarize and generate posts.</CardDescription> {/* Updated description */}
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <Textarea
-                            placeholder="Paste your content or URL here..."
+                            placeholder="Paste your content here..." // Updated placeholder
                             value={content}
                             onChange={handleContentChange}
                             rows={5} // Slightly reduced rows
@@ -1379,7 +1281,7 @@ export default function Dashboard({
                                 </div>
                             </TooltipTrigger>
                             <TooltipContent side="bottom">
-                                {getRateLimitTooltip('summarize') ?? getRateLimitTooltip('generate') ?? (isApiKeyMissing ? 'Add Gemini API Key in Profile Settings.' : (isQuotaExceeded ? 'Quota exceeded.' : (!content.trim() ? 'Enter content or URL first.' : 'Summarize & Generate Posts')))}
+                                {getRateLimitTooltip('summarize') ?? getRateLimitTooltip('generate') ?? (isApiKeyMissing ? 'Add Gemini API Key in Profile Settings.' : (isQuotaExceeded ? 'Quota exceeded.' : (!content.trim() ? 'Enter content first.' : 'Summarize & Generate Posts')))} {/* Updated tooltip */}
                             </TooltipContent>
                           </Tooltip>
                         </div>

@@ -8,11 +8,11 @@ import { Zap, Edit, TrendingUp, Clock, Users, Check, Lock } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'VibeFlow | AI Social Media Post Generator - Go Viral Faster',
-  description: 'Stop wasting hours on social media! VibeFlow uses AI to instantly transform any content (articles, videos, text) into captivating posts for LinkedIn, Twitter & YouTube. Tune perfection, schedule effortlessly (soon!). Unlock your social potential.',
+  description: 'Stop wasting hours on social media! VibeFlow uses AI to instantly transform your text into captivating posts for LinkedIn, Twitter & YouTube. Tune perfection, schedule effortlessly (soon!). Unlock your social potential.', // Removed reference to articles/videos
   keywords: ['ai social media generator', 'linkedin post ai', 'twitter post ai', 'youtube description ai', 'content marketing automation', 'social media scheduling', 'ai content creation', 'save time social media'],
   openGraph: {
       title: 'VibeFlow | Instantly Generate Viral Social Media Posts with AI',
-      description: 'Transform links or text into perfect LinkedIn, Twitter, and YouTube posts in seconds. Summarize, generate, tune, and dominate social media effortlessly.',
+      description: 'Transform text into perfect LinkedIn, Twitter, and YouTube posts in seconds. Summarize, generate, tune, and dominate social media effortlessly.', // Removed reference to links
       // Replace with actual OG image URL
       images: ['/og-image-vibeflow.png'],
   }
@@ -28,11 +28,14 @@ export default function LandingPage() {
             <Zap className="h-7 w-7 text-primary animate-pulse" />
             <h1 className="text-2xl font-bold text-gradient">VibeFlow</h1>
           </Link>
-          <nav className="flex items-center gap-2 sm:gap-4">
-            <Link href="/login">
-              <Button size="sm" className="transition-transform duration-200 hover:scale-105 shadow-md hover:shadow-primary/50">Unlock VibeFlow Now</Button>
-            </Link>
-          </nav>
+          <nav className="flex items-center gap-4"> {/* Increased gap */}
+              <Link href="/about-vibeflow" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                About
+              </Link>
+              <Link href="/login">
+                  <Button size="sm" className="transition-transform duration-200 hover:scale-105 shadow-md hover:shadow-primary/50">Unlock VibeFlow Now</Button>
+              </Link>
+           </nav>
         </div>
       </header>
 
@@ -50,7 +53,7 @@ export default function LandingPage() {
             Stop Guessing, Start <span className="underline decoration-primary/50">Growing.</span>
           </h1>
           <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-10 max-w-md md:max-w-2xl mx-auto fade-in-up" style={{ animationDelay: '0.2s' }}>
-            Tired of the content grind? VibeFlow's AI instantly crafts magnetic posts from any link or text for LinkedIn, Twitter & YouTube. Save hours, go viral faster.
+            Tired of the content grind? VibeFlow's AI instantly crafts magnetic posts from your text for LinkedIn, Twitter & YouTube. Save hours, go viral faster. {/* Updated description */}
           </p>
           <div className="fade-in-up" style={{ animationDelay: '0.3s' }}>
             <Link href="/login">
@@ -81,7 +84,7 @@ export default function LandingPage() {
              />
           </div>
            <p className="text-center text-muted-foreground mt-8 text-base fade-in-up" style={{ animationDelay: '0.3s' }}>
-             Turn any content into polished social posts in <span className="font-bold text-gradient">3 simple steps</span>.
+             Turn your text into polished social posts in <span className="font-bold text-gradient">3 simple steps</span>. {/* Updated description */}
            </p>
         </div>
       </section>
@@ -93,24 +96,24 @@ export default function LandingPage() {
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-center mb-16 md:mb-20 fade-in-up">Unlock Your Social Superpowers</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
             {/* Feature Card 1 */}
-            <div className="flex flex-col items-center text-center p-6 border border-transparent rounded-lg transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:bg-muted/20 fade-in-up" style={{ animationDelay: '0.1s' }}>
-               <div className="mb-5 p-4 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20">
+            <div className="flex flex-col items-center text-center p-6 border border-transparent rounded-lg transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:bg-muted/20 fade-in-up group" style={{ animationDelay: '0.1s' }}> {/* Added group */}
+               <div className="mb-5 p-4 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20"> {/* Use group-hover */}
                   <Zap className="h-10 w-10 text-primary"/>
                </div>
               <h3 className="text-xl md:text-2xl font-semibold mb-3">Instant AI Drafts</h3>
-              <p className="text-base text-muted-foreground">Paste a link or text. VibeFlow summarizes and crafts tailored posts for LinkedIn, Twitter & YouTube in seconds. Stop staring at a blank screen.</p>
+              <p className="text-base text-muted-foreground">Paste your text. VibeFlow summarizes and crafts tailored posts for LinkedIn, Twitter & YouTube in seconds. Stop staring at a blank screen.</p> {/* Updated description */}
             </div>
             {/* Feature Card 2 */}
-            <div className="flex flex-col items-center text-center p-6 border border-transparent rounded-lg transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:bg-muted/20 fade-in-up" style={{ animationDelay: '0.2s' }}>
-              <div className="mb-5 p-4 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20">
+            <div className="flex flex-col items-center text-center p-6 border border-transparent rounded-lg transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:bg-muted/20 fade-in-up group" style={{ animationDelay: '0.2s' }}> {/* Added group */}
+              <div className="mb-5 p-4 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20"> {/* Use group-hover */}
                   <Edit className="h-10 w-10 text-primary"/>
                </div>
               <h3 className="text-xl md:text-2xl font-semibold mb-3">Tune to Perfection</h3>
               <p className="text-base text-muted-foreground">Refine your message effortlessly. Use AI suggestions ("Make it wittier," "Add emojis") or choose a persona ("Tech CEO," "Gen Z") for the perfect voice.</p>
             </div>
             {/* Feature Card 3 */}
-            <div className="flex flex-col items-center text-center p-6 border border-transparent rounded-lg transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:bg-muted/20 fade-in-up" style={{ animationDelay: '0.3s' }}>
-               <div className="mb-5 p-4 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20">
+            <div className="flex flex-col items-center text-center p-6 border border-transparent rounded-lg transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:bg-muted/20 fade-in-up group" style={{ animationDelay: '0.3s' }}> {/* Added group */}
+               <div className="mb-5 p-4 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20"> {/* Use group-hover */}
                   <Clock className="h-10 w-10 text-primary"/>
                </div>
               <h3 className="text-xl md:text-2xl font-semibold mb-3">Reclaim Your Time</h3>
@@ -192,11 +195,24 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="py-8 md:py-10 border-t border-border/40">
-        <div className="container text-center text-sm text-muted-foreground px-4">
-          &copy; {new Date().getFullYear()} VibeFlow. Stop Dreaming, Start Generating. | Built with Next.js & AI
+        <div className="container px-4 flex flex-col md:flex-row justify-between items-center text-center md:text-left">
+            <div className="text-sm text-muted-foreground mb-4 md:mb-0">
+                &copy; {new Date().getFullYear()} VibeFlow. Stop Dreaming, Start Generating. | Built with Next.js & AI
+            </div>
+            <div className="flex gap-4">
+                <Link href="/about-vibeflow" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                    About
+                </Link>
+                {/* Add Privacy Policy and Terms links if available */}
+                {/* <Link href="/privacy" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                    Privacy Policy
+                </Link>
+                <Link href="/terms" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                    Terms of Service
+                </Link> */}
+            </div>
         </div>
       </footer>
     </div>
   );
 }
-

@@ -1192,7 +1192,7 @@ export default function Dashboard({
         <header className="flex flex-wrap justify-between items-center mb-6 md:mb-8 gap-4">
            <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
              {/* Update logo size */}
-             <Image src="/logo.png" alt="VibeFlow Logo" width={50} height={50} className="object-contain" />
+             <Image src="/logo.png" alt="VibeFlow Logo" width={168} height={168} className="object-contain" />
            </Link>
           <div className="flex items-center gap-3 md:gap-4">
              {/* Quota and XP Display */}

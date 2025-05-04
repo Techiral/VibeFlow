@@ -1,4 +1,5 @@
 
+
 import Link from "next/link";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
@@ -7,8 +8,8 @@ import { SubmitButton } from "./submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Zap } from "lucide-react"; // Icon for VibeFlow
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // Import Alert components
+import { Alert, AlertDescription } from "@/components/ui/alert"; // Import Alert components
+import Image from "next/image"; // Import Image component
 
 export default async function LoginPage({
   searchParams,
@@ -29,6 +30,10 @@ export default async function LoginPage({
       user = data.user;
 
    } catch (error: any) { // Catch potential errors from client creation or getUser
+     // Avoid logging redirects as errors
+      if (error.message.includes('NEXT_REDIRECT')) {
+        throw error; // Re-throw the redirect error for Next.js to handle
+      }
      console.error("Error during Supabase initialization or user check:", error.message);
      initialError = error;
 
@@ -49,9 +54,10 @@ export default async function LoginPage({
              <div className="absolute inset-0 z-0 gradient-glow"></div>
              <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
                  <CardHeader className="space-y-1 text-center">
-                     <div className="flex justify-center items-center mb-4">
-                         <Zap className="h-8 w-8 text-primary" />
-                     </div>
+                     {/* Use Image component for logo */}
+                      <Link href="/" className="flex justify-center items-center mb-4 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
+                         <Image src="/logo.png" alt="VibeFlow Logo" width={40} height={40} className="object-contain" />
+                      </Link>
                      <CardTitle className="text-2xl font-bold text-gradient">VibeFlow</CardTitle>
                      <CardDescription className="text-destructive-foreground font-semibold pt-2">
                          {errorMessage}
@@ -164,8 +170,9 @@ export default async function LoginPage({
 
       <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
         <CardHeader className="space-y-1 text-center">
+           {/* Use Image component for logo */}
            <Link href="/" className="flex justify-center items-center mb-4 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
-             <Zap className="h-8 w-8 text-primary" />
+              <Image src="/logo.png" alt="VibeFlow Logo" width={40} height={40} className="object-contain" />
            </Link>
           <CardTitle className="text-2xl font-bold text-gradient">VibeFlow</CardTitle>
           <CardDescription className="text-muted-foreground">

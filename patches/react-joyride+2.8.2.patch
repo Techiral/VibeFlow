@@ -1,53 +1,40 @@
 diff --git a/node_modules/react-joyride/dist/index.mjs b/node_modules/react-joyride/dist/index.mjs
-index b61a2b8..573c53e 100644
+index 9371e9c..9f2e0db 100644
 --- a/node_modules/react-joyride/dist/index.mjs
 +++ b/node_modules/react-joyride/dist/index.mjs
-@@ -1,5 +1,5 @@
- import React, { useReducer, useEffect, useCallback, useRef, useState, useMemo, useLayoutEffect } from 'react';
+@@ -1,6 +1,6 @@
+ import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
+ import { jsx, jsxs } from 'react/jsx-runtime';
 -import ReactDOM from 'react-dom';
-+import ReactDOM from 'react-dom';
- import { computePosition, shift, offset, arrow as arrow$1, flip, inline, autoUpdate, hide } from '@floating-ui/dom';
++import { createPortal } from 'react-dom';
  import PropTypes from 'prop-types';
- import { M as MOUSE, a as ACTIONS, T as Tooltip, S as STATUS, L as LIFECYCLE } from './index2.mjs';
-@@ -9,6 +9,7 @@ import scroll from 'scroll';
- import { getStyle } from 'react-style-object-utils';
- import 'element-scroll-polyfill';
+ import { computePosition, flip, shift, offset, arrow, inline, autoUpdate, hide } from '@floating-ui/dom';
+ import { size } from '@floating-ui/react-dom';
+@@ -1020,7 +1020,7 @@
  
-+const { createRoot } = ReactDOM;
- const defaultOptions = {
-   debug: false,
-   disableCloseOnEsc: false,
-@@ -169,8 +170,12 @@ function Portal(props) {
-     document.body.removeChild(node.current);
-     }
-   }, [hasMounted, node.current]);
-+
-   if (!hasMounted) {
--    return null;
-+    return null
-   }
--  return /*#__PURE__*/ReactDOM.createPortal(props.children, node.current);
-+
-+  // Use createRoot for React 18+
-+  const root = createRoot(node.current)
-+  return root.render(props.children);
- }
- Portal.propTypes = {
-   children: PropTypes.oneOfType([PropTypes.arrayOf(PropTypes.node), PropTypes.node])
-@@ -1168,10 +1173,13 @@ function useOnMountUnsafe(callback) {
+   useEffect(() => {
+     return () => {
+-      ReactDOM.unmountComponentAtNode(portal.current);
++      // No direct equivalent needed for createPortal, React handles unmounting
+     };
    }, []);
- }
- const isReact18 = React.version && React.version.startsWith("18");
-+// Keep original ref for cleanup
-+const portalRootRef = React.createRef();
- function renderPortal(element, container) {
-   if (isReact18) {
--    ReactDOM.createRoot(container).render(element);
--    return () => ReactDOM.createRoot(container).unmount();
-+    // Create root and store ref
-+    portalRootRef.current = ReactDOM.createRoot(container);
-+    portalRootRef.current.render(element);
-+    return () => portalRootRef.current.unmount();
+   useEffect(() => {
+@@ -1029,8 +1029,7 @@
+       return;
+     }
+ 
+-    // @ts-ignore
+-    ReactDOM.unstable_renderSubtreeIntoContainer(instance, element, portal.current);
++    // unstable_renderSubtreeIntoContainer is removed. createPortal handles this.
+   }, [instance, element, portal]);
+   useEffect(() => {
+     if (!container) {
+@@ -1046,7 +1045,7 @@
+     return;
    }
-   ReactDOM.render(element, container);
-   return () => ReactDOM.unmountComponentAtNode(container);
+ 
+-  return portal.current;
++  return createPortal(element, portal.current);
+ };
+ 
+ const propTypes$5 = {

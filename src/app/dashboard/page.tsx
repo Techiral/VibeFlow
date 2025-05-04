@@ -1,4 +1,3 @@
-
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Dashboard from '@/components/dashboard/dashboard'; // Ensure this path is correct
@@ -32,12 +31,14 @@ export default async function DashboardPage() {
     const { data: userData, error: authError } = await supabase.auth.getUser();
 
     if (authError) {
-      console.error("Error fetching user:", authError.message);
-       // Check if it's an auth error vs. a connection error already handled by createClient throw
+       // Check if it's an expected auth error vs. a critical connection error
        if (authError.message.includes("Auth session missing") || authError.message.includes("Unauthorized")) {
-            // This is an expected case if the user isn't logged in, redirect silently
+            // This is an expected case if the user isn't logged in, log info and redirect silently
+            console.log("Auth session missing, redirecting to login.");
             return redirect('/login');
        } else {
+           // Log other auth errors as actual errors
+           console.error("Authentication error:", authError.message);
            errorMessage = `Authentication error: ${authError.message}`;
            // Don't assign initialError here, as we want to show the specific auth message
        }
@@ -89,18 +90,24 @@ export default async function DashboardPage() {
                 .from('quotas')
                 .select('*')
                 .eq('user_id', user.id)
-                .single(); // Expect only one row or null
+                .maybeSingle(); // Use maybeSingle to handle 0 or 1 row gracefully
 
-             if (quotaError && quotaError.code !== 'PGRST116') { // Ignore 'PGRST116' (No rows found) which is handled below
+             if (quotaError) {
                 console.error("Error fetching quota:", quotaError.message);
                  if (quotaError.message.includes("relation \"public.quotas\" does not exist") || quotaError.code === '42P01') {
                       errorMessage = (errorMessage ? errorMessage + "\n" : "") + "Database setup incomplete: The 'quotas' table is missing. Please run the SQL script.";
                       isDbSetupError = true;
+                 } else if (quotaError.message.includes('JSON object requested, multiple (or no) rows returned') && !quotaData){
+                     // This specific error with !quotaData indicates no row found, which we handle below
+                     console.log("Quota record not found for user (PGRST116 equivalent), attempting to create default.");
                  } else {
                      errorMessage = (errorMessage ? errorMessage + "\n" : "") + `Error loading usage quota: ${quotaError.message}. Check DB schema.`;
                  }
-                 quota = null;
-             } else if (!quotaData) {
+                 quota = null; // Ensure quota is null if there was an error other than 'not found'
+             }
+
+             // Handle case where no quota record exists (either no row found or specific error handled above)
+             if (!quotaData && !quotaError?.message.includes("relation \"public.quotas\" does not exist")) { // Check !quotaData AND it wasn't a 'table missing' error
                   console.log("Quota record not found for user, attempting to create default.");
                   // Attempt to create a default quota record if none exists
                   const { data: newQuota, error: insertQuotaError } = await supabase
@@ -123,7 +130,7 @@ export default async function DashboardPage() {
                       quota = newQuota;
                    }
 
-             } else {
+             } else if (quotaData) { // If quotaData exists (fetched successfully)
                  quota = quotaData;
                  console.log("Quota loaded successfully:", quota.request_count, "/", quota.quota_limit);
              }
@@ -143,6 +150,15 @@ export default async function DashboardPage() {
          errorMessage = "Configuration Error: Supabase URL or Key is missing in environment variables (.env.local). Please contact the administrator.";
       } else if (error.message.includes("Invalid URL")) {
          errorMessage = "Configuration Error: Invalid Supabase URL format in environment variables (.env.local). Please contact the administrator.";
+      } else if (profileError && (profileError.message.includes("relation \"public.profiles\" does not exist") || profileError.code === '42P01')) {
+         errorMessage = "Database setup incomplete: The 'profiles' table is missing. Please run the SQL script in `supabase/schema.sql`.";
+         isDbSetupError = true;
+      } else if (quotaError && (quotaError.message.includes("relation \"public.quotas\" does not exist") || quotaError.code === '42P01')) {
+          errorMessage = (errorMessage ? errorMessage + "\n" : "") + "Database setup incomplete: The 'quotas' table is missing. Please run the SQL script.";
+          isDbSetupError = true;
+      } else if (profileError && profileError.message.includes("function public.get_user_profile does not exist")) {
+           errorMessage = "Database setup incomplete: The 'get_user_profile' function is missing. Please run the SQL script.";
+           isDbSetupError = true;
       } else if (!errorMessage) { // If no specific error message was already set
          errorMessage = `An unexpected error occurred: ${error.message}. Please try again later or contact support.`;
       }
@@ -159,7 +175,7 @@ export default async function DashboardPage() {
              <p className="mb-4">{errorMessage}</p>
              {isDbSetupError && (
                <p className="text-sm text-muted-foreground">
-                 Please go to the Supabase SQL Editor in your project dashboard and run the entire script from the <code>supabase/schema.sql</code> file. You can find detailed instructions in the project's README file under "Getting Started - Step 3".
+                 Please go to the Supabase SQL Editor in your project dashboard and run the entire script from the <code>supabase/schema.sql</code> file. You can find detailed instructions in the project's README file under "Getting Started - Step 3". Ensure the script runs successfully without errors.
                </p>
              )}
               {initialError && !isDbSetupError && (
@@ -190,6 +206,8 @@ export default async function DashboardPage() {
   if (!profile || !quota) {
       console.warn("Dashboard loading with incomplete data (profile or quota might be null).");
       // We proceed, the Dashboard component must handle null states gracefully.
+       if (!profile) errorMessage = (errorMessage ? errorMessage + "\n" : "") + "Failed to load profile data.";
+       if (!quota) errorMessage = (errorMessage ? errorMessage + "\n" : "") + "Failed to load quota data.";
   }
 
 

@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -50,9 +49,9 @@ const summarizeContentPrompt = defaultAi.definePrompt({
   name: 'summarizeContentPrompt',
   input: {
     schema: z.object({
-        processedContent: z.string().describe('The processed content (either original text, extracted text from URL, or a placeholder message) to summarize.'),
+        processedContent: z.string().describe('The processed content (original text, extracted text from URL, or a placeholder message) to summarize.'),
         originalInput: z.string().describe('The original input (URL or text) for context.'),
-        isPlaceholder: z.boolean().optional().describe('Indicates if the processed content is just a placeholder (e.g., for an unsupported URL type).')
+        isPlaceholder: z.boolean().optional().describe('Indicates if the processed content is just a placeholder (e.g., for an unsupported URL type or failed parse).')
     }),
   },
   output: {
@@ -60,7 +59,7 @@ const summarizeContentPrompt = defaultAi.definePrompt({
   },
   prompt: `Summarize the following content concisely.
 {{#if isPlaceholder}}
-Note: The original input was a URL ({{{originalInput}}}) that could not be fully processed. Summarize based on the available information or the URL itself if possible.
+Note: The original input was '{{{originalInput}}}'. It might be a URL that could not be fully processed or direct text. Summarize based on the available information.
 Content: {{{processedContent}}}
 {{else}}
 Original Input (URL or Text): {{{originalInput}}}
@@ -114,18 +113,20 @@ const isRetriableError = (error: any): boolean => {
   return false;
 };
 
-// Helper to check if a string looks like a URL
+// Helper to check if a string looks like a valid URL
 function isUrl(text: string): boolean {
+    if (!text || typeof text !== 'string') return false;
     try {
-        new URL(text);
-        return text.startsWith('http://') || text.startsWith('https://');
+        const url = new URL(text);
+        // Basic check for http/https protocols
+        return url.protocol === 'http:' || url.protocol === 'https:';
     } catch (_) {
+        // If new URL() throws, it's not a valid URL format
         return false;
     }
 }
 
 
-// Modify the flow definition to accept and use options
 // Use defaultAi.defineFlow
 const summarizeContentFlow = defaultAi.defineFlow<
   typeof SummarizeContentInputSchema,
@@ -139,42 +140,43 @@ const summarizeContentFlow = defaultAi.defineFlow<
   },
   async (input, flowOptions) => { // Receive flowOptions here
 
-    let processedContent: string = input.content;
+    let processedContent: string;
     let isPlaceholder = false;
-    let parsedData: ParsedContent | null = null;
+    const originalInput = input.content;
 
-    // If the input is a URL, parse the content from the URL.
-    if (isUrl(input.content)) {
+    // --- Determine if input is URL or text ---
+    if (isUrl(originalInput)) {
+      console.log("Input identified as URL:", originalInput);
+      // --- Input is a URL, try parsing it ---
       try {
-        parsedData = await parseContent(input.content);
+        const parsedData: ParsedContent = await parseContent(originalInput);
         processedContent = parsedData.body; // Use the parsed body
         isPlaceholder = parsedData.isPlaceholder ?? false;
-        console.log("Content parsed successfully from URL:", input.content);
+        console.log("Content parsed successfully from URL:", originalInput);
       } catch (parseError: any) {
-        console.error(`Error processing URL (${input.content}):`, parseError.message);
+        console.error(`Error processing URL (${originalInput}):`, parseError.message);
         // If parsing fails, pass the error message to the summarizer
-        // This provides context to the AI about why the full content isn't available.
-        processedContent = `Failed to fetch or parse content from the URL: ${input.content}. Error: ${parseError.message || 'Unknown error'}. Please try summarizing based on the URL itself or paste the text directly.`;
+        processedContent = `Failed to fetch or parse content from the URL: ${originalInput}. Error: ${parseError.message || 'Unknown error'}. Please try summarizing based on the URL itself or paste the text directly.`;
         isPlaceholder = true; // Mark as placeholder/error state
-         // Do not throw here; let the summarizer attempt to work with the error message
-        // throw new GenkitError({
-        //   status: 'INVALID_ARGUMENT',
-        //   message: `Error processing URL: ${parseError.message}. Please check the URL or paste text directly.`,
-        //   cause: parseError,
-        // });
       }
+    } else {
+      console.log("Input identified as plain text.");
+      // --- Input is plain text, use it directly ---
+      processedContent = originalInput;
+      isPlaceholder = false; // Not a placeholder in this case
     }
 
+    // --- Attempt summarization with retry logic ---
     let retries = 0;
     let backoff = INITIAL_BACKOFF_MS;
 
     while (retries < MAX_RETRIES) {
       try {
-        // Call the prompt object directly, passing the API key via config
+        // Call the prompt object, passing the API key via config
         const { output } = await summarizeContentPrompt(
           {
             processedContent,
-            originalInput: input.content, // Pass original URL/text
+            originalInput: originalInput, // Pass original input (URL or text)
             isPlaceholder
           }, // Prompt input
           { config: { apiKey: flowOptions.apiKey } } // Prompt config with API key
@@ -185,6 +187,7 @@ const summarizeContentFlow = defaultAi.defineFlow<
           throw new Error('AI returned an empty summary.');
         }
         return output; // Success! Exit the loop and return.
+
       } catch (error: any) {
         // Check for specific API key error - this is not retriable
         if (
@@ -224,7 +227,7 @@ const summarizeContentFlow = defaultAi.defineFlow<
         } else {
           // If it's not a retriable error OR retries are exhausted, prepare to throw
           console.error(
-            `SummarizeContentFlow: Failed after ${retries} retries. Original Error:`,
+            `SummarizeContentFlow: Failed after ${retries} retries for input "${originalInput.substring(0, 50)}...". Original Error:`,
             error
           );
 
@@ -240,21 +243,21 @@ const summarizeContentFlow = defaultAi.defineFlow<
           } else if (isRetriableError(error)) {
             // If it was retriable but retries exhausted
             if (
-              error.status === 503 ||
+              error.status === 503 || error.statusCode === 503 ||
               messageLower.includes('503') ||
               messageLower.includes('overloaded') ||
               messageLower.includes('service unavailable')
             ) {
               finalStatus = 'UNAVAILABLE';
               finalMessage =
-                'AI service was unavailable for summarization after multiple retry attempts.'; // Specific message
+                `AI service was unavailable for summarization after ${MAX_RETRIES} attempts. Please try again later.`;
             } else if (
-              error.status === 'RESOURCE_EXHAUSTED' ||
-              messageLower.includes('rate limit exceeded')
+              error.status === 'RESOURCE_EXHAUSTED' || error.statusCode === 429 ||
+              messageLower.includes('rate limit exceeded') || messageLower.includes('quota exceeded')
             ) {
               finalStatus = 'RESOURCE_EXHAUSTED';
               finalMessage =
-                'AI service rate limit issues persisted during summarization after multiple retry attempts. Please check your Google API quota.'; // Specific message
+                `AI service rate limit/quota issues persisted during summarization after ${MAX_RETRIES} attempts. Please check your Google API quota or wait.`;
             } else {
               finalStatus = 'INTERNAL'; // Default for other retriable errors after exhaustion
               finalMessage = `Summarization failed due to a temporary AI service issue after ${MAX_RETRIES} attempts. Please try again later. Original error: ${error.message}`;
@@ -282,7 +285,7 @@ const summarizeContentFlow = defaultAi.defineFlow<
     // Should be unreachable if MAX_RETRIES > 0, but needed for TypeScript compilation
     throw new GenkitError({
       status: 'DEADLINE_EXCEEDED',
-      message: `SummarizeContentFlow: Max retries (${MAX_RETRIES}) reached after encountering errors.`,
+      message: `SummarizeContentFlow: Max retries (${MAX_RETRIES}) reached after encountering errors for input "${originalInput.substring(0, 50)}...".`,
     });
   }
 );

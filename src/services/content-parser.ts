@@ -39,41 +39,40 @@ export async function parseContent(url: string): Promise<ParsedContent> {
   const youtubeMatch = url.match(YOUTUBE_REGEX);
   if (youtubeMatch) {
     const videoId = youtubeMatch[1];
-    console.log(`YouTube URL detected (Video ID: ${videoId}). Transcript fetching not implemented.`);
+    console.log(`YouTube URL detected (Video ID: ${videoId}). Direct transcript fetching is not implemented.`);
+    // Refined placeholder message
     return {
-      title: "YouTube Video",
-      body: `Fetching transcripts for YouTube videos (ID: ${videoId}) is complex and not currently supported by VibeFlow's basic parser.\n\nThe AI will attempt to generate posts based on the video's URL and potentially available metadata if accessible.`,
+      title: `YouTube Video (ID: ${videoId})`, // Include ID in title
+      body: `Note: Direct YouTube transcript fetching is not available in VibeFlow.\nThe AI will generate content based on the video's title, URL, and any accessible metadata. The quality may vary depending on available information.`,
       isPlaceholder: true,
     };
   }
 
   // --- Handle general webpage URLs ---
   try {
+    console.log(`Fetching general URL: ${url}`);
     const response = await fetch(url, {
-        headers: { // Add a basic User-Agent to mimic a browser
+        headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8', // Be more specific about accepted types
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
         },
-        redirect: 'follow', // Follow redirects
-        // Add timeout? Requires AbortController, more complex for now.
+        redirect: 'follow',
     });
 
     if (!response.ok) {
-       // Provide more context in the error message
-      throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}. Please check if the URL is correct and publicly accessible.`);
+      throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}. Check if the URL is correct and publicly accessible.`);
     }
 
     const contentType = response.headers.get('content-type');
-    // Check if content type indicates HTML
     if (!contentType || !contentType.toLowerCase().includes('text/html')) {
-        console.warn(`URL content type might not be HTML (${contentType}). Attempting to read as text.`);
+        console.warn(`URL content type might not be HTML (${contentType}). Reading as text.`);
         const textContent = await response.text();
-         // Check if the extracted text is meaningful
-         if (!textContent || textContent.trim().length < 50) { // Increased threshold
+         if (!textContent || textContent.trim().length < 50) {
+              console.error(`Fetched non-HTML content from ${url} is too short.`);
               throw new Error(`Fetched content is not HTML and contains very little text. Unable to parse effectively.`);
          }
-         // If it's not HTML but has text, return it as is.
+         console.log(`Successfully read non-HTML text content from ${url}`);
          return { title: 'Web Content (Non-HTML)', body: textContent.trim() };
     }
 
@@ -81,43 +80,72 @@ export async function parseContent(url: string): Promise<ParsedContent> {
     const html = await response.text();
     console.log(`Fetched HTML content (length: ${html.length}) from: ${url}`);
 
-    // Basic HTML parsing (can be improved with libraries like cheerio if needed on server)
     let title = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() || 'Untitled Webpage';
-    // A more robust attempt to get main content (simple approach)
-    // 1. Try <main> tag
-    let bodyText = html.match(/<main[^>]*>(.*?)<\/main>/is)?.[1] || '';
-    // 2. If no <main>, try <article> tag
-    if (!bodyText) {
-      bodyText = html.match(/<article[^>]*>(.*?)<\/article>/is)?.[1] || '';
-    }
-    // 3. If still nothing, fallback to joining <p> tags (as before)
-    if (!bodyText) {
-        const bodyMatches = html.match(/<p[^>]*>(.*?)<\/p>/igs);
-        bodyText = bodyMatches ? bodyMatches.map(p => p.replace(/<[^>]+>/g, '').trim()).join('\n\n') : '';
+    let bodyText = '';
+
+    // Try specific semantic tags first
+    const mainContent = html.match(/<main[^>]*>(.*?)<\/main>/is)?.[1];
+    const articleContent = html.match(/<article[^>]*>(.*?)<\/article>/is)?.[1];
+
+    if (mainContent) {
+        bodyText = mainContent;
+        console.log("Extracted content from <main> tag.");
+    } else if (articleContent) {
+        bodyText = articleContent;
+        console.log("Extracted content from <article> tag.");
+    } else {
+        // Fallback: try to extract from common content divs, then paragraphs
+        const contentDiv = html.match(/<div[^>]+(?:id|class)\s*=\s*["'](?:content|main-content|post-body|entry-content)["'][^>]*>(.*?)<\/div>/is)?.[1];
+        if (contentDiv) {
+            bodyText = contentDiv;
+            console.log("Extracted content from common content div.");
+        } else {
+            console.log("Falling back to extracting <p> tags.");
+            const pMatches = html.match(/<p[^>]*>(.*?)<\/p>/igs);
+            bodyText = pMatches ? pMatches.join('\n\n') : ''; // Join paragraphs
+        }
     }
 
-    // Clean up extracted body text: remove scripts, styles, excessive whitespace
+    // Clean up extracted body text
     bodyText = bodyText
-        .replace(/<script[^>]*>.*?<\/script>/gis, '')
-        .replace(/<style[^>]*>.*?<\/style>/gis, '')
-        .replace(/<[^>]+>/g, ' ') // Replace remaining tags with spaces
-        .replace(/&nbsp;/g, ' ') // Replace non-breaking spaces
-        .replace(/\s\s+/g, ' ') // Collapse multiple whitespace characters
+        .replace(/<script[^>]*>.*?<\/script>/gis, '') // Remove script tags and content
+        .replace(/<style[^>]*>.*?<\/style>/gis, '') // Remove style tags and content
+        .replace(/<nav[^>]*>.*?<\/nav>/gis, '') // Remove nav tags
+        .replace(/<header[^>]*>.*?<\/header>/gis, '') // Remove header tags
+        .replace(/<footer[^>]*>.*?<\/footer>/gis, '') // Remove footer tags
+        .replace(/<aside[^>]*>.*?<\/aside>/gis, '') // Remove aside tags
+        .replace(/<form[^>]*>.*?<\/form>/gis, '') // Remove form tags
+        .replace(/<[^>]+>/g, ' ') // Replace remaining HTML tags with a space
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/\s\s+/g, ' ') // Collapse multiple whitespace chars
         .trim();
 
-     // Clean up title further (e.g., remove common site name suffixes)
-     title = title.replace(/&[^;]+;/g, '').replace(/\s+/g, ' ').replace(/\|.*?$/, '').trim(); // Remove text after |
+     // Further clean up title
+     title = title
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/\s+/g, ' ')
+        .replace(/\|.*?$/, '') // Remove text after | (often site name)
+        .replace(/-.*?$/, '') // Remove text after - (often site name)
+        .trim();
 
-    console.log(`Extracted Title: ${title}`);
-    console.log(`Extracted Body Preview (first 150 chars): ${bodyText.substring(0, 150)}...`);
+    console.log(`Cleaned Title: ${title}`);
+    console.log(`Cleaned Body Preview (first 200 chars): ${bodyText.substring(0, 200)}...`);
 
-    // Check if the extracted body is substantial enough
-    if (!bodyText || bodyText.length < 100) { // Use a reasonable length threshold
-        console.warn("Extracted body text is very short after parsing. The URL might be complex, use dynamic rendering, or lack substantial text content.");
-        // Return the short text but flag as placeholder/potential issue
+    if (!bodyText || bodyText.length < 100) {
+        console.warn("Extracted body text is very short after parsing/cleaning.");
         return {
             title: title || 'Web Content (Short)',
-            body: bodyText || `Could only extract very little text from ${url}. Summarization might be limited.`,
+            body: bodyText || `Could only extract very limited text content from ${url}. Summarization quality may be affected.`,
             isPlaceholder: true
         };
     }
@@ -125,12 +153,16 @@ export async function parseContent(url: string): Promise<ParsedContent> {
     return {
       title: title,
       body: bodyText,
-      isPlaceholder: false, // Successfully parsed substantial content
+      isPlaceholder: false,
     };
 
   } catch (error: any) {
     console.error(`Error parsing content from URL (${url}):`, error);
-    // Re-throw a more specific error for the flow to catch, including the original message
-    throw new Error(`Failed to parse content from URL. ${error.message || 'Unknown error'}`);
+    // Return a placeholder with the error message for the AI to potentially use
+    return {
+        title: `Error Parsing URL`,
+        body: `Failed to fetch or parse content from the URL: ${url}. Error: ${error.message || 'Unknown error'}. The AI will attempt to generate content based on the URL itself.`,
+        isPlaceholder: true,
+    };
   }
 }

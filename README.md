@@ -572,5 +572,4 @@ This project is licensed under the [MIT License](LICENSE). _(Assuming MIT, updat
 
 ## 📄 License
 
-This project is lice
-nsed under the [MIT License](LICENSE). _(Assuming MIT, update if different)_
+This project is licensed under the [MIT License](LICENSE). _(Assuming MIT, update if different)_

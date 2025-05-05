@@ -4,6 +4,8 @@
 
 "use client";
 
+"use client";
+
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -43,7 +45,7 @@ export default function LandingPage() {
           <nav className="flex items-center gap-4">
             <Link href="/login">
               <Button size="sm" className="transition-transform duration-200 hover:scale-105 shadow-md hover:shadow-primary/50">
-                Unlock VibeFlow Now
+                Supercharge Your Posts
               </Button>
             </Link>
           </nav>
@@ -55,22 +57,22 @@ export default function LandingPage() {
         <div aria-hidden="true" className="absolute inset-x-0 top-0 z-0 transform-gpu overflow-hidden blur-3xl" style={{ clipPath: 'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)' }}></div>
        <div className="container relative z-10 text-center px-4 max-w-4xl mx-auto">
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold mb-6 text-gradient leading-tight drop-shadow-lg fade-in-up" style={{ animationDelay: '0.1s' }}>
-            Unlock Your Social Media Potential with AI
+            Stop staring at a blank screen.
           </h1>
           <p className="text-lg sm:text-xl md:text-2xl lg:text-3xl text-muted-foreground mb-12 max-w-3xl mx-auto fade-in-up" style={{ animationDelay: '0.2s' }}>
-            VibeFlow uses AI to transform your ideas into engaging social media posts. Stop wasting time and start growing your audience today!
+            Paste your idea. Get ready-to-post socials for LinkedIn, X, and YouTube in seconds.
           </p>
           <div className="flex justify-center gap-6 fade-in-up" style={{ animationDelay: '0.3s' }}>
             <Link href="/login" aria-label="Start generating free posts">
               <Button size="lg" className="text-lg py-4 px-10 shadow-xl bg-gradient-to-r from-primary to-purple-600 hover:from-purple-600 hover:to-primary hover:scale-110 transition-all duration-300 transform text-primary-foreground font-bold">
-                Get Started Now <Zap className="ml-2 h-6 w-6" />
+                Try VibeFlow Free <Zap className="ml-2 h-6 w-6" />
               </Button>
             </Link>
           </div>
           <p className="text-xs text-muted-foreground mt-4 italic fade-in-up max-w-md mx-auto" style={{ animationDelay: '0.4s' }}>
-            Limited spots available during beta.
+            30 free AI posts to start—no credit card.
           </p>
-          <progress className="w-full h-2 bg-gray-200 rounded-full mt-4" value="0" max="100" id="scroll-progress" style={{ appearance: 'none' }}/>
+          <progress className="w-full h-2 bg-gray-200 rounded-full mt-4" value="0" max="100" id="scroll-progress" style={{ appearance: 'none' }}></progress>
         </div>
       </section>
 
@@ -84,9 +86,9 @@ export default function LandingPage() {
         transition={{ duration: 0.5 }}
       >
         <div className="container max-w-5xl mx-auto px-4 text-center">
-          <h2 className="text-4xl font-extrabold mb-8 fade-in-up">Trusted by Early Adopters & Influencers</h2>
+          <h2 className="text-4xl font-extrabold mb-8 fade-in-up">Real Creators. Real Results.</h2>
           <p className="text-lg text-muted-foreground mb-12 fade-in-up max-w-3xl mx-auto">
-            Join thousands of users who have transformed their social media presence with VibeFlow.
+            
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <Card className="fade-in-up" style={{ animationDelay: '0.1s' }}>
@@ -95,7 +97,7 @@ export default function LandingPage() {
                 <CardDescription>Marketing Manager at Tech Solutions Inc.</CardDescription>
               </CardHeader>
               <CardContent>
-                "VibeFlow has completely transformed our social media strategy. We're saving at least 10 hours a week and seeing a 30% increase in engagement!"
+                "I saved 10 hours/week and engagement spiked 30%!"
               </CardContent>
             </Card>
             <Card className="fade-in-up" style={{ animationDelay: '0.2s' }}>
@@ -104,7 +106,7 @@ export default function LandingPage() {
                 <CardDescription>Content Creator and Influencer</CardDescription>
               </CardHeader>
               <CardContent>
-                "As a content creator, time is money. VibeFlow helps me create high-quality content in minutes, freeing me up to focus on engaging with my audience."
+                "Instant posts let me focus on my fans, not my keyboard."
               </CardContent>
             </Card>
             <Card className="fade-in-up" style={{ animationDelay: '0.3s' }}>
@@ -113,7 +115,7 @@ export default function LandingPage() {
                 <CardDescription>Social Media Strategist at Global Marketing Group</CardDescription>
               </CardHeader>
               <CardContent>
-                "VibeFlow's AI-powered insights have been invaluable in helping us fine-tune our social media campaigns and achieve better results for our clients."
+                "Our campaigns hit new highs thanks to VibeFlow."
               </CardContent>
             </Card>
           </div>
@@ -122,9 +124,9 @@ export default function LandingPage() {
 
       <section id="dashboard-preview" className="py-20 md:py-28 bg-background" aria-label="Dashboard preview showcasing app features">
         <div className="container max-w-6xl mx-auto px-4 text-center">
-          <h2 className="text-4xl font-extrabold mb-12 fade-in-up">See VibeFlow in Action</h2>
+          <h2 className="text-4xl font-extrabold mb-12 fade-in-up">Your AI Content Studio</h2>
           <p className="text-lg text-muted-foreground mb-10 max-w-3xl mx-auto fade-in-up">
-            Experience the power of AI-driven social media post generation with our intuitive dashboard.
+            See how one paste transforms into multiple ready-to-post drafts—all in one dashboard.
           </p>
           <div className="rounded-xl overflow-hidden shadow-2xl border-2 border-primary/20 transform transition-transform duration-500 hover:scale-[1.03] fade-in-up"  style={{ transform: 'translateY(calc(var(--scroll-y) * 0.02px))' }}>
             <Image
@@ -141,33 +143,33 @@ export default function LandingPage() {
 
       <section id="features" className="py-20 md:py-28" aria-label="Key features and benefits">
         <div className="container px-4 max-w-5xl mx-auto">
-          <h2 className="text-4xl font-extrabold text-center mb-16 fade-in-up">Unlock Your Social Superpowers</h2>
+          <h2 className="text-4xl font-extrabold text-center mb-16 fade-in-up">Why You’ll Love VibeFlow</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
             <motion.div className="flex flex-col items-center text-center p-8 border border-transparent rounded-lg transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:bg-muted/20 fade-in-up hover:scale-105" style={{ animationDelay: '0.1s' }} whileHover={{ y: -5 }}>
               <div className="mb-6 p-5 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20">
                 <Zap className="h-12 w-12 text-primary" />
               </div>
-              <h3 className="text-2xl font-semibold mb-4">Instant AI Drafts</h3>
+              <h3 className="text-2xl font-semibold mb-4">Instant Drafts</h3>
               <p className="text-base text-muted-foreground max-w-xs">
-                Paste your text. VibeFlow summarizes and crafts tailored posts for LinkedIn, Twitter & YouTube in seconds.
+                Get LinkedIn, X & YouTube posts in a click.
               </p>
             </motion.div>
             <motion.div className="flex flex-col items-center text-center p-8 border border-transparent rounded-lg transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:bg-muted/20 fade-in-up hover:scale-105" style={{ animationDelay: '0.2s' }} whileHover={{ y: -5 }}>
               <div className="mb-6 p-5 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20">
                 <Edit className="h-12 w-12 text-primary" />
               </div>
-              <h3 className="text-2xl font-semibold mb-4">Tune to Perfection</h3>
+              <h3 className="text-2xl font-semibold mb-4">Tone Tweaks</h3>
               <p className="text-base text-muted-foreground max-w-xs">
-                Refine your message effortlessly. Use AI suggestions or choose a persona for the perfect voice.
+                Switch voice—CEO, Gen-Z, Motivator—without retyping.
               </p>
             </motion.div>
             <motion.div className="flex flex-col items-center text-center p-8 border border-transparent rounded-lg transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:bg-muted/20 fade-in-up hover:scale-105" style={{ animationDelay: '0.3s' }} whileHover={{ y: -5 }}>
               <div className="mb-6 p-5 bg-primary/10 rounded-full transition-colors duration-300 group-hover:bg-primary/20">
                 <Clock className="h-12 w-12 text-primary" />
               </div>
-              <h3 className="text-2xl font-semibold mb-4">Reclaim Your Time</h3>
+              <h3 className="text-2xl font-semibold mb-4">Time Saver</h3>
               <p className="text-base text-muted-foreground max-w-xs">
-                Slash content creation time by 90%. Focus on strategy and engagement, not endless drafting.
+                Cut drafting time by 90%—more time for real work (or life).
               </p>
             </motion.div>
           </div>
@@ -180,16 +182,16 @@ export default function LandingPage() {
           <div className="relative left-[calc(50%+3rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 bg-gradient-to-tr from-[#6D28D9] to-[#A855F7] opacity-20 motion-safe:animate-pulse-slow" style={{ clipPath: 'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)' }}></div>
         </div>
         <div className="container relative z-10 text-center px-4 fade-in-up max-w-3xl mx-auto">
-          <h2 className="text-4xl font-extrabold mb-6">Don't Miss Out! Get VibeFlow Today</h2>
+          <h2 className="text-4xl font-extrabold mb-6">Ready to ditch blank screens?</h2>
           <p className="text-lg mb-10 max-w-xl mx-auto">
-            Limited spots are available for our beta program. Get early access to VibeFlow and start creating viral content before your competitors do!
+            Join our beta—space is limited. Start creating viral posts today.
           </p>
           <Link href="/login" aria-label="Claim your free access now">
             <Button size="lg" className="text-lg py-4 px-10 shadow-xl bg-white text-primary font-bold hover:scale-105 transition-transform duration-300">
-              Claim Your Free Access Now
+              Claim Free Access
             </Button>
           </Link>
-          <p className="text-xs italic mt-4 max-w-md mx-auto">Hurry, offer ends soon!</p>
+          <p className="text-xs italic mt-4 max-w-md mx-auto">Hurry, spots fill up fast!</p>
         </div>
       </section>
 

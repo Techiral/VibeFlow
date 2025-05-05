@@ -1,0 +1,39 @@
+{
+    "name": "VibeFlow | AI Tool for Writing Social Media Posts That Go Viral",
+    "short_name": "VibeFlow",
+    "description": "VibeFlow is your AI content partner that turns ideas into scroll-stopping posts for LinkedIn, X, and YouTube. Instantly write, grow, and engage with zero writing effort.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0c0b0e",
+    "theme_color": "#843ae5",
+    "icons": [
+      {
+        "src": "/favicon.png",
+        "sizes": "192x192",
+        "type": "image/png"
+      },
+      {
+        "src": "/favicon.png",
+        "sizes": "512x512",
+        "type": "image/png"
+      }
+    ],
+    "categories": [
+      "productivity",
+      "social",
+      "business",
+      "content-creation",
+      "marketing"
+    ],
+    "screenshots": [
+      {
+        "src": "/dashboard-screenshot.png",
+        "sizes": "1080x1920",
+        "type": "image/png"
+      }
+    ],
+    "orientation": "portrait-primary",
+    "lang": "en-US",
+    "prefer_related_applications": false
+  }
+  

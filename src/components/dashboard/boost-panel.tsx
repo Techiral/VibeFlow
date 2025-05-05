@@ -1,4 +1,3 @@
-// src/components/dashboard/boost-panel.tsx
 'use client';
 
 import { useState } from 'react';
@@ -52,8 +51,17 @@ const BoostPanel: React.FC<BoostPanelProps> = ({ isOpen, onToggle, onInsertText 
     return acc;
   }, {} as typeof TRENDING_HASHTAGS);
 
+  // Don't render anything if closed, but allow placeholder on large screens
+   if (!isOpen) {
+     return null;
+   }
+
   return (
-    <Card className={ cn( `w-full max-w-xs lg:max-w-sm border-l border-border/50 rounded-l-none flex flex-col h-full bg-card/90 backdrop-blur-sm shadow-lg transition-all duration-300 ease-in-out ${isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 absolute right-0 top-0 pointer-events-none'}` )}>
+    // Removed fixed width, added flex-grow and min-height
+    <Card className={ cn(
+        `w-full border-l border-border/50 rounded-l-none flex flex-col h-full bg-card/90 backdrop-blur-sm shadow-lg transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`,
+        "lg:min-h-[300px]" // Ensure it has some height on large screens
+    )}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-base font-semibold flex items-center gap-2">
           <Hash className="h-5 w-5 text-cyan-400" /> / <Smile className="h-5 w-5 text-yellow-400" />

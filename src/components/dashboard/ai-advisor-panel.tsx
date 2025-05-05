@@ -1,4 +1,3 @@
-// src/components/dashboard/ai-advisor-panel.tsx
 'use client';
 
 import { X, Lightbulb, Check } from 'lucide-react';
@@ -8,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { AnalyzePostOutput } from '@/ai/flows/analyze-post';
+import { cn } from '@/lib/utils'; // Import cn
 
 interface AiAdvisorPanelProps {
   isOpen: boolean;
@@ -24,12 +24,17 @@ const AiAdvisorPanel: React.FC<AiAdvisorPanelProps> = ({
   onApplySuggestion,
   onClose,
 }) => {
+  // Don't render anything if closed, but allow placeholder on large screens
   if (!isOpen) {
     return null;
   }
 
   return (
-    <Card className="w-full max-w-sm lg:max-w-md border-l border-border/50 rounded-l-none flex flex-col h-full bg-card/90 backdrop-blur-sm shadow-lg">
+    // Removed fixed width, added flex-grow and min-height
+    <Card className={cn(
+        "w-full border-l border-border/50 rounded-l-none flex flex-col h-full bg-card/90 backdrop-blur-sm shadow-lg",
+        "lg:min-h-[300px]" // Ensure it has some height on large screens
+    )}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-base font-semibold flex items-center gap-2">
           <Lightbulb className="h-5 w-5 text-purple-400" />

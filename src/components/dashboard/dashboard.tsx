@@ -7,7 +7,7 @@ import type { Profile, Quota, UserProfileFunctionReturn } from '@/types/supabase
 import { summarizeContent, type SummarizeContentOutput } from '@/ai/flows/summarize-content';
 import { generateSocialPosts, type GenerateSocialPostsOutput } from '@/ai/flows/generate-social-posts';
 import { tuneSocialPosts, type TuneSocialPostsOutput } from '@/ai/flows/tune-social-posts';
-import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post'; // Added analyzePost
+import { analyzePost, type AnalyzePostOutput } from '@/ai/flows/analyze-post';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -15,27 +15,27 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image'; // Import Image component
 import {
     User as UserIcon, LogOut, Copy, Bot, Palette, Lightbulb, AlertCircle, X, Loader2,
-    Check, Sparkles, Settings2, BookOpen, Info, Hash, Smile, BrainCircuit, Trophy, Star, Zap, Separator, ChevronRight
+    Check, Sparkles, Settings2, BookOpen, Info, Hash, Smile, BrainCircuit, Trophy, Star, Zap, ChevronRight, Separator
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ProfileDialog } from './profile-dialog';
-import { Progress } from "@/components/ui/progress";
-import AiAdvisorPanel from './ai-advisor-panel';
+import { ProfileDialog } from './profile-dialog'; // Import the profile dialog
+import { Progress } from "@/components/ui/progress"; // Import Progress component
+import AiAdvisorPanel from '@/components/dashboard/ai-advisor-panel'; // Import AI Advisor Panel
 import { toast as sonnerToast } from 'sonner';
 import Confetti from 'react-confetti';
-import Joyride, { Step, CallBackProps } from 'react-joyride';
+// import Joyride, { Step, CallBackProps } from 'react-joyride'; // Remove react-joyride import
 import ToneTunerSheet from './tone-tuner-sheet';
 import BoostPanel from './boost-panel';
 import PreviewMockup from './preview-mockup';
 import HelpModal from './help-modal';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils'; // Import cn
 
 
 // Type definitions
@@ -90,49 +90,49 @@ const BADGES = [
   { xp: 500, name: 'AI Maestro 🧑‍🔬', description: 'Mastered 50 generations!', icon: BrainCircuit },
 ];
 
-// Onboarding steps definition
-const ONBOARDING_STEPS: Step[] = [
-  {
-    target: '#content-input-section',
-    content: 'Start by pasting your content (text or URL) here.',
-    placement: 'bottom',
-  },
-  {
-    target: '#persona-selector',
-    content: 'Optionally, choose an AI persona to influence the writing style.',
-    placement: 'bottom',
-  },
-  {
-    target: '#generate-posts-button',
-    content: 'Click here to let the AI summarize and generate post drafts.',
-    placement: 'bottom',
-  },
-  {
-    target: '#output-tabs',
-    content: 'Review your generated drafts for LinkedIn, Twitter, and YouTube here.',
-    placement: 'top',
-  },
-  {
-    target: '#ai-advisor-button-linkedin', // Target the first platform's advisor button
-    content: 'Use the AI Advisor (✨) for feedback and suggestions on your drafts.',
-    placement: 'left',
-  },
-  {
-    target: '#tune-buttons-linkedin', // Target the first platform's tune buttons
-    content: 'Quickly refine the post using these AI tuning suggestions.',
-    placement: 'top',
-  },
-  {
-    target: '#quota-display',
-    content: 'Keep an eye on your monthly request quota and XP progress here.',
-    placement: 'bottom-end',
-  },
-  {
-    target: '#profile-button',
-    content: 'Manage your profile, API keys, and see your achievements here.',
-    placement: 'bottom-end',
-  },
-];
+// Onboarding steps definition - Removed as react-joyride is removed
+// const ONBOARDING_STEPS: Step[] = [
+//   {
+//     target: '#content-input-section',
+//     content: 'Start by pasting your content (text or URL) here.',
+//     placement: 'bottom',
+//   },
+//   {
+//     target: '#persona-selector',
+//     content: 'Optionally, choose an AI persona to influence the writing style.',
+//     placement: 'bottom',
+//   },
+//   {
+//     target: '#generate-posts-button',
+//     content: 'Click here to let the AI summarize and generate post drafts.',
+//     placement: 'bottom',
+//   },
+//   {
+//     target: '#output-tabs',
+//     content: 'Review your generated drafts for LinkedIn, Twitter, and YouTube here.',
+//     placement: 'top',
+//   },
+//   {
+//     target: '#ai-advisor-button-linkedin', // Target the first platform's advisor button
+//     content: 'Use the AI Advisor (✨) for feedback and suggestions on your drafts.',
+//     placement: 'left',
+//   },
+//   {
+//     target: '#tune-buttons-linkedin', // Target the first platform's tune buttons
+//     content: 'Quickly refine the post using these AI tuning suggestions.',
+//     placement: 'top',
+//   },
+//   {
+//     target: '#quota-display',
+//     content: 'Keep an eye on your monthly request quota and XP progress here.',
+//     placement: 'bottom-end',
+//   },
+//   {
+//     target: '#profile-button',
+//     content: 'Manage your profile, API keys, and see your achievements here.',
+//     placement: 'bottom-end',
+//   },
+// ];
 
 export default function Dashboard({
   user,
@@ -177,7 +177,7 @@ export default function Dashboard({
   const [showConfetti, setShowConfetti] = useState(false);
   const [confettiPieces, setConfettiPieces] = useState(200);
 
-  const [runTour, setRunTour] = useState(false);
+  // const [runTour, setRunTour] = useState(false); // Removed Joyride state
   const [isClient, setIsClient] = useState(false);
   const outputTextareaRefs = {
     linkedin: useRef<HTMLTextAreaElement>(null),
@@ -241,44 +241,44 @@ export default function Dashboard({
  // --- Onboarding & Client-Side Check ---
  useEffect(() => {
     setIsClient(true);
-    // Check if onboarding needs to run after profile is loaded
-    if (initialProfile && !initialProfile.badges?.includes('onboarded') && !dbSetupError && !serverErrorMessage) {
-      const timer = setTimeout(() => setRunTour(true), 500);
-      return () => clearTimeout(timer);
-    }
+    // Onboarding logic removed as react-joyride is removed
+    // if (initialProfile && !initialProfile.badges?.includes('onboarded') && !dbSetupError && !serverErrorMessage) {
+    //   const timer = setTimeout(() => setRunTour(true), 500);
+    //   return () => clearTimeout(timer);
+    // }
   }, [initialProfile, dbSetupError, serverErrorMessage]); // Run when profile status known
 
-  // Function to mark onboarding as complete
-  const handleJoyrideCallback = async (data: CallBackProps) => {
-    const { status } = data;
-    const finishedStatuses: string[] = ['finished', 'skipped'];
+  // Function to mark onboarding as complete - Removed as react-joyride is removed
+  // const handleJoyrideCallback = async (data: CallBackProps) => {
+  //   const { status } = data;
+  //   const finishedStatuses: string[] = ['finished', 'skipped'];
 
-    if (finishedStatuses.includes(status)) {
-      setRunTour(false); // Stop the tour visually
-      // Mark onboarding as complete in the database
-      if (profile && !badges.includes('onboarded')) {
-        const updatedBadges = [...badges, 'onboarded'];
-        try {
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update({ badges: updatedBadges })
-            .eq('id', user.id);
+  //   if (finishedStatuses.includes(status)) {
+  //     setRunTour(false); // Stop the tour visually
+  //     // Mark onboarding as complete in the database
+  //     if (profile && !badges.includes('onboarded')) {
+  //       const updatedBadges = [...badges, 'onboarded'];
+  //       try {
+  //         const { error: updateError } = await supabase
+  //           .from('profiles')
+  //           .update({ badges: updatedBadges })
+  //           .eq('id', user.id);
 
-          if (updateError) throw updateError;
-          setBadges(updatedBadges); // Update local state
-          handleProfileUpdate({ ...profile, badges: updatedBadges }); // Update parent state
-          console.log("Onboarding marked as complete.");
-        } catch (error: any) {
-          console.error("Failed to mark onboarding complete:", error.message);
-          toast({
-            title: "Onboarding Error",
-            description: "Could not save onboarding status.",
-            variant: "destructive",
-          });
-        }
-      }
-    }
-  };
+  //         if (updateError) throw updateError;
+  //         setBadges(updatedBadges); // Update local state
+  //         handleProfileUpdate({ ...profile, badges: updatedBadges }); // Update parent state
+  //         console.log("Onboarding marked as complete.");
+  //       } catch (error: any) {
+  //         console.error("Failed to mark onboarding complete:", error.message);
+  //         toast({
+  //           title: "Onboarding Error",
+  //           description: "Could not save onboarding status.",
+  //           variant: "destructive",
+  //         });
+  //       }
+  //     }
+  //   }
+  // };
 
 
   // --- Rate Limit Countdown Effect ---
@@ -506,16 +506,28 @@ export default function Dashboard({
   };
 
   // --- Helper to refund quota on AI call errors (if cost was > 0) ---
-   const refundQuotaOnError = async (cost: number) => {
+   const refundQuotaOnError = async (cost: number, operationKey: RateLimitOperation) => {
        if (cost > 0) {
            try {
-               console.log(`Refunding ${cost} quota points due to errors.`);
+               console.log(`Refunding ${cost} quota points for failed ${operationKey}.`);
                // Use negative increment amount to refund
-               await supabase.rpc('increment_quota', {
+               const { error: refundRpcError } = await supabase.rpc('increment_quota', {
                    p_user_id: user.id,
                    p_increment_amount: -cost,
                });
-               // Optionally refetch quota state after refund
+
+               if (refundRpcError) {
+                 // Check if the error is related to the function not existing
+                 if (refundRpcError.message.includes("function public.increment_quota does not exist")) {
+                      console.error("Database setup incomplete: The 'increment_quota' function is missing. Cannot refund quota.");
+                      setErrorMessage(prev => `${prev ? prev + '\n' : ''}Database setup incomplete: 'increment_quota' function missing.`);
+                      return; // Stop trying to refund if function is missing
+                 }
+                 // Otherwise, throw the original refund error
+                 throw refundRpcError;
+               }
+
+               // Optionally refetch quota state after successful refund
                 const { data: refreshedQuota, error: qError } = await supabase
                     .from('quotas')
                     .select('*')
@@ -523,6 +535,7 @@ export default function Dashboard({
                     .single();
                 if (qError) throw qError;
                 setQuota(refreshedQuota);
+                console.log("Quota refunded and state updated.");
            } catch (refundError: any) {
                console.error("Failed to refund quota:", refundError.message);
                toast({
@@ -546,8 +559,14 @@ export default function Dashboard({
     let isRateLimitError = false;
     let apiRetryAfter = 0;
     let error: Error | null = null; // Keep track of the error across retries
+    let incrementSuccessful = false; // Track if quota increment happened in the *current* attempt
 
     while (currentAttempt < MAX_AI_RETRIES) {
+      incrementSuccessful = false; // Reset flag for each new attempt
+      error = null; // Reset error for this attempt
+      isRateLimitError = false;
+      apiRetryAfter = 0;
+
       const currentLimitState = rateLimitState[operationKey];
       // Check local rate limit state first
       if (currentLimitState?.active && Date.now() < currentLimitState.retryAfter) {
@@ -581,17 +600,26 @@ export default function Dashboard({
                 .from('quotas')
                 .select('request_count, quota_limit')
                 .eq('user_id', user.id)
-                .single();
+                .single(); // Use single to expect one row or throw error
+
             if (fetchQuotaError) {
-                console.error("Failed to fetch current quota before check:", fetchQuotaError.message);
-                currentQuotaCount = quota?.request_count ?? 0;
-                currentQuotaLimit = quota?.quota_limit ?? 100;
+                 if (fetchQuotaError.code === 'PGRST116') { // Handle "No rows found" specifically
+                     console.warn("No quota record found before check. Attempting creation or reset might occur.");
+                     // Assume 0 count if no record exists yet, rely on increment_quota's upsert
+                     currentQuotaCount = 0;
+                     currentQuotaLimit = 100; // Assume default limit
+                 } else {
+                    console.error("Failed to fetch current quota before check:", fetchQuotaError.message);
+                    // Use local state as fallback, but log the issue
+                    currentQuotaCount = quota?.request_count ?? 0;
+                    currentQuotaLimit = quota?.quota_limit ?? 100;
+                 }
             } else {
                 currentQuotaCount = currentQuotaData.request_count;
                 currentQuotaLimit = currentQuotaData.quota_limit;
             }
-        } catch (e) {
-            console.error("Exception fetching quota before check:", e);
+        } catch (e: any) {
+            console.error("Exception fetching quota before check:", e.message);
             currentQuotaCount = quota?.request_count ?? 0;
             currentQuotaLimit = quota?.quota_limit ?? 100;
         }
@@ -599,16 +627,12 @@ export default function Dashboard({
        if (currentQuotaCount + cost > currentQuotaLimit) {
            console.warn("Quota exceeded (local check before increment).");
            setErrorMessage("Quota exceeded. Upgrade your plan or wait for reset.");
+           // Update local state to reflect exceeded status, but rely on RPC for actual DB state
            setQuota(prev => prev ? { ...prev, request_count: currentQuotaLimit } : null);
            return { data: null, error: new Error("Quota exceeded.") };
        }
 
       // ----- Attempt Quota Increment and AI Call -----
-      let incrementSuccessful = false; // Flag to track if quota increment happened
-      error = null; // Reset error for this attempt
-      isRateLimitError = false;
-      apiRetryAfter = 0;
-
       try {
         // 1. Increment Quota via RPC
         if (cost > 0) {
@@ -626,13 +650,18 @@ export default function Dashboard({
                  // Set error but don't throw, return it as quota exceeded
                  error = new Error("Quota exceeded.");
                  break; // Exit the loop, quota exceeded is non-retriable in this attempt
+               } else if (incrementError.message.includes("function public.increment_quota does not exist")) {
+                  console.error("Database setup incomplete: The 'increment_quota' function is missing.");
+                  setErrorMessage(prev => `${prev ? prev + '\n' : ''}Database setup incomplete: 'increment_quota' function missing. Cannot proceed.`);
+                  error = new Error("Database setup error: increment_quota function missing.");
+                  break; // Stop trying if the function is missing
                } else {
                  console.error("Error incrementing quota via RPC:", incrementError);
                  // Throw to indicate a DB interaction issue, potentially retriable? Let outer catch handle.
                  throw new Error(`Failed to update quota: ${incrementError.message}`);
                }
              }
-             incrementSuccessful = true; // Mark increment as successful
+             incrementSuccessful = true; // Mark increment as successful *for this attempt*
              console.log("Quota increment RPC successful, refetching data...");
 
              // ---- Refetch Profile and Quota AFTER successful increment ----
@@ -655,7 +684,7 @@ export default function Dashboard({
                    throw new Error("Profile function failed to return data after increment.");
                  }
                  const postIncrementProfile = postIncrementProfileData[0];
-                 handleProfileUpdate(postIncrementProfile);
+                 handleProfileUpdate(postIncrementProfile); // This updates local profile, xp, badges and runs checkAndAwardBadges
                  console.log("Refetched profile data:", postIncrementProfile);
 
              } catch (refetchError: any) {
@@ -683,18 +712,25 @@ export default function Dashboard({
         console.error(`Error during AI operation (${operationKey}) attempt ${currentAttempt + 1}/${MAX_AI_RETRIES}:`, error.message);
 
         // --- Error Handling Logic ---
-        // Refund quota if increment happened but AI call failed
+        // Refund quota *only if* increment happened in *this specific attempt*
          if (incrementSuccessful) {
-             await refundQuotaOnError(cost);
-             incrementSuccessful = false; // Ensure refund only happens once per failed AI attempt
+             await refundQuotaOnError(cost, operationKey);
+             // Do not reset incrementSuccessful here, let it reset at the start of the next loop
          }
 
         const messageLower = error.message?.toLowerCase() || '';
         const status = (error instanceof Error && 'status' in error) ? (error as any).status : null;
+        const statusCode = (error instanceof Error && 'statusCode' in error) ? (error as any).statusCode : null; // Check for statusCode too
 
-        // A. Check for RETRIABLE Errors
-        if (status === 'UNAVAILABLE' || status === 'RESOURCE_EXHAUSTED' || messageLower.includes('503') || messageLower.includes('unavailable') || messageLower.includes('overloaded') || messageLower.includes('rate limit') || messageLower.includes('429') || messageLower.includes('internal error') || messageLower.includes('the model is overloaded') || messageLower.includes('quota exceeded') ) { // Treat temporary quota issues as retriable
-          isRateLimitError = true;
+        // A. Check for RETRIABLE Errors (5xx, UNAVAILABLE, RESOURCE_EXHAUSTED, 429)
+        if (
+            status === 'UNAVAILABLE' ||
+            status === 'RESOURCE_EXHAUSTED' ||
+            statusCode === 503 || messageLower.includes('503') || messageLower.includes('unavailable') || messageLower.includes('overloaded') || messageLower.includes('internal error') || messageLower.includes('the model is overloaded') || // Treat temporary Google overload as retriable
+            statusCode === 429 || messageLower.includes('rate limit') || messageLower.includes('429') ||
+            messageLower.includes('quota exceeded') // Treat *temporary* quota issues as potentially retriable (might clear up)
+          ) {
+          isRateLimitError = true; // Treat all these as 'rate limit like' for UI feedback
           apiRetryAfter = Date.now() + backoff;
 
           // Update local rate limit state
@@ -705,7 +741,7 @@ export default function Dashboard({
 
           if (currentAttempt >= MAX_AI_RETRIES - 1) {
              let finalMessage = `AI service for ${operationKey} remained unavailable after ${MAX_AI_RETRIES} attempts. Please try again later.`;
-              if (status === 'RESOURCE_EXHAUSTED' || messageLower.includes('rate limit') || messageLower.includes('quota exceeded') ) { // Check for persistent quota/rate limit
+              if (status === 'RESOURCE_EXHAUSTED' || statusCode === 429 || messageLower.includes('rate limit') || messageLower.includes('quota exceeded') ) { // Check for persistent quota/rate limit
                  finalMessage = `AI service rate limit/quota hit for ${operationKey}. Please wait or check your API quota. Retried ${MAX_AI_RETRIES} times.`;
                  apiRetryAfter = Date.now() + 60000; // Extend local rate limit
                   setRateLimitState(prev => ({
@@ -737,6 +773,9 @@ export default function Dashboard({
         } else if (error.message === "Quota exceeded.") {
            // This was set above if increment failed due to quota, just break.
            console.warn("Quota exceeded, stopping operation.");
+        } else if (error.message.includes("increment_quota function missing")) {
+            // Message already set, just break
+             console.error("Database setup error prevented operation.");
         } else {
           // Handle other unexpected internal errors
           console.error(`Internal error during ${operationKey}:`, error.message);
@@ -751,7 +790,6 @@ export default function Dashboard({
     if (error) {
        // If it was a rate limit error that exhausted retries, the message is already set
        // If it was another error, the message was set in the non-retriable block
-       // The refund should have happened within the loop if needed
        return { data: null, error: error, rateLimited: isRateLimitError, retryAfter: isRateLimitError ? apiRetryAfter : undefined };
     }
 
@@ -775,20 +813,20 @@ export default function Dashboard({
 
     const summaryCost = 1; // Cost for summarization
     const generationCostPerPlatform = 1; // Cost per platform generation
-    const totalCost = summaryCost + PLATFORMS.length * generationCostPerPlatform; // Total potential cost
+    // Removed total cost calculation, charge incrementally
 
     const summaryResult = await callAiWithRetry(
       async () => {
         if (!profile?.gemini_api_key) throw new Error("Missing Gemini API Key");
         return await summarizeContent({ content }, { apiKey: profile.gemini_api_key });
       },
-      summaryCost, // Charge only summary cost initially
+      summaryCost,
       'summarize'
     );
 
     if (summaryResult.error || !summaryResult.data) {
       setLoadingState(prev => ({ ...prev, summarizing: false, generating: null }));
-      // Error message handled, potentially refund done within callAiWithRetry
+      // Error message handled, potential refund done within callAiWithRetry
       return; // Stop execution if summarization fails
     }
 
@@ -830,7 +868,8 @@ export default function Dashboard({
         setGeneratedPosts(prev => ({ ...prev, [platform]: result.data.post }));
         platformsSuccessfullyGenerated++;
       }
-      setLoadingState(prev => ({ ...prev, generating: null }));
+       // Set generating to null *after* processing each platform
+       setLoadingState(prev => ({ ...prev, generating: null }));
     }
 
     // Final feedback toast
@@ -1161,390 +1200,388 @@ export default function Dashboard({
 
   // Main Dashboard Structure
   return (
-    <TooltipProvider>
-      {isClient && runTour && (
-        <Joyride
-          steps={ONBOARDING_STEPS}
-          run={runTour}
-          continuous
-          showProgress
-          showSkipButton
-          callback={handleJoyrideCallback}
-          styles={{
-            options: {
-              zIndex: 10000, // Ensure Joyride is above other elements
-              primaryColor: '#6D28D9', // Use primary color
-            },
-          }}
-        />
-      )}
-      {isClient && showConfetti && (
-        <Confetti
-          width={typeof window !== 'undefined' ? window.innerWidth : 0}
-          height={typeof window !== 'undefined' ? window.innerHeight : 0}
-          numberOfPieces={confettiPieces}
-          recycle={false}
-          onConfettiComplete={() => setShowConfetti(false)}
-          className="!fixed !top-0 !left-0 !w-full !h-full !z-[10001]"
-        />
-      )}
-      <div className={cn("flex flex-col min-h-screen bg-background text-foreground p-4 md:p-6 lg:p-8")}>
-        <header className="flex flex-wrap justify-between items-center mb-6 md:mb-8 gap-4">
-           <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
-             {/* Update logo size */}
+     <TooltipProvider>
+     {/* Remove Joyride related code */}
+     {/* {isClient && runTour && (
+       <Joyride
+         steps={ONBOARDING_STEPS}
+         run={runTour}
+         continuous
+         showProgress
+         showSkipButton
+         callback={handleJoyrideCallback}
+         styles={{
+           options: {
+             zIndex: 10000,
+             primaryColor: '#6D28D9',
+           },
+         }}
+       />
+     )} */}
+     {isClient && showConfetti && (
+       <Confetti
+         width={typeof window !== 'undefined' ? window.innerWidth : 0}
+         height={typeof window !== 'undefined' ? window.innerHeight : 0}
+         numberOfPieces={confettiPieces}
+         recycle={false}
+         onConfettiComplete={() => setShowConfetti(false)}
+         className="!fixed !top-0 !left-0 !w-full !h-full !z-[10001]"
+       />
+     )}
+     <div className={cn("flex flex-col min-h-screen bg-background text-foreground p-4 md:p-6 lg:p-8")}>
+       <header className="flex flex-wrap justify-between items-center mb-6 md:mb-8 gap-4">
+          <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
              <Image src="/logo.png" alt="VibeFlow Logo" width={168} height={168} className="object-contain" />
-           </Link>
-          <div className="flex items-center gap-3 md:gap-4">
-             {/* Quota and XP Display */}
-             <Tooltip>
-               <TooltipTrigger asChild>
-                  <div id="quota-display" className="flex flex-col items-end w-32 md:w-48">
-                      <div className="w-full flex justify-between items-center mb-1">
-                         <span className="text-xs font-medium text-muted-foreground">Usage</span>
-                         {quota ? (
-                           <span className="text-xs font-semibold">{quota.request_count ?? 0}/{quota.quota_limit ?? 100}</span>
-                         ) : (
-                           <Skeleton className="h-4 w-12" />
-                         )}
-                      </div>
-                      <Progress
-                        value={quotaPercentage}
-                        className="h-2 w-full mb-2"
-                        aria-label="Monthly Usage Quota"
-                        indicatorClassName={isQuotaExceeded ? "bg-destructive" : "bg-primary"}
-                      />
-                      <div className="w-full flex justify-between items-center mb-1">
-                         <span className="text-xs font-medium text-muted-foreground">XP</span>
-                         <span className="text-xs font-semibold">{xp}</span>
-                      </div>
-                      <Progress
-                        value={xpInfo.percentage}
-                        className="h-2 w-full"
-                        aria-label={xpTooltipContent}
-                        indicatorClassName="bg-gradient-to-r from-purple-500 to-cyan-400"
-                      />
-                    </div>
-               </TooltipTrigger>
-               <TooltipContent side="bottom" align="end">
-                 <p>{quotaTooltipContent}</p>
-                 <p>{xpTooltipContent}</p>
-               </TooltipContent>
-             </Tooltip>
-
+          </Link>
+         <div className="flex items-center gap-3 md:gap-4">
+            {/* Quota and XP Display */}
             <Tooltip>
-               <TooltipTrigger asChild>
-                 <Button variant="ghost" size="icon" onClick={() => setIsProfileDialogOpen(true)} id="profile-button" className="h-8 w-8 md:h-9 md:w-9">
-                   <UserIcon className="h-4 w-4 md:h-5 md:w-5" />
-                   <span className="sr-only">Profile & Settings</span>
+              <TooltipTrigger asChild>
+                 <div id="quota-display" className="flex flex-col items-end w-32 md:w-48">
+                     <div className="w-full flex justify-between items-center mb-1">
+                        <span className="text-xs font-medium text-muted-foreground">Usage</span>
+                        {quota ? (
+                          <span className="text-xs font-semibold">{quota.request_count ?? 0}/{quota.quota_limit ?? 100}</span>
+                        ) : (
+                          <Skeleton className="h-4 w-12" />
+                        )}
+                     </div>
+                     <Progress
+                       value={quotaPercentage}
+                       className="h-2 w-full mb-2"
+                       aria-label="Monthly Usage Quota"
+                       indicatorClassName={isQuotaExceeded ? "bg-destructive" : "bg-primary"}
+                     />
+                     <div className="w-full flex justify-between items-center mb-1">
+                        <span className="text-xs font-medium text-muted-foreground">XP</span>
+                        <span className="text-xs font-semibold">{xp}</span>
+                     </div>
+                     <Progress
+                       value={xpInfo.percentage}
+                       className="h-2 w-full"
+                       aria-label={xpTooltipContent}
+                       indicatorClassName="bg-gradient-to-r from-purple-500 to-cyan-400"
+                     />
+                   </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="end">
+                <p>{quotaTooltipContent}</p>
+                <p>{xpTooltipContent}</p>
+              </TooltipContent>
+            </Tooltip>
+
+           <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={() => setIsProfileDialogOpen(true)} id="profile-button" className="h-8 w-8 md:h-9 md:w-9">
+                  <UserIcon className="h-4 w-4 md:h-5 md:w-5" />
+                  <span className="sr-only">Profile & Settings</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Profile & Settings</TooltipContent>
+            </Tooltip>
+
+           <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={() => setIsHelpModalOpen(true)} aria-label="Help & Shortcuts" className="h-8 w-8 md:h-9 md:w-9">
+                  <BookOpen className="h-4 w-4 md:h-5 md:w-5" />
+                  <span className="sr-only">Help & Shortcuts</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Help & Shortcuts (Ctrl+H)</TooltipContent>
+            </Tooltip>
+
+           <Button onClick={handleSignOut} variant="outline" size="sm">
+             <LogOut className="mr-1 h-4 w-4" /> Sign Out
+           </Button>
+         </div>
+       </header>
+
+       {/* Alerts Container */}
+       <div className="space-y-4 mb-6 md:mb-8">
+         {errorMessage && !dbSetupError && (
+           <Alert variant="destructive">
+             <AlertCircle className="h-4 w-4" />
+             <AlertTitle>Error</AlertTitle>
+             <AlertDescription>
+               <div className="flex justify-between items-start gap-2">
+                 <span className="whitespace-pre-wrap">{errorMessage}</span>
+                 <Button variant="ghost" size="icon" onClick={() => setErrorMessage(null)} className="-mt-1 -mr-1 h-6 w-6 flex-shrink-0">
+                   <X className="h-4 w-4" />
+                   <span className="sr-only">Dismiss error</span>
                  </Button>
-               </TooltipTrigger>
-               <TooltipContent>Profile & Settings</TooltipContent>
-             </Tooltip>
+               </div>
+               {errorMessage.includes("Quota exceeded") && (
+                 <Button size="sm" className="mt-2" onClick={() => setIsProfileDialogOpen(true)}>Upgrade Plan</Button>
+               )}
+               {errorMessage.includes("API Key is missing") && (
+                  <Button size="sm" className="mt-2" onClick={() => setIsProfileDialogOpen(true)}>Add API Key</Button>
+               )}
+             </AlertDescription>
+           </Alert>
+         )}
+         {/* Rate Limit Alerts */}
+         {Object.entries(rateLimitState).map(([key, state]) => {
+           const operationKey = key as RateLimitOperation;
+           const remainingTime = getRateLimitRemainingTime(operationKey);
+           return state?.active && remainingTime > 0 && (
+             <Alert variant="default" className="bg-yellow-900/20 border-yellow-700/50" key={key}>
+               <Info className="h-4 w-4 text-yellow-500" />
+               <AlertTitle className="text-yellow-300">Rate Limit Active: {key.charAt(0).toUpperCase() + key.slice(1)}</AlertTitle>
+               <AlertDescription className="text-yellow-400">
+                 Please wait {remainingTime} seconds to perform this action again.
+               </AlertDescription>
+             </Alert>
+           );
+         })}
+       </div>
 
-            <Tooltip>
-               <TooltipTrigger asChild>
-                 <Button variant="ghost" size="icon" onClick={() => setIsHelpModalOpen(true)} aria-label="Help & Shortcuts" className="h-8 w-8 md:h-9 md:w-9">
-                   <BookOpen className="h-4 w-4 md:h-5 md:w-5" />
-                   <span className="sr-only">Help & Shortcuts</span>
-                 </Button>
-               </TooltipTrigger>
-               <TooltipContent>Help & Shortcuts (Ctrl+H)</TooltipContent>
-             </Tooltip>
-
-            <Button onClick={handleSignOut} variant="outline" size="sm">
-              <LogOut className="mr-1 h-4 w-4" /> Sign Out
-            </Button>
-          </div>
-        </header>
-
-        {/* Alerts Container */}
-        <div className="space-y-4 mb-6 md:mb-8">
-          {errorMessage && !dbSetupError && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>
-                <div className="flex justify-between items-start gap-2">
-                  <span className="whitespace-pre-wrap">{errorMessage}</span>
-                  <Button variant="ghost" size="icon" onClick={() => setErrorMessage(null)} className="-mt-1 -mr-1 h-6 w-6 flex-shrink-0">
-                    <X className="h-4 w-4" />
-                    <span className="sr-only">Dismiss error</span>
-                  </Button>
-                </div>
-                {errorMessage.includes("Quota exceeded") && (
-                  <Button size="sm" className="mt-2" onClick={() => setIsProfileDialogOpen(true)}>Upgrade Plan</Button>
-                )}
-                {errorMessage.includes("API Key is missing") && (
-                   <Button size="sm" className="mt-2" onClick={() => setIsProfileDialogOpen(true)}>Add API Key</Button>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-          {/* Rate Limit Alerts */}
-          {Object.entries(rateLimitState).map(([key, state]) => {
-            const operationKey = key as RateLimitOperation;
-            const remainingTime = getRateLimitRemainingTime(operationKey);
-            return state?.active && remainingTime > 0 && (
-              <Alert variant="default" className="bg-yellow-900/20 border-yellow-700/50" key={key}>
-                <Info className="h-4 w-4 text-yellow-500" />
-                <AlertTitle className="text-yellow-300">Rate Limit Active: {key.charAt(0).toUpperCase() + key.slice(1)}</AlertTitle>
-                <AlertDescription className="text-yellow-400">
-                  Please wait {remainingTime} seconds to perform this action again.
-                </AlertDescription>
-              </Alert>
-            );
-          })}
-        </div>
-
-       {/* Main content area */}
-       <main className="flex-grow flex flex-col gap-6 md:gap-8 overflow-hidden">
-          {/* Top Row: Input */}
-          <Card id="content-input-section" className="shadow-md border-border/30">
-            <CardHeader>
-              <CardTitle className="text-lg md:text-xl">1. Input Content</CardTitle>
-              <CardDescription>Paste your text here.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Textarea
-                placeholder="Paste your text here..."
-                value={content}
-                onChange={handleContentChange}
-                rows={5}
-                className="text-sm"
-                disabled={loadingState.summarizing || !!loadingState.generating}
-                aria-label="Content Input"
-              />
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4">
-                <div id="persona-selector" className="w-full sm:w-auto">
-                  <Label htmlFor="persona" className="text-xs font-medium text-muted-foreground mb-1 block">AI Persona</Label>
-                  <Select
-                    value={selectedPersona}
-                    onValueChange={setSelectedPersona}
-                    disabled={loadingState.summarizing || !!loadingState.generating}
-                  >
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <SelectTrigger className="w-full sm:w-[180px] h-9 text-xs" id="persona" aria-label="Select AI Persona">
-                          <SelectValue placeholder="Select Persona" />
-                        </SelectTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent>Select a writing style for the AI.</TooltipContent>
-                    </Tooltip>
-                    <SelectContent>
-                      {PERSONAS.map(persona => (
-                        <SelectItem key={persona.value} value={persona.value} textValue={persona.label}>
-                          {persona.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="w-full sm:w-auto">
-                      <Button
-                        id="generate-posts-button"
-                        onClick={handleGeneratePosts}
-                        disabled={!content.trim() || loadingState.summarizing || !!loadingState.generating || isApiKeyMissing || isQuotaExceeded || !!rateLimitState.summarize?.active || !!rateLimitState.generate?.active}
-                        loading={loadingState.summarizing || !!loadingState.generating}
-                        className="w-full sm:w-auto"
-                      >
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        {loadingState.summarizing ? 'Summarizing...' : (loadingState.generating ? `Generating ${loadingState.generating}...` : 'Generate Posts')}
-                      </Button>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {getRateLimitTooltip('summarize') ?? getRateLimitTooltip('generate') ?? (isApiKeyMissing ? 'Add Gemini API Key in Profile Settings.' : (isQuotaExceeded ? 'Quota exceeded.' : (!content.trim() ? 'Enter content first.' : 'Summarize & Generate Posts')))}
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Bottom Row: Output and Side Panels */}
-          <div className="flex-grow flex flex-col lg:flex-row gap-6 md:gap-8 overflow-hidden">
-            {/* Main Output Area */}
-            <Card className="shadow-md border-border/30 flex-grow flex flex-col min-h-0 lg:min-w-0">
-              <CardHeader>
-                <CardTitle className="text-lg md:text-xl">2. Generated Drafts</CardTitle>
-                <CardDescription>Review, tune, and copy the generated posts.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow flex flex-col min-h-0 p-0 md:p-0">
-                {summary || Object.values(generatedPosts).some(p => p) ? (
-                  <Tabs defaultValue="linkedin" className="flex-grow flex flex-col min-h-0" onValueChange={(value) => setActiveOutputTab(value as SocialPlatform)} id="output-tabs">
-                    <div className="flex justify-between items-center px-4 md:px-6 pt-4 pb-2 md:pb-4 border-b">
-                      <TabsList className="grid w-full grid-cols-3 max-w-xs sm:max-w-sm">
-                        {PLATFORMS.map(platform => (
-                          <TabsTrigger key={platform} value={platform} className="capitalize text-xs sm:text-sm tabs-trigger-underline px-2 py-1 sm:px-3 sm:py-1.5">
-                            {platform}
-                          </TabsTrigger>
-                        ))}
-                      </TabsList>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={handleToggleBoostPanel} className={cn("transition-colors h-8 w-8 md:h-9 md:w-9", isBoostPanelOpen && "bg-accent")}>
-                            <Settings2 className="h-4 w-4 md:h-5 md:w-5" />
-                            <span className="sr-only">Toggle Boost Panel</span>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Hashtags & Emojis</TooltipContent>
-                      </Tooltip>
-                    </div>
-                    {PLATFORMS.map(platform => (
-                      <TabsContent key={platform} value={platform} className="flex-grow mt-0 overflow-y-auto p-4 md:p-6">
-                        <div className="flex flex-col h-full gap-4">
-                          <div className="relative flex-grow">
-                            <Textarea
-                              ref={outputTextareaRefs[platform]}
-                              value={generatedPosts[platform]}
-                              onChange={(e) => handleOutputChange(platform, e.target.value)}
-                              rows={10}
-                              className="text-sm h-full resize-none pr-10 md:pr-12"
-                              disabled={!!loadingState.tuning[platform]}
-                              placeholder={`Generated ${platform} post will appear here...`}
-                              aria-label={`${platform} Post Output`}
-                            />
-                            <div className="absolute top-2 right-2 flex flex-col gap-1">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    id={`ai-advisor-button-${platform}`}
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    onClick={() => handleAnalyzePost(platform)}
-                                    disabled={loadingState.analyzing === platform || !generatedPosts[platform] || generatedPosts[platform].startsWith("Error:") || !!rateLimitState.analyze?.active}
-                                    aria-label="Analyze post with AI Advisor"
-                                  >
-                                    {loadingState.analyzing === platform ? <Loader2 className="animate-spin h-4 w-4" /> : <Sparkles className="h-4 w-4 text-purple-400" />}
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>{getRateLimitTooltip('analyze') ?? "AI Advisor"}</TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openToneTuner(platform)} disabled={!generatedPosts[platform] || generatedPosts[platform].startsWith("Error:") || !!loadingState.tuning[platform]}>
-                                    <Palette className="h-4 w-4 text-cyan-400" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Tune Tone & Style</TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCopyToClipboard(platform)} disabled={!generatedPosts[platform] || generatedPosts[platform].startsWith("Error:")}>
-                                    <Copy className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Copy to Clipboard</TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </div>
-                          {/* Tuning Buttons */}
-                          <div id={`tune-buttons-${platform}`} className="flex flex-wrap gap-2">
-                            {['Make Wittier', 'More Concise', 'Add Emojis', 'More Formal', 'Add Hashtags'].map(instr => (
-                              <Tooltip key={instr}>
-                                <TooltipTrigger asChild>
-                                  <div className="inline-block">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleTunePost(platform, instr)}
-                                      disabled={!!loadingState.tuning[platform] || !generatedPosts[platform] || generatedPosts[platform].startsWith("Error:") || !!rateLimitState.tune?.active}
-                                      loading={loadingState.tuning[platform] === instr}
-                                      className="text-xs px-2 py-1 h-auto"
-                                    >
-                                      {instr}
-                                    </Button>
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent>{getRateLimitTooltip('tune') ?? `Apply: ${instr}`}</TooltipContent>
-                              </Tooltip>
-                            ))}
-                          </div>
-                          <PreviewMockup platform={platform} content={generatedPosts[platform]} />
-                        </div>
-                      </TabsContent>
-                    ))}
-                  </Tabs>
-                ) : (
-                  <div className="flex items-center justify-center text-center text-muted-foreground p-10 flex-grow">
-                    {loadingState.summarizing || loadingState.generating ? (
-                      <div className="flex items-center justify-center">
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        <span>{loadingState.summarizing ? 'Summarizing...' : `Generating ${loadingState.generating}...`}</span>
-                      </div>
-                    ) : (
-                      'Enter content above and click "Generate Posts".'
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Side Panels Column - Fixed width on larger screens */}
-            <div className={cn(
-              "flex flex-col gap-6 md:gap-8",
-              // Fixed width only on large screens and up
-              "lg:w-[340px] lg:flex-shrink-0",
-              // Only truly visible if a panel is open
-              (isAiAdvisorOpen || isBoostPanelOpen) ? "flex" : "hidden lg:flex"
-             )}>
-                {/* AI Advisor Panel */}
-                <div className={cn(!isAiAdvisorOpen && "hidden")}>
-                    <AiAdvisorPanel
-                       isOpen={isAiAdvisorOpen}
-                       isLoading={!!loadingState.analyzing}
-                       analysis={advisorAnalysis}
-                       onApplySuggestion={handleApplySuggestion}
-                       onClose={() => setIsAiAdvisorOpen(false)}
-                    />
-                </div>
-                {/* Boost Panel */}
-                 <div className={cn(!isBoostPanelOpen && "hidden")}>
-                    <BoostPanel
-                       isOpen={isBoostPanelOpen}
-                       onToggle={handleToggleBoostPanel}
-                       onInsertText={handleInsertText}
-                    />
+      {/* Main content area - Adjusted for responsiveness and side panels */}
+      <main className="flex-grow flex flex-col lg:flex-row gap-6 md:gap-8 overflow-hidden">
+         {/* Left Column: Input and Output */}
+         <div className="flex-grow flex flex-col gap-6 md:gap-8 min-w-0">
+             {/* Top Row: Input */}
+             <Card id="content-input-section" className="shadow-md border-border/30">
+               <CardHeader>
+                 <CardTitle className="text-lg md:text-xl">1. Input Content</CardTitle>
+                 <CardDescription>Paste your text here.</CardDescription>
+               </CardHeader>
+               <CardContent className="space-y-4">
+                 <Textarea
+                   placeholder="Paste your text here..."
+                   value={content}
+                   onChange={handleContentChange}
+                   rows={5}
+                   className="text-sm"
+                   disabled={loadingState.summarizing || !!loadingState.generating}
+                   aria-label="Content Input"
+                 />
+                 <div className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4">
+                   <div id="persona-selector" className="w-full sm:w-auto">
+                     <Label htmlFor="persona" className="text-xs font-medium text-muted-foreground mb-1 block">AI Persona</Label>
+                     <Select
+                       value={selectedPersona}
+                       onValueChange={setSelectedPersona}
+                       disabled={loadingState.summarizing || !!loadingState.generating}
+                     >
+                       <Tooltip>
+                         <TooltipTrigger asChild>
+                           <SelectTrigger className="w-full sm:w-[180px] h-9 text-xs" id="persona" aria-label="Select AI Persona">
+                             <SelectValue placeholder="Select Persona" />
+                           </SelectTrigger>
+                         </TooltipTrigger>
+                         <TooltipContent>Select a writing style for the AI.</TooltipContent>
+                       </Tooltip>
+                       <SelectContent>
+                         {PERSONAS.map(persona => (
+                           <SelectItem key={persona.value} value={persona.value} textValue={persona.label}>
+                             {persona.label}
+                           </SelectItem>
+                         ))}
+                       </SelectContent>
+                     </Select>
+                   </div>
+                   <Tooltip>
+                     <TooltipTrigger asChild>
+                       <div className="w-full sm:w-auto">
+                         <Button
+                           id="generate-posts-button"
+                           onClick={handleGeneratePosts}
+                           disabled={!content.trim() || loadingState.summarizing || !!loadingState.generating || isApiKeyMissing || isQuotaExceeded || !!rateLimitState.summarize?.active || !!rateLimitState.generate?.active}
+                           loading={loadingState.summarizing || !!loadingState.generating}
+                           className="w-full sm:w-auto"
+                         >
+                           <Sparkles className="mr-2 h-4 w-4" />
+                           {loadingState.summarizing ? 'Summarizing...' : (loadingState.generating ? `Generating ${loadingState.generating}...` : 'Generate Posts')}
+                         </Button>
+                       </div>
+                     </TooltipTrigger>
+                     <TooltipContent side="bottom">
+                       {getRateLimitTooltip('summarize') ?? getRateLimitTooltip('generate') ?? (isApiKeyMissing ? 'Add Gemini API Key in Profile Settings.' : (isQuotaExceeded ? 'Quota exceeded.' : (!content.trim() ? 'Enter content first.' : 'Summarize & Generate Posts')))}
+                     </TooltipContent>
+                   </Tooltip>
                  </div>
-                 {/* Placeholder if no panel is open on large screens */}
-                 {!isAiAdvisorOpen && !isBoostPanelOpen && (
-                    <div className="hidden lg:flex lg:flex-col lg:gap-6 md:gap-8">
-                        {/* Optional: Add a placeholder card or message here if desired */}
-                        <Card className="flex-grow border-dashed border-border/50 flex items-center justify-center">
-                           <p className="text-sm text-muted-foreground">Click ✨ or ⚙️ on a post.</p>
-                        </Card>
-                    </div>
+               </CardContent>
+             </Card>
+
+             {/* Bottom Row: Output */}
+             <Card className="shadow-md border-border/30 flex-grow flex flex-col min-h-0">
+               <CardHeader>
+                 <CardTitle className="text-lg md:text-xl">2. Generated Drafts</CardTitle>
+                 <CardDescription>Review, tune, and copy the generated posts.</CardDescription>
+               </CardHeader>
+               <CardContent className="flex-grow flex flex-col min-h-0 p-0 md:p-0">
+                 {summary || Object.values(generatedPosts).some(p => p) ? (
+                   <Tabs defaultValue="linkedin" className="flex-grow flex flex-col min-h-0" onValueChange={(value) => setActiveOutputTab(value as SocialPlatform)} id="output-tabs">
+                     <div className="flex justify-between items-center px-4 md:px-6 pt-4 pb-2 md:pb-4 border-b">
+                       <TabsList className="grid w-full grid-cols-3 max-w-xs sm:max-w-sm">
+                         {PLATFORMS.map(platform => (
+                           <TabsTrigger key={platform} value={platform} className="capitalize text-xs sm:text-sm tabs-trigger-underline px-2 py-1 sm:px-3 sm:py-1.5">
+                             {platform}
+                           </TabsTrigger>
+                         ))}
+                       </TabsList>
+                       <Tooltip>
+                         <TooltipTrigger asChild>
+                           <Button variant="ghost" size="icon" onClick={handleToggleBoostPanel} className={cn("transition-colors h-8 w-8 md:h-9 md:w-9", isBoostPanelOpen && "bg-accent")}>
+                             <Settings2 className="h-4 w-4 md:h-5 md:w-5" />
+                             <span className="sr-only">Toggle Boost Panel</span>
+                           </Button>
+                         </TooltipTrigger>
+                         <TooltipContent>Hashtags & Emojis</TooltipContent>
+                       </Tooltip>
+                     </div>
+                     {PLATFORMS.map(platform => (
+                       <TabsContent key={platform} value={platform} className="flex-grow mt-0 overflow-y-auto p-4 md:p-6">
+                         <div className="flex flex-col h-full gap-4">
+                           <div className="relative flex-grow">
+                             <Textarea
+                               ref={outputTextareaRefs[platform]}
+                               value={generatedPosts[platform]}
+                               onChange={(e) => handleOutputChange(platform, e.target.value)}
+                               rows={10}
+                               className="text-sm h-full resize-none pr-10 md:pr-12"
+                               disabled={!!loadingState.tuning[platform]}
+                               placeholder={`Generated ${platform} post will appear here...`}
+                               aria-label={`${platform} Post Output`}
+                             />
+                             <div className="absolute top-2 right-2 flex flex-col gap-1">
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                   <Button
+                                     id={`ai-advisor-button-${platform}`}
+                                     variant="ghost"
+                                     size="icon"
+                                     className="h-7 w-7"
+                                     onClick={() => handleAnalyzePost(platform)}
+                                     disabled={loadingState.analyzing === platform || !generatedPosts[platform] || generatedPosts[platform].startsWith("Error:") || !!rateLimitState.analyze?.active}
+                                     aria-label="Analyze post with AI Advisor"
+                                   >
+                                     {loadingState.analyzing === platform ? <Loader2 className="animate-spin h-4 w-4" /> : <Sparkles className="h-4 w-4 text-purple-400" />}
+                                   </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent>{getRateLimitTooltip('analyze') ?? "AI Advisor"}</TooltipContent>
+                               </Tooltip>
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openToneTuner(platform)} disabled={!generatedPosts[platform] || generatedPosts[platform].startsWith("Error:") || !!loadingState.tuning[platform]}>
+                                     <Palette className="h-4 w-4 text-cyan-400" />
+                                   </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent>Tune Tone & Style</TooltipContent>
+                               </Tooltip>
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCopyToClipboard(platform)} disabled={!generatedPosts[platform] || generatedPosts[platform].startsWith("Error:")}>
+                                     <Copy className="h-4 w-4" />
+                                   </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent>Copy to Clipboard</TooltipContent>
+                               </Tooltip>
+                             </div>
+                           </div>
+                           {/* Tuning Buttons */}
+                           <div id={`tune-buttons-${platform}`} className="flex flex-wrap gap-2">
+                             {['Make Wittier', 'More Concise', 'Add Emojis', 'More Formal', 'Add Hashtags'].map(instr => (
+                               <Tooltip key={instr}>
+                                 <TooltipTrigger asChild>
+                                   <div className="inline-block">
+                                     <Button
+                                       variant="outline"
+                                       size="sm"
+                                       onClick={() => handleTunePost(platform, instr)}
+                                       disabled={!!loadingState.tuning[platform] || !generatedPosts[platform] || generatedPosts[platform].startsWith("Error:") || !!rateLimitState.tune?.active}
+                                       loading={loadingState.tuning[platform] === instr}
+                                       className="text-xs px-2 py-1 h-auto"
+                                     >
+                                       {instr}
+                                     </Button>
+                                   </div>
+                                 </TooltipTrigger>
+                                 <TooltipContent>{getRateLimitTooltip('tune') ?? `Apply: ${instr}`}</TooltipContent>
+                               </Tooltip>
+                             ))}
+                           </div>
+                           <PreviewMockup platform={platform} content={generatedPosts[platform]} />
+                         </div>
+                       </TabsContent>
+                     ))}
+                   </Tabs>
+                 ) : (
+                   <div className="flex items-center justify-center text-center text-muted-foreground p-10 flex-grow">
+                     {loadingState.summarizing || loadingState.generating ? (
+                       <div className="flex items-center justify-center">
+                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                         <span>{loadingState.summarizing ? 'Summarizing...' : `Generating ${loadingState.generating}...`}</span>
+                       </div>
+                     ) : (
+                       'Enter content above and click "Generate Posts".'
+                     )}
+                   </div>
                  )}
-            </div>
-          </div>
-        </main>
+               </CardContent>
+             </Card>
+         </div>
 
-        <footer className="text-center mt-8 text-xs text-muted-foreground">
-          Built with Next.js, Supabase, Genkit & ShadCN UI for the Gemini Hackathon.
-        </footer>
+         {/* Right Column: Side Panels */}
+         <div className="lg:w-[340px] lg:flex-shrink-0 flex flex-col gap-6 md:gap-8">
+             {/* AI Advisor Panel */}
+             <div className={cn(!isAiAdvisorOpen && "hidden lg:block", "flex-grow-[1] flex flex-col")}>
+                 <AiAdvisorPanel
+                    isOpen={isAiAdvisorOpen}
+                    isLoading={!!loadingState.analyzing}
+                    analysis={advisorAnalysis}
+                    onApplySuggestion={handleApplySuggestion}
+                    onClose={() => setIsAiAdvisorOpen(false)}
+                 />
+                 {/* Placeholder when closed on large screens */}
+                 {!isAiAdvisorOpen && (
+                     <Card className="hidden lg:flex flex-grow border-dashed border-border/50 items-center justify-center">
+                        <p className="text-sm text-muted-foreground">Click ✨ on a post for feedback.</p>
+                     </Card>
+                 )}
+             </div>
 
-        {/* Dialogs and Sheets */}
-        <ProfileDialog
-          isOpen={isProfileDialogOpen}
-          onOpenChange={setIsProfileDialogOpen}
-          user={user}
-          initialProfile={profile}
-          initialQuota={quota}
-          onProfileUpdate={handleProfileUpdate}
-          initialXp={xp}
-          initialBadges={badges}
-          dbSetupError={dbSetupError}
-        />
-        <ToneTunerSheet
-          isOpen={isToneTunerOpen}
-          onOpenChange={setIsToneTunerOpen}
-          currentTone={selectedPersona}
-          onApplyTone={handleApplyTone}
-        />
-        <HelpModal isOpen={isHelpModalOpen} onOpenChange={setIsHelpModalOpen} />
-      </div>
-    </TooltipProvider>
+             {/* Boost Panel */}
+              <div className={cn(!isBoostPanelOpen && "hidden lg:block", "flex-grow-[1] flex flex-col")}>
+                 <BoostPanel
+                    isOpen={isBoostPanelOpen}
+                    onToggle={handleToggleBoostPanel}
+                    onInsertText={handleInsertText}
+                 />
+                 {/* Placeholder when closed on large screens */}
+                  {!isBoostPanelOpen && (
+                     <Card className="hidden lg:flex flex-grow border-dashed border-border/50 items-center justify-center">
+                        <p className="text-sm text-muted-foreground">Click ⚙️ on a post for boosts.</p>
+                     </Card>
+                 )}
+             </div>
+         </div>
+       </main>
+
+       <footer className="text-center mt-8 text-xs text-muted-foreground">
+         Built with Next.js, Supabase, Genkit & ShadCN UI for the Gemini Hackathon.
+       </footer>
+
+       {/* Dialogs and Sheets */}
+       <ProfileDialog
+         isOpen={isProfileDialogOpen}
+         onOpenChange={setIsProfileDialogOpen}
+         user={user}
+         initialProfile={profile}
+         initialQuota={quota}
+         onProfileUpdate={handleProfileUpdate}
+         initialXp={xp}
+         initialBadges={badges}
+         dbSetupError={dbSetupError}
+       />
+       <ToneTunerSheet
+         isOpen={isToneTunerOpen}
+         onOpenChange={setIsToneTunerOpen}
+         currentTone={selectedPersona}
+         onApplyTone={handleApplyTone}
+       />
+       <HelpModal isOpen={isHelpModalOpen} onOpenChange={setIsHelpModalOpen} />
+     </div>
+   </TooltipProvider>
   );
 }

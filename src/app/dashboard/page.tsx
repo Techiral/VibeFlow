@@ -16,6 +16,8 @@ function safeJsonParse<T>(jsonString: string | null): T | null {
   }
 }
 
+export const dynamic = 'force-dynamic'; // Mark page as dynamic
+
 export default async function DashboardPage() {
   let supabase;
   let user = null;
@@ -24,6 +26,8 @@ export default async function DashboardPage() {
   let initialError: Error | null = null;
   let errorMessage: string | null = null;
   let isDbSetupError = false; // Flag for DB setup specific errors
+  let profileError: any = null; // Define profileError before the try block
+  let quotaError: any = null; // Define quotaError before the try block
 
   try {
     supabase = await createClient();
@@ -33,7 +37,7 @@ export default async function DashboardPage() {
     if (authError) {
        // Check if it's an expected auth error vs. a critical connection error
        if (authError.message.includes("Auth session missing") || authError.message.includes("Unauthorized")) {
-            // This is an expected case if the user isn't logged in, log info and redirect silently
+            // This is an expected case if the user isn't logged in, redirect silently
             console.log("Auth session missing, redirecting to login.");
             return redirect('/login');
        } else {
@@ -50,8 +54,10 @@ export default async function DashboardPage() {
         user = userData.user;
 
         // Fetch profile using the function - Expects an array, take the first element
-        const { data: profileDataArray, error: profileError } = await supabase
+        const { data: profileDataArray, error: fetchedProfileError } = await supabase
         .rpc('get_user_profile', { p_user_id: user.id }); // Use the user ID
+
+        profileError = fetchedProfileError; // Assign the fetched error
 
         if (profileError) {
           console.error("Error fetching profile:", profileError.message);
@@ -86,11 +92,13 @@ export default async function DashboardPage() {
 
          // Fetch quota only if profile fetch was somewhat successful (no major DB setup error)
          if (!isDbSetupError && user?.id) {
-             const { data: quotaData, error: quotaError } = await supabase
+             const { data: quotaData, error: fetchedQuotaError } = await supabase
                 .from('quotas')
                 .select('*')
                 .eq('user_id', user.id)
                 .maybeSingle(); // Use maybeSingle to handle 0 or 1 row gracefully
+
+             quotaError = fetchedQuotaError; // Assign the fetched error
 
              if (quotaError) {
                 console.error("Error fetching quota:", quotaError.message);
@@ -107,7 +115,7 @@ export default async function DashboardPage() {
              }
 
              // Handle case where no quota record exists (either no row found or specific error handled above)
-             if (!quotaData && !quotaError?.message.includes("relation \"public.quotas\" does not exist")) { // Check !quotaData AND it wasn't a 'table missing' error
+             if (!quotaData && !(quotaError?.message.includes("relation \"public.quotas\" does not exist"))) { // Check !quotaData AND it wasn't a 'table missing' error
                   console.log("Quota record not found for user, attempting to create default.");
                   // Attempt to create a default quota record if none exists
                   const { data: newQuota, error: insertQuotaError } = await supabase

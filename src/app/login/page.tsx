@@ -17,6 +17,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // 
 import { AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils"; // Import cn if needed for conditional classNames
 
+export const dynamic = 'force-dynamic'; // Mark page as dynamic
+
 export default async function LoginPage({
   searchParams,
 }: {
@@ -68,10 +70,10 @@ export default async function LoginPage({
         <div className="absolute inset-0 z-0 gradient-glow"></div>
         <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
           <CardHeader className="space-y-1 text-center">
-            <Link href="/" className="flex justify-center items-center mb-4 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
-              {/* Use Image component for logo, adjust size */}
-              <Image src="/logo.png" alt="VibeFlow Logo" width={168} height={168} className="object-contain" />
-            </Link>
+             <Link href="/" className="flex justify-center items-center mb-4 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
+               {/* Use Image component for logo, adjust size */}
+               <Image src="/logo.png" alt="VibeFlow Logo" width={168} height={168} className="object-contain" />
+             </Link>
             <CardTitle className="text-2xl font-bold text-gradient sr-only">VibeFlow</CardTitle>
             <CardDescription className="text-destructive-foreground font-semibold pt-2">
               Configuration Error
@@ -243,10 +245,10 @@ export default async function LoginPage({
 
       <Card className="mx-auto max-w-sm w-full z-10 bg-card/80 backdrop-blur-sm border-border/50 shadow-xl">
         <CardHeader className="space-y-1 text-center">
-          <Link href="/" className="flex justify-center items-center mb-4 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
-            {/* Use Image component for logo, adjust size */}
-            <Image src="/logo.png" alt="VibeFlow Logo" width={168} height={168} className="object-contain" />
-          </Link>
+           <Link href="/" className="flex justify-center items-center mb-4 focus:outline-none focus:ring-2 focus:ring-ring rounded-md">
+             {/* Use Image component for logo, adjust size */}
+             <Image src="/logo.png" alt="VibeFlow Logo" width={168} height={168} className="object-contain" />
+           </Link>
           <CardTitle className="text-2xl font-bold text-gradient sr-only">VibeFlow</CardTitle>
           <CardDescription className="text-muted-foreground">
             Enter your email below to login or sign up

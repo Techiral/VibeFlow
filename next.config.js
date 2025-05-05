@@ -17,8 +17,7 @@ const nextConfig = {
       },
     ],
   },
-  // Use the correct key 'serverExternalPackages' instead of the experimental one
-  serverExternalPackages: [], // Updated from experimental.serverComponentsExternalPackages
+  // Removed deprecated experimental.serverComponentsExternalPackages
   webpack: (config, options) => {
     // Only apply fallbacks for the client-side bundle
     if (!options.isServer) {
